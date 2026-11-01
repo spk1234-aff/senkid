@@ -179,7 +179,11 @@ input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;bac
 .pageno{position:absolute;left:12px;bottom:calc(10px + var(--safe-b));font-size:19px;color:var(--muted);background:var(--bar);border:1px solid var(--line);border-radius:999px;padding:2px 12px;pointer-events:none;opacity:.92;z-index:2}
 .zoomind{position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:20px;background:rgba(32,34,39,.85);color:#fff;border-radius:999px;padding:2px 14px;pointer-events:none;opacity:0;transition:opacity .25s;z-index:2}
 .zoomind.show{opacity:1}
-.showtb{position:absolute;right:calc(12px + var(--safe-r));top:calc(10px + var(--safe-t));z-index:6;width:44px;height:44px;border-radius:50%;background:var(--bar);border:1px solid var(--line);box-shadow:0 4px 14px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;color:var(--icon)}
+.showtb{position:absolute;right:calc(10px + var(--safe-r));top:calc(8px + var(--safe-t));z-index:6;display:flex;gap:2px;padding:3px;border-radius:24px;background:rgba(40,42,48,.55);opacity:.28;transition:opacity .2s}
+.showtb:hover,.showtb:active,.showtb.peek{opacity:1}
+.showtb .b{width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:#fff;display:flex;align-items:center;justify-content:center}
+.showtb .b svg.i{width:22px;height:22px}
+.showtb.peek{top:auto;bottom:calc(14px + var(--safe-b,0px))}
 .recfloat{position:absolute;right:calc(64px + var(--safe-r));top:calc(10px + var(--safe-t));z-index:6}
 
 /* thumbnails panel */
@@ -427,3 +431,7 @@ video.preview{width:100%;max-height:44vh;border-radius:12px;background:#000;marg
 .scr-step .n{flex:none;width:32px;height:32px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px}
 .scr-step b{font-size:22px}
 .scr-warn{background:rgba(214,69,69,.12);color:var(--rec);border-radius:10px;padding:8px 12px;margin:0 0 8px;font-size:20px}
+
+/* presentation mode: nothing but paper (and ink) */
+.ed.present .pageno,.ed.present .zoomind{display:none!important}
+body.present #toasts .toast:not(.warn):not(.keep){display:none}
