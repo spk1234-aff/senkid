@@ -807,7 +807,8 @@ export class Editor {
       if (this.pointers.size === 0) {
         const g = this.gesture; this.gesture = null; this.pan = null;
         if (g && !cancel && performance.now() - g.t0 < 320 && g.moved < 14) {
-          if (g.max === 1 && this.imgSel) this.deselectImage();
+          if (g.max === 1 && this.tool === 'text') { if (this.imgSel) this.deselectImage(); this.textAtFinger(e); }
+          else if (g.max === 1 && this.imgSel) this.deselectImage();
           if (g.max === 2) { this.undo(); toast('ย้อนกลับ', 900); }
           else if (g.max === 3) { this.redo(); toast('ทำซ้ำ', 900); }
         }
@@ -1255,6 +1256,11 @@ export class Editor {
     this.markDirty(page); this.need.main = true;
     this.selectImage(page.id, obj.id);
     if (!crop) toast('วางรูปแล้ว · กดค้างบนรูปเพื่อเลือกอีกครั้ง', 2200);
+  }
+  textAtFinger(e) { // finger tap with the text tool: new text box, or edit the text under the finger
+    const [sx, sy] = this.local(e), [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return;
+    const r = this.rects.get(page.id), hit = this.imgAt(page, wx - r.x, wy - r.y);
+    if (hit && hit.t === 'text') this.openTextDialog(page, hit); else this.openTextDialog(page, null, wx - r.x, wy - r.y);
   }
   imgAt(page, x, y) {
     for (let i = page.strokes.length - 1; i >= 0; i--) { const s = page.strokes[i]; if ((s.t === 'img' || s.t === 'text') && x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) return s; }
