@@ -11,7 +11,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.3.0';
+export const VERSION = '1.3.1';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -50,7 +50,7 @@ class App {
       }).catch(() => { });
       let shown = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!had || shown) return; shown = true;
+        if (!had || shown || this.updating) return; shown = true;
         const b = h('button', { class: 'pill prim', style: { height: '40px', marginLeft: '10px', pointerEvents: 'auto' } }, 'อัปเดตเลย');
         b.onclick = async () => { await this.editor?.flush?.(); location.reload(); };
         const t = h('div', { class: 'toast keep updbar' }, 'มีเส้นคิดรุ่นใหม่แล้ว', b);
@@ -206,6 +206,7 @@ class App {
         row('วิธีติดตั้งและใช้งาน', (() => { const b = h('button', { class: 'btn sq' }, icon('chev')); b.onclick = () => this.openHelp(); return b; })()),
         row('ดูหน้าแนะนำอีกครั้ง', (() => { const b = h('button', { class: 'btn sq' }, icon('chev')); b.onclick = () => this.onboarding(); return b; })()),
         row('เวอร์ชัน', h('span', { style: { color: 'var(--muted)' } }, VERSION + ' · ทำงานออฟไลน์ได้')),
+        row('ตรวจหาอัปเดต', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'อัปเดต'); b.onclick = () => this.checkUpdate(b); return b; })()),
         row('ผู้พัฒนา', h('span', { style: { color: 'var(--muted)', textAlign: 'right' } }, DEV.name, h('br'), h('small', {}, DEV.org))))
     );
     this.sheet('ตั้งค่า', h('div', { class: 'cols' }, left, right));
@@ -266,6 +267,25 @@ class App {
         'แทรก PDF ในสมุดเดิม: ปุ่มเพิ่มหน้า > แทรกไฟล์ PDF ต่อจากหน้านี้',
         'ส่งออก PDF: ปุ่มส่งออก > ส่งออกเป็น PDF เลือกได้ทั้งหมด หน้าปัจจุบัน ช่วงหน้า หรือหลายช่วง เช่น 1-5, 8, 10-12 ลายมือเป็นเวกเตอร์ ซูมแล้วยังคม'));
     this.sheet('วิธีใช้', body);
+  }
+
+  // manual update: ask the server for a new version; if there is one, install it and reload
+  async checkUpdate(btn) {
+    if (!('serviceWorker' in navigator)) { location.reload(); return; }
+    if (!navigator.onLine) { toast('ต้องต่ออินเทอร์เน็ตก่อนจึงจะตรวจหาอัปเดตได้', 3000, 'warn'); return; }
+    const bz = busy('กำลังตรวจหาอัปเดต…', 'รุ่นที่ใช้อยู่ ' + VERSION);
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) { bz.done(); location.reload(); return; }
+      await reg.update(); // downloads sw.js fresh; a changed file means a new version
+      const w = reg.installing || reg.waiting;
+      if (!w) { bz.done(); toast('ใช้รุ่นล่าสุดอยู่แล้ว (' + VERSION + ')', 2600); return; }
+      bz.set('กำลังดาวน์โหลดรุ่นใหม่…', 'อีกสักครู่แอปจะเปิดใหม่เอง');
+      await this.editor?.flush?.();
+      this.updating = true;
+      await new Promise((res) => { if (w.state === 'activated') return res(); w.addEventListener('statechange', () => { if (w.state === 'activated' || w.state === 'redundant') res(); }); setTimeout(res, 20000); });
+      location.reload();
+    } catch (e) { bz.done(); toast('ตรวจหาอัปเดตไม่สำเร็จ: ' + (e.message || e), 3500, 'warn'); }
   }
 
   // ---------- onboarding ----------
