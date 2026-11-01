@@ -350,6 +350,7 @@ export class Editor {
     box.append(h('div', { style: { height: '6px' } }));
     box.append(row('เขียนด้วยนิ้ว', toggle(prefs.fingerDraw, (v) => { prefs.fingerDraw = v; savePrefs(); }), 'ปิดไว้: นิ้วใช้เลื่อนและซูม'));
     box.append(row('แปลงเป็นรูปทรงอัตโนมัติ', toggle(prefs.shapeRecog, (v) => { prefs.shapeRecog = v; savePrefs(); this.buildToolbar(); }), 'ขีดแล้วกดค้างไว้ 0.5 วินาที'));
+    box.append(row('ขีดฆ่าเพื่อลบ', toggle(prefs.scribbleErase, (v) => { prefs.scribbleErase = v; savePrefs(); }), 'ขีดไปมาซ้ำ ๆ ทับเส้นที่ต้องการลบ'));
     box.append(row('แสดง 2 หน้าคู่ (สมุดเล่มนี้)', toggle(prefs.twoPage && !this.nb.single, (v) => { this.nb.single = !v; if (v && !prefs.twoPage) { prefs.twoPage = true; savePrefs(); } this.saveNb(); this.relayout(true); }), 'ปิด = เปิดทีละ 1 หน้า (สมุด PDF ตั้งเป็นทีละหน้าไว้)'));
     const m = h('div', { class: 'menu', style: { padding: '6px 0 0', minWidth: 0 } });
     const mi = (ic, label, fn) => { const b = h('button', { class: 'mi' }, icon(ic), h('span', {}, label)); b.onclick = () => { close(); fn(); }; m.append(b); };
@@ -930,6 +931,8 @@ export class Editor {
     if (!s) return;
     s.id = uid(); s.bb = null; s.ts = Date.now();
     if (!s.shape && s.pts.length === STRIDE) { const p = Array.from(s.pts); s.pts = Float32Array.from(p.concat([p[0] + 0.05, p[1] + 0.05, p[2], p[3]])); }
+    // Goodnotes-style scribble to erase: a back-and-forth scratch over ink removes what it touches
+    if (prefs.scribbleErase && L.kind !== 'hl' && !s.shape && this.scribbleErase(L.page, s)) return;
     const page = L.page, before = page.strokes.slice();
     page.strokes.push(s);
     this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
@@ -939,6 +942,30 @@ export class Editor {
     this.need.live = true;
     if (s.c) pushRecent(s.c);
     if (s.shape) { this.sel = { pid: page.id, sid: s.id }; this.need.ui = true; }
+  }
+  scribbleErase(page, s) {
+    const rs = scribblePath(s.pts); if (!rs) return false;
+    const [x0, y0, x1, y1] = rs.bb, r = Math.max(1.5, s.w / 2);
+    const keep = [], gone = [];
+    for (const o of page.strokes) {
+      if (o.t === 'img' || o.t === 'text') { keep.push(o); continue; }
+      const b = strokeBB(o);
+      if (b[2] < x0 - r || b[0] > x1 + r || b[3] < y0 - r || b[1] > y1 + r) { keep.push(o); continue; }
+      let hit = false;
+      for (let i = 0; i < rs.xy.length && !hit; i += 2) {
+        const x = rs.xy[i], y = rs.xy[i + 1];
+        if (x < b[0] - r - o.w || x > b[2] + r + o.w || y < b[1] - r - o.w || y > b[3] + r + o.w) continue;
+        hit = hitStroke(o, x, y, r);
+      }
+      (hit ? gone : keep).push(o);
+    }
+    if (!gone.length) return false; // scribble on empty paper stays as ink
+    const before = page.strokes.slice();
+    page.strokes = keep;
+    this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
+    this.markDirty(page); this.need.main = this.need.live = true;
+    try { navigator.vibrate?.(12); } catch { }
+    return true;
   }
   selStroke() {
     if (!this.sel) return null;
@@ -1573,6 +1600,34 @@ export class Editor {
 function strokeXY(s) {
   if (s.shape) return { xy: shapePolyline(s.shape, 96), st: 2 };
   return { xy: s.pts, st: STRIDE };
+}
+// Is this pen stroke a scratch-out scribble? Returns the resampled path + bbox, or null.
+// Rule: path resampled every ~2pt; at least 4 sharp reversals (>150°), and the path is
+// much longer than the area it covers — so ordinary handwriting (m, w, ร, ม) is not mistaken.
+function scribblePath(pts) {
+  const n = pts.length / STRIDE | 0; if (n < 12) return null;
+  const STEP = 2, xy = [pts[0], pts[1]];
+  let px = pts[0], py = pts[1], len = 0;
+  for (let i = 1; i < n; i++) {
+    const x = pts[i * STRIDE], y = pts[i * STRIDE + 1];
+    let d = Math.hypot(x - px, y - py);
+    while (d >= STEP) { const t = STEP / d; px += (x - px) * t; py += (y - py) * t; xy.push(px, py); len += STEP; d -= STEP; }
+  }
+  const m = xy.length / 2; if (m < 16) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < xy.length; i += 2) { x0 = Math.min(x0, xy[i]); x1 = Math.max(x1, xy[i]); y0 = Math.min(y0, xy[i + 1]); y1 = Math.max(y1, xy[i + 1]); }
+  const span = Math.max(x1 - x0, y1 - y0);
+  if (span < 8 || len < span * 3.2) return null;
+  const W = 3; // look 3 samples (≈6pt) before/after each point
+  let rev = 0, lastRev = -99;
+  for (let i = W; i < m - W; i++) {
+    const ax = xy[i * 2] - xy[(i - W) * 2], ay = xy[i * 2 + 1] - xy[(i - W) * 2 + 1];
+    const bx = xy[(i + W) * 2] - xy[i * 2], by = xy[(i + W) * 2 + 1] - xy[i * 2 + 1];
+    const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by); if (!la || !lb) continue;
+    if ((ax * bx + ay * by) / (la * lb) < -0.866 && i - lastRev > W * 2) { rev++; lastRev = i; }
+  }
+  if (rev < 4) return null;
+  return { xy, bb: [x0, y0, x1, y1] };
 }
 function hitStroke(s, x, y, r) {
   const { xy, st } = strokeXY(s);

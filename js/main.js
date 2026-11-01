@@ -11,7 +11,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.2.1';
+export const VERSION = '1.2.2';
 
 class App {
   constructor() {
@@ -161,6 +161,7 @@ class App {
       card(
         row('เขียนด้วยนิ้ว', toggle(prefs.fingerDraw, v => { prefs.fingerDraw = v; savePrefs(); }), 'สำหรับเครื่องที่ไม่มีปากกา (ใช้ 2 นิ้วเลื่อน/ซูม)'),
         row('แปลงเป็นรูปทรงอัตโนมัติ', toggle(prefs.shapeRecog, v => { prefs.shapeRecog = v; savePrefs(); this.editor?.buildToolbar(); }), 'ขีดแล้วกดค้างไว้ 0.5 วินาที'),
+        row('ขีดฆ่าเพื่อลบ', toggle(prefs.scribbleErase, v => { prefs.scribbleErase = v; savePrefs(); }), 'ขีดไปมาซ้ำ ๆ ทับเส้นที่ต้องการลบ'),
         row('แสดงจุดปลายปากกาเมื่อลอย', toggle(prefs.showHover, v => { prefs.showHover = v; savePrefs(); }), 'Apple Pencil Pro / Apple Pencil 2 บน iPad M2 ขึ้นไป')),
       h('div', { class: 'sec-t' }, 'การรองรับของเครื่องนี้'),
       card(

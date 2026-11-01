@@ -25,7 +25,7 @@ const defaults = () => ({
   hlFavorites: ['#F5B83D', '#7FE07A', '#7CC7FF', '#FF8FB1', '#C9A7FF'],
   recent: [],
   toolbarPos: 'top', toolbarHidden: false,
-  theme: 'auto', fingerDraw: false, shapeRecog: true, twoPage: true, economy: false,
+  theme: 'auto', fingerDraw: false, shapeRecog: true, scribbleErase: true, twoPage: true, economy: false,
   showHover: true, onboarded: false,
   newNb: { bg: 'grid', orient: 'P', paper: 'cream' },
   rec: { res: '2160', mic: '', warn25: true, fps: 30 },
