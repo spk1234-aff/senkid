@@ -1,3 +1,4 @@
+// เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // Export pages to PDF with vector ink (pdf-lib, offline). PDF-backed pages keep their original vector content.
 import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy } from './ui.js';
 import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo } from './render.js';

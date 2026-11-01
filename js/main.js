@@ -1,3 +1,4 @@
+// เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // App shell: routing between library and editor, settings, help, onboarding, backup
 import { h, icon, toast, dialog, seg, toggle, downloadBlob, pickFile, fmtBytes, uid, logoMark, brandWord, busy, $ } from './ui.js';
 import { prefs, savePrefs, applyTheme } from './prefs.js';
@@ -11,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.3.2';
+export const VERSION = '1.3.3';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {

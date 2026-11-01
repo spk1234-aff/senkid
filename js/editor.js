@@ -1,3 +1,4 @@
+// เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // Writing screen: toolbar, view (pan/zoom), pen input, rendering, pages, history, autosave
 import { h, icon, toast, popover, menu, dialog, confirmBox, toggle, seg, onLongPress, uid, ask, pickFile, busy, $, $$ } from './ui.js';
 import { prefs, savePrefs, pushRecent, applyTheme, PEN_LABEL } from './prefs.js';

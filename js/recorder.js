@@ -1,3 +1,4 @@
+// เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // Records ONLY the paper area (main + live canvases) + microphone audio.
 import { h, icon, toast, dialog, popover, seg, toggle, fmtBytes, fmtTime, downloadBlob, confirmBox, uid, busy } from './ui.js';
 import { prefs, savePrefs } from './prefs.js';
@@ -168,6 +169,22 @@ export class Recorder {
     if (ed.live) { c.globalCompositeOperation = ed.live.kind === 'hl' && !ed.darkPaper ? 'multiply' : 'source-over'; c.drawImage(ed.cvLive, 0, 0, this.canvas.width, this.canvas.height); c.globalCompositeOperation = 'source-over'; }
     if (ed.laser && ed.laser.length) c.drawImage(ed.cvLaser, 0, 0, this.canvas.width, this.canvas.height);
     this.app.timer?.drawInto(c, this.canvas.width / ed.W, this.canvas.width, this.canvas.height);
+    const cr = this.creditImg();
+    if (cr) c.drawImage(cr, this.canvas.width - cr.width - Math.round(this.canvas.height * 0.012), this.canvas.height - cr.height - Math.round(this.canvas.height * 0.01));
+  }
+  // developer credit, always in the clip (bottom-right, small)
+  creditImg() {
+    const H = this.canvas.height;
+    if (this._cr && this._crH === H) return this._cr;
+    const px = Math.max(12, Math.round(H * 0.019)), text = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
+    const cv = document.createElement('canvas'), x = cv.getContext('2d');
+    x.font = `${px}px "TH Sarabun New", sans-serif`;
+    const w = Math.ceil(x.measureText(text).width), pad = Math.round(px * 0.5), hh = Math.round(px * 1.4);
+    cv.width = w + pad * 2; cv.height = hh;
+    x.fillStyle = 'rgba(30,32,38,0.38)'; const r = hh / 2;
+    x.beginPath(); x.moveTo(r, 0); x.arcTo(cv.width, 0, cv.width, hh, r); x.arcTo(cv.width, hh, 0, hh, r); x.arcTo(0, hh, 0, 0, r); x.arcTo(0, 0, cv.width, 0, r); x.fill();
+    x.font = `${px}px "TH Sarabun New", sans-serif`; x.fillStyle = 'rgba(255,255,255,0.92)'; x.textBaseline = 'middle'; x.fillText(text, pad, hh / 2 + px * 0.04);
+    this._cr = cv; this._crH = H; return cv;
   }
   frame(ed) { if (this.state === 'recording') this.paint(ed); }
   onTick() {
