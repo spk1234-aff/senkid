@@ -2,7 +2,7 @@
 // Writing screen: toolbar, view (pan/zoom), pen input, rendering, pages, history, autosave
 import { h, icon, toast, popover, menu, dialog, confirmBox, toggle, seg, onLongPress, uid, ask, pickFile, busy, $, $$ } from './ui.js';
 import { prefs, savePrefs, pushRecent, applyTheme, PEN_LABEL } from './prefs.js';
-import { PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
+import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog } from './exportpdf.js';
 import { recognize, straighten, shapeHandles, moveHandle } from './shapes.js';
@@ -13,6 +13,16 @@ import { canLinkFiles, getHandle, handlePermission, writeHandle, buildBackup } f
 
 const GAP = 28;
 const HOLD_MS = 500;
+
+// where the first baseline sits inside a CSS line box, so the textarea caret lines up with canvas text (drawn at y + 0.98em)
+let _txTop = null;
+function txtTop() {
+  if (_txTop != null) return _txTop;
+  const c = document.createElement('canvas').getContext('2d'); c.font = '100px "TH Sarabun New", sans-serif';
+  const m = c.measureText('กขค'), A = (m.fontBoundingBoxAscent || 90) / 100, D = (m.fontBoundingBoxDescent || 40) / 100;
+  const base = (TEXT_LH - (A + D)) / 2 + A;
+  const v = 0.98 - base; if (document.fonts?.check?.('100px "TH Sarabun New"')) _txTop = v; return v;
+}
 
 export class Editor {
   constructor(app, nb, pages) {
@@ -240,7 +250,7 @@ export class Editor {
       const tips = { lasso: 'วาดวงล้อมสิ่งที่ต้องการเลือก แล้วลากเพื่อย้าย ลากมุมเพื่อย่อขยาย ลากจุดด้านบนเพื่อหมุน', laser: 'ลากเพื่อชี้ เส้นจะจางหายเอง และแสดงบนหน้าจอนักเรียนและในคลิป', text: 'แตะบนกระดาษเพื่อพิมพ์ข้อความ · กดค้างที่ข้อความเพื่อแก้ไข' };
       bar.append(h('span', { class: 'chip', style: { cursor: 'default' } }, icon(t), tips[t]));
       if (t === 'laser') this.laserBar(bar);
-      if (t === 'text') { bar.append(h('div', { class: 'vsep' })); for (const col of prefs.favorites.slice(0, 8)) { const on = col.toUpperCase() === prefs.penColor.toUpperCase(); const b = h('button', { class: 'sw' + (on ? ' on' : '') }, h('i', { style: { background: col } })); b.onclick = () => { prefs.penColor = col; savePrefs(); this.buildToolbar(); }; bar.append(b); } }
+      if (t === 'text') this.textBar(bar);
       if (prefs.toolbarHidden && !this.peek) { cap.classList.add('hidden'); bar.classList.add('hidden'); }
       this.stage.append(cap, bar); this.updateUndoBtns(); this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
       this.app.timer.attach(this);
@@ -428,7 +438,7 @@ export class Editor {
     if (ch <= this.H) this.oy = Math.max(8, Math.min(this.oy, this.H - ch - 8));
     else this.oy = Math.min(this.H * 0.35, Math.max(this.H * 0.65 - ch, this.oy));
   }
-  viewChanged() { this.need.main = true; this.need.ui = true; this.need.live = true; this.lastViewChange = performance.now(); this.updatePageNo(); if (this.thumbList) { clearTimeout(this.thC); this.thC = setTimeout(() => this.markThumbCur(), 120); } }
+  viewChanged() { this.need.main = true; this.need.ui = true; this.need.live = true; this.lastViewChange = performance.now(); this.updatePageNo(); if (this.txEd) this.txPos(); if (this.thumbList) { clearTimeout(this.thC); this.thC = setTimeout(() => this.markThumbCur(), 120); } }
   toWorld(sx, sy) { return [(sx - this.ox) / this.z, (sy - this.oy) / this.z]; }
   pageAt(wx, wy, slack = 0) {
     for (const p of this.pages) { const r = this.rects.get(p.id); if (wx >= r.x - slack && wx <= r.x + r.w + slack && wy >= r.y - slack && wy <= r.y + r.h + slack) return p; }
@@ -598,7 +608,9 @@ export class Editor {
   inStageUI(e) { return !this.isSurface(e.target); }
 
   down(e) {
+    if (this.txEd && e.target === this.txEd.ta) return;
     if (this.inStageUI(e)) return;
+    if (this.txEd && (e.pointerType !== 'touch' || this.tool === 'text')) { this.txCommit(); this.txDone = performance.now(); if (this.tool === 'text' && e.pointerType !== 'touch') return; }
     if (this.peek && (e.pointerType !== 'touch' || prefs.fingerDraw)) { this.peek = false; this.applyPos(); }
     const [sx, sy] = this.local(e);
     const type = e.pointerType;
@@ -784,7 +796,7 @@ export class Editor {
     if (this.lasering && this.lasering.id === e.pointerId) { (this.laserEnd ||= new Map()).set(this.lasering.s, performance.now()); this.lasering = null; this.pointers.delete(e.pointerId); this.laserDirty = true; return; }
     if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { this.pointers.delete(e.pointerId); this.finishLasso(); return; }
     if (this.lxf && this.lxf.id === e.pointerId) { this.pointers.delete(e.pointerId); this.endLassoDrag(); return; }
-    if (this.textTap && this.textTap.id === e.pointerId) { const tt = this.textTap; this.textTap = null; this.pointers.delete(e.pointerId); if (!cancel) this.openTextDialog(tt.page, null, tt.x, tt.y); return; }
+    if (this.textTap && this.textTap.id === e.pointerId) { const tt = this.textTap; this.textTap = null; this.pointers.delete(e.pointerId); if (!cancel) { const hit = this.imgAt(tt.page, tt.x, tt.y); if (hit && hit.t === 'text') this.editTextInline(tt.page, hit); else this.editTextInline(tt.page, null, tt.x, tt.y); } return; }
     if (this.imgDrag && this.imgDrag.id === e.pointerId) {
       const d = this.imgDrag; this.imgDrag = null; this.pointers.delete(e.pointerId);
       if (d.cur !== d.orig) { const before = d.page.strokes.map(s => s === d.cur ? d.orig : s); this.pushHistory({ k: 'str', items: [{ pid: d.page.id, before, after: d.page.strokes.slice() }] }); this.markDirty(d.page); }
@@ -1198,6 +1210,70 @@ export class Editor {
   }
 
   // ---------- text boxes ----------
+  // ---------- inline text editing (type straight onto the paper) ----------
+  textBar(bar) {
+    bar.lastChild?.remove();
+    const ed = this.txEd, o = ed?.o, cur = o || { size: prefs.textSize || 24, bold: !!prefs.textBold, c: prefs.penColor };
+    const apply = (k, v) => {
+      if (k === 'size') prefs.textSize = v; if (k === 'bold') prefs.textBold = v; if (k === 'c') prefs.penColor = v; savePrefs();
+      const tgt = this.txEd?.o || (() => { const sel = this.selImage(); return sel && sel.s.t === 'text' ? sel.s : null; })();
+      if (tgt && !this.txEd) { const sel = this.selImage(); const before = sel.page.strokes.slice(); const ns = { ...tgt, [k]: v, bb: null }; const m = measureText(ns); ns.w = m.w; ns.h = m.h; sel.page.strokes = sel.page.strokes.map(x => x === tgt ? ns : x); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.imgSel = { pid: sel.page.id, sid: ns.id }; this.need.main = this.need.ui = true; }
+      if (this.txEd) { this.txEd.o[k] = v; this.txUpdate(); setTimeout(() => this.txEd?.ta.focus({ preventScroll: true }), 0); }
+      this.buildToolbar();
+    };
+    bar.append(h('span', { class: 'chip', style: { cursor: 'default' } }, icon('text')));
+    for (const [v, l] of [[18, 'เล็ก'], [24, 'กลาง'], [32, 'ใหญ่'], [44, 'ใหญ่มาก'], [60, 'หัวข้อ']]) { const b = h('button', { class: 'chip' + (cur.size === v ? ' on' : '') }, l); b.onpointerdown = (e) => e.preventDefault(); b.onclick = () => apply('size', v); bar.append(b); }
+    const bb = h('button', { class: 'chip' + (cur.bold ? ' on' : ''), style: { fontWeight: 700 } }, 'B'); bb.onpointerdown = (e) => e.preventDefault(); bb.onclick = () => apply('bold', !cur.bold); bar.append(bb);
+    bar.append(h('div', { class: 'vsep' }));
+    for (const col of prefs.favorites.slice(0, 8)) { const on = col.toUpperCase() === String(cur.c).toUpperCase(); const b = h('button', { class: 'sw' + (on ? ' on' : '') }, h('i', { style: { background: col } })); b.onpointerdown = (e) => e.preventDefault(); b.onclick = () => apply('c', col); bar.append(b); }
+    if (ed) { bar.append(h('div', { class: 'vsep' })); const ok = h('button', { class: 'chip on' }, icon('check'), 'เสร็จ'); ok.onpointerdown = (e) => e.preventDefault(); ok.onclick = () => this.txCommit(); bar.append(ok); }
+  }
+  editTextInline(page, existing, x, y) {
+    if (this.txEd) this.txCommit();
+    this.deselectImage(); this.deselect?.();
+    const before = page.strokes.slice();
+    const size = existing ? existing.size : (prefs.textSize || 24);
+    const o = existing ? { ...existing, bb: null } : { id: uid(), t: 'text', text: '', size, bold: !!prefs.textBold, c: prefs.penColor, a: 1, x, y: y - size * 0.7, ts: Date.now() };
+    if (existing) page.strokes = page.strokes.map(s => s === existing ? o : s); else page.strokes.push(o);
+    const ta = h('textarea', { class: 'txed', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', rows: 1 });
+    ta.value = o.text;
+    this.stage.append(ta);
+    this.txEd = { page, o, before, ta, isNew: !existing };
+    ta.addEventListener('input', () => { o.text = ta.value; this.txUpdate(); });
+    ta.addEventListener('keydown', (e) => { if (e.key === 'Escape' || (e.key === 'Enter' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); this.txCommit(); } });
+    ta.addEventListener('blur', () => setTimeout(() => { if (this.txEd && this.txEd.ta === ta && document.activeElement !== ta && !this.txKeep) this.txCommit(); }, 180));
+    this.txUpdate(); this.buildToolbar();
+    ta.focus({ preventScroll: true }); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch { }
+  }
+  txUpdate() {
+    const E = this.txEd; if (!E) return;
+    const o = E.o, m = measureText({ ...o, text: o.text || ' ' }); o.w = m.w; o.h = m.h; o.bb = null;
+    this.txPos(); this.need.main = true;
+  }
+  txPos() { // keep the transparent textarea exactly over the text drawn on the canvas
+    const E = this.txEd; if (!E) return;
+    const o = E.o, r = this.rects.get(E.page.id); if (!r) return;
+    const z = this.z, fs = o.size * z, ta = E.ta;
+    Object.assign(ta.style, {
+      left: (this.ox + (r.x + o.x) * z) + 'px', top: (this.oy + (r.y + o.y) * z) + 'px',
+      width: Math.max(o.w * z, fs * 2) + fs * 0.6 + 'px', height: o.h * z + 'px',
+      font: `${o.bold ? 700 : 400} ${fs}px/${TEXT_LH} "TH Sarabun New", sans-serif`,
+      paddingLeft: fs * 0.1 + 'px', paddingTop: Math.max(0, fs * txtTop()) + 'px', caretColor: o.c,
+    });
+  }
+  txCommit() {
+    const E = this.txEd; if (!E) return;
+    this.txEd = null; E.ta.remove();
+    const { page, o, before } = E;
+    o.text = (o.text || '').replace(/\s+$/, '');
+    if (!o.text) { page.strokes = page.strokes.filter(s => s !== o); if (!E.isNew) { this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] }); this.markDirty(page); } }
+    else {
+      const m = measureText(o); o.w = m.w; o.h = m.h; o.bb = null;
+      const prev = before.find(s => s.id === o.id);
+      if (!prev || prev.text !== o.text || prev.size !== o.size || prev.bold !== o.bold || prev.c !== o.c) { this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] }); this.markDirty(page); }
+    }
+    this.need.main = this.need.ui = true; this.buildToolbar();
+  }
   openTextDialog(page, existing, x, y) {
     const sizes = [['18', 'เล็ก'], ['24', 'กลาง'], ['32', 'ใหญ่'], ['44', 'ใหญ่มาก'], ['60', 'หัวข้อ']];
     let size = existing ? existing.size : (prefs.textSize || 24), bold = existing ? !!existing.bold : false, color = existing ? existing.c : prefs.penColor;
@@ -1259,9 +1335,10 @@ export class Editor {
     if (!crop) toast('วางรูปแล้ว · กดค้างบนรูปเพื่อเลือกอีกครั้ง', 2200);
   }
   textAtFinger(e) { // finger tap with the text tool: new text box, or edit the text under the finger
+    if (performance.now() - (this.txDone || 0) < 700) return;
     const [sx, sy] = this.local(e), [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return;
     const r = this.rects.get(page.id), hit = this.imgAt(page, wx - r.x, wy - r.y);
-    if (hit && hit.t === 'text') this.openTextDialog(page, hit); else this.openTextDialog(page, null, wx - r.x, wy - r.y);
+    if (hit && hit.t === 'text') this.editTextInline(page, hit); else this.editTextInline(page, null, wx - r.x, wy - r.y);
   }
   imgAt(page, x, y) {
     for (let i = page.strokes.length - 1; i >= 0; i--) { const s = page.strokes[i]; if ((s.t === 'img' || s.t === 'text') && x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) return s; }
@@ -1286,7 +1363,7 @@ export class Editor {
     const cur = this.selImage();
     if (cur && cur.s.t === 'text') {
       const del = () => { const sel = this.selImage(); if (!sel) return; const before = sel.page.strokes.slice(); sel.page.strokes = sel.page.strokes.filter(x => x !== sel.s); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.deselectImage(); this.need.main = true; };
-      bar.append(B('edit', 'แก้ไข', () => { const sel = this.selImage(); if (sel) this.openTextDialog(sel.page, sel.s); }),
+      bar.append(B('edit', 'แก้ไข', () => { const sel = this.selImage(); if (sel) this.editTextInline(sel.page, sel.s); }),
         B('copy', 'ทำสำเนา', () => { const sel = this.selImage(); if (!sel) return; const ns = { ...sel.s, id: uid(), x: sel.s.x + 14, y: sel.s.y + 14, bb: null }; const before = sel.page.strokes.slice(); sel.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.selectImage(sel.page.id, ns.id); this.need.main = true; }),
         B('trash', 'ลบ', del, true), B('check', 'เสร็จ', () => this.deselectImage()));
       this.placeImgBar(); return;

@@ -462,3 +462,6 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .onb-dev{position:absolute;left:0;right:0;bottom:calc(14px + var(--safe-b));text-align:center;font-size:18px;color:var(--muted);padding:0 20px}
 .updbar{display:flex;align-items:center;pointer-events:auto}
 .xp-credit{font-size:17px;color:var(--muted);margin-top:8px}
+/* inline text editor: transparent textarea over the canvas text (canvas shows the real rendering) */
+.txed{position:absolute;z-index:5;margin:0;border:0;outline:1.5px dashed var(--acc);outline-offset:2px;border-radius:3px;background:rgba(47,91,234,.04);color:transparent;resize:none;overflow:hidden;white-space:pre;box-sizing:content-box;padding-right:0;padding-bottom:0;touch-action:manipulation;-webkit-text-size-adjust:none}
+.txed::selection{background:rgba(47,91,234,.25);color:transparent}
