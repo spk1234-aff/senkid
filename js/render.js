@@ -158,7 +158,14 @@ function curvePts(sh, per = 10) {
   out.push(p[p.length - 2], p[p.length - 1]);
   return out;
 }
+// smooth 3-point curve (parabola-like): passes through start, middle handle (at t=0.5) and end
+export function quadPts(sh, steps = 48) {
+  const [x0, y0, mx, my, x1, y1] = sh.pts, cx = 2 * mx - (x0 + x1) / 2, cy = 2 * my - (y0 + y1) / 2, out = [];
+  for (let i = 0; i <= steps; i++) { const t = i / steps, u = 1 - t; out.push(u * u * x0 + 2 * u * t * cx + t * t * x1, u * u * y0 + 2 * u * t * cy + t * t * y1); }
+  return out;
+}
 export function shapePolyline(sh, steps = 72) {
+  if (sh.k === 'quad') return quadPts(sh, steps);
   if (sh.k === 'arc3') return arcPts(sh, steps);
   if (sh.k === 'curve') return curvePts(sh, Math.max(4, Math.round(steps / 8)));
   if (sh.k === 'ellipse') {
@@ -178,7 +185,7 @@ function arrowHead(sh, w) {
 function shapePath(sh, w) {
   const p = NewPath();
   if (sh.k === 'ellipse') { p.ellipse(sh.cx, sh.cy, Math.max(.1, sh.rx), Math.max(.1, sh.ry), sh.rot || 0, 0, Math.PI * 2); return p; }
-  if (sh.k === 'arc3' || sh.k === 'curve') { const q = sh.k === 'arc3' ? arcPts(sh, 96) : curvePts(sh, 16); p.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) p.lineTo(q[i], q[i + 1]); return p; }
+  if (sh.k === 'arc3' || sh.k === 'curve' || sh.k === 'quad') { const q = sh.k === 'arc3' ? arcPts(sh, 96) : sh.k === 'quad' ? quadPts(sh, 64) : curvePts(sh, 16); p.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) p.lineTo(q[i], q[i + 1]); return p; }
   p.moveTo(sh.pts[0], sh.pts[1]);
   for (let i = 2; i < sh.pts.length; i += 2) p.lineTo(sh.pts[i], sh.pts[i + 1]);
   if (sh.closed) p.closePath();

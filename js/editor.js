@@ -5,7 +5,7 @@ import { prefs, savePrefs, pushRecent, applyTheme, PEN_LABEL } from './prefs.js'
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog } from './exportpdf.js';
-import { recognize, straighten, shapeHandles, moveHandle } from './shapes.js';
+import { recognize, straighten, shapeHandles, moveHandle, shapeAs } from './shapes.js';
 import * as db from './db.js';
 import { openPenPanel, openEraserPanel } from './penpanel.js';
 import { normalizeImage, openCropper, rotateBlob, setImageReadyHook } from './images.js';
@@ -609,6 +609,7 @@ export class Editor {
 
   down(e) {
     if (this.txEd && e.target === this.txEd.ta) return;
+    if (this.shapeAltEl && !this.shapeAltEl.contains(e.target) && e.pointerType !== 'touch') this.hideShapeAlt();
     if (this.inStageUI(e)) return;
     if (this.txEd && (e.pointerType !== 'touch' || this.tool === 'text')) { this.txCommit(); this.txDone = performance.now(); if (this.tool === 'text' && e.pointerType !== 'touch') return; }
     if (this.peek && (e.pointerType !== 'touch' || prefs.fingerDraw)) { this.peek = false; this.applyPos(); }
@@ -724,8 +725,37 @@ export class Editor {
     const upto = Math.max(4 * STRIDE, Math.min(L.pts.length, (L.holdIdx || L.pts.length) + STRIDE));
     const xy = []; for (let i = 0; i < upto; i += STRIDE) xy.push(L.pts[i], L.pts[i + 1]);
     const sh = recognize(xy);
-    if (sh) { L.shape = sh; this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
+    if (sh) { L.shape = sh; L.rawXY = xy; L.rawPts = Array.from(L.pts.slice(0, upto)); this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
   }
+  // after hold-to-shape on an open stroke: chips to switch line / arc / curve / hand-drawn
+  showShapeAlt(page, s, xy, rawPts) {
+    this.hideShapeAlt();
+    const bar = h('div', { class: 'shapealt' });
+    const cur = { id: s.id };
+    const set = (kind) => {
+      const st = page.strokes.find(x => x.id === cur.id); if (!st) return this.hideShapeAlt();
+      const before = page.strokes.slice();
+      let ns;
+      if (kind === 'free') { if (!rawPts || rawPts.length < 8) return; ns = { ...st, id: uid(), pts: Float32Array.from(rawPts), bb: null }; delete ns.shape; }
+      else { const sh = shapeAs(xy, kind); if (!sh) return; ns = { ...st, id: uid(), shape: sh, bb: null }; }
+      page.strokes = page.strokes.map(x => x === st ? ns : x); cur.id = ns.id;
+      this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
+      this.markDirty(page); this.sel = ns.shape ? { pid: page.id, sid: ns.id } : null; this.need.main = this.need.ui = true;
+      for (const b of bar.querySelectorAll('button')) b.classList.toggle('on', b.dataset.k === kind);
+      clearTimeout(this.saT); this.saT = setTimeout(() => this.hideShapeAlt(), 4000);
+    };
+    const k0 = s.shape.k === 'arrow' ? 'line' : s.shape.k === 'curve' ? 'quad' : s.shape.k;
+    for (const [k, l] of [['line', 'เส้นตรง'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
+      const b = h('button', { class: 'chip' + (k === k0 ? ' on' : ''), 'data-k': k }, l); b.onclick = () => set(k); bar.append(b);
+    }
+    // place near the end of the stroke
+    const r = this.rects.get(page.id), ex = xy[xy.length - 2], ey = xy[xy.length - 1];
+    const sx = this.ox + (r.x + ex) * this.z, sy = this.oy + (r.y + ey) * this.z;
+    bar.style.left = Math.max(8, Math.min(this.W - 380, sx - 150)) + 'px'; bar.style.top = Math.max(60, Math.min(this.H - 60, sy + 26)) + 'px';
+    this.stage.append(bar); this.shapeAltEl = bar;
+    this.saT = setTimeout(() => this.hideShapeAlt(), 4000);
+  }
+  hideShapeAlt() { clearTimeout(this.saT); this.shapeAltEl?.remove(); this.shapeAltEl = null; }
   pressureOf(e) {
     if (e.pointerType === 'pen') return e.pressure > 0 ? e.pressure : 0.5;
     return 0.5;
@@ -964,7 +994,7 @@ export class Editor {
     // keep the last frame visible until main is repainted
     this.need.live = true;
     if (s.c) pushRecent(s.c);
-    if (s.shape) { this.sel = { pid: page.id, sid: s.id }; this.need.ui = true; }
+    if (s.shape) { this.sel = { pid: page.id, sid: s.id }; this.need.ui = true; if (L.rawXY && !s.shape.closed && ['line', 'arc3', 'curve', 'quad', 'arrow'].includes(s.shape.k)) this.showShapeAlt(page, s, L.rawXY, L.rawPts); }
   }
   scribbleErase(page, s) {
     const rs = scribblePath(s.pts); if (!rs) return false;

@@ -147,6 +147,20 @@ function flipsLow(P, mx, my, ux, uy, ext) {
   let pos = 0, neg = 0; for (const q of P) { const d = -(q[0] - mx) * uy + (q[1] - my) * ux; pos = Math.max(pos, d); neg = Math.min(neg, d); }
   return Math.min(pos, -neg) < 0.03 * ext;
 }
+// does the stroke bend one way only? (signed distance from the chord keeps one sign)
+function singleBend(P) {
+  const s = P[0], e = P[P.length - 1], L = Math.hypot(e[0] - s[0], e[1] - s[1]) || 1;
+  let pos = 0, neg = 0, mx = 0;
+  for (const q of P) { const d = ((e[0] - s[0]) * (q[1] - s[1]) - (e[1] - s[1]) * (q[0] - s[0])) / L; mx = Math.max(mx, Math.abs(d)); if (d > 0) pos = Math.max(pos, d); else neg = Math.max(neg, -d); }
+  return Math.min(pos, neg) < Math.max(0.12 * mx, 2);
+}
+// quadratic through start, the point farthest from the chord (vertex) and end
+function quadFrom(P) {
+  const s = P[0], e = P[P.length - 1], L = Math.hypot(e[0] - s[0], e[1] - s[1]) || 1;
+  let best = P[P.length >> 1], bd = -1;
+  for (const q of P) { const d = Math.abs((e[0] - s[0]) * (q[1] - s[1]) - (e[1] - s[1]) * (q[0] - s[0])) / L; if (d > bd) { bd = d; best = q; } }
+  return { k: 'quad', closed: false, pts: [s[0], s[1], best[0], best[1], e[0], e[1]] };
+}
 export function recognize(p) {
   if (p.length < 8) return null;
   p = trimRest(p);
@@ -187,20 +201,22 @@ export function recognize(p) {
         return { k: 'arrow', pts: snapLine(S[0][0], S[0][1], tip[0], tip[1]), closed: false };
       }
     }
-    // ---- arc of a circle ----
+    // ---- one bend (U / parabola / gentle arc) → smooth 3-point curve, like Goodnotes ----
     const C = fitCircle(P);
     const bend = dmax / ext;
-    if (C && C.err < 0.04 && C.r < 3 * diag && C.r > 4 && bend > 0.08) {
-      let sw = 0; for (let i = 1; i < P.length; i++) { let d = Math.atan2(P[i][1] - C.cy, P[i][0] - C.cx) - Math.atan2(P[i - 1][1] - C.cy, P[i - 1][0] - C.cx); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; sw += d; }
-      if (Math.abs(sw) > 0.35 && Math.abs(sw) < 5.6) {
-        const a0 = Math.atan2(s[1] - C.cy, s[0] - C.cx), am = a0 + sw / 2, a1 = a0 + sw;
-        return { k: 'arc3', closed: false, pts: [C.cx + C.r * Math.cos(a0), C.cy + C.r * Math.sin(a0), C.cx + C.r * Math.cos(am), C.cy + C.r * Math.sin(am), C.cx + C.r * Math.cos(a1), C.cy + C.r * Math.sin(a1)] };
-      }
+    let sw = 0;
+    if (C) for (let i = 1; i < P.length; i++) { let d = Math.atan2(P[i][1] - C.cy, P[i][0] - C.cx) - Math.atan2(P[i - 1][1] - C.cy, P[i - 1][0] - C.cx); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; sw += d; }
+    const oneBend = singleBend(P);
+    // a big round arc (half circle or more) that really fits a circle stays a circular arc
+    if (C && oneBend && C.err < 0.03 && C.r > 4 && Math.abs(sw) > 2.3 && Math.abs(sw) < 5.6) {
+      const a0 = Math.atan2(s[1] - C.cy, s[0] - C.cx), am = a0 + sw / 2, a1 = a0 + sw;
+      return { k: 'arc3', closed: false, pts: [C.cx + C.r * Math.cos(a0), C.cy + C.r * Math.sin(a0), C.cx + C.r * Math.cos(am), C.cy + C.r * Math.sin(am), C.cx + C.r * Math.cos(a1), C.cy + C.r * Math.sin(a1)] };
     }
-    // ---- any other open line: smooth curve through a few points (editable) ----
     if (bend < 0.07 && chord > 0.6 * L && flipsLow(P, mx, my, ux, uy, ext)) { const pr = (q) => { const tt = (q[0] - mx) * ux + (q[1] - my) * uy; return [mx + ux * tt, my + uy * tt]; }; const a = pr(s), b = pr(e); return { k: 'line', pts: snapLine(a[0], a[1], b[0], b[1]), closed: false }; }
-    let eps = 0.012 * L, S2 = rdp(P, Math.max(eps, 1.5));
-    while (S2.length > 9) { eps *= 1.4; S2 = rdp(P, eps); }
+    if (oneBend) return quadFrom(P);
+    // S-shapes etc.: smooth curve through a few points (editable)
+    let eps = 0.02 * L, S2 = rdp(P, Math.max(eps, 1.5));
+    while (S2.length > 6) { eps *= 1.4; S2 = rdp(P, eps); }
     if (S2.length >= 3) return { k: 'curve', closed: false, pts: S2.flat() };
     return null;
   }
@@ -295,4 +311,27 @@ export function moveHandle(orig, id, x, y) {
     const o = id === 0 ? 1 : 0; const sn = snapLine(sh.pts[o * 2], sh.pts[o * 2 + 1], x, y); sh.pts[id * 2] = sn[2]; sh.pts[id * 2 + 1] = sn[3];
   }
   return sh;
+}
+
+// force a specific open shape (used by the "change to…" chips after hold-to-shape)
+export function shapeAs(p, kind) {
+  p = trimRest(p);
+  const R = resample(p, 96); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
+  if (P.length < 3) return null;
+  const s = P[0], e = P[P.length - 1];
+  if (kind === 'line') return { k: 'line', pts: snapLine(s[0], s[1], e[0], e[1]), closed: false };
+  if (kind === 'arc3') { // circle through start, the point farthest from the chord, and end
+    let best = P[1], bd = -1; const L = Math.hypot(e[0] - s[0], e[1] - s[1]) || 1;
+    for (const q of P) { const d = Math.abs((e[0] - s[0]) * (s[1] - q[1]) - (s[0] - q[0]) * (e[1] - s[1])) / L; if (d > bd) { bd = d; best = q; } }
+    if (bd < 1) return { k: 'line', pts: snapLine(s[0], s[1], e[0], e[1]), closed: false };
+    return { k: 'arc3', closed: false, pts: [s[0], s[1], best[0], best[1], e[0], e[1]] };
+  }
+  if (kind === 'quad') return quadFrom(P);
+  if (kind === 'curve') {
+    const L = pathLen(p); let eps = 0.012 * L, S2 = rdp(P, Math.max(eps, 1.5));
+    while (S2.length > 9) { eps *= 1.4; S2 = rdp(P, eps); }
+    if (S2.length < 3) S2 = [s, P[P.length >> 1], e];
+    return { k: 'curve', closed: false, pts: S2.flat() };
+  }
+  return null;
 }
