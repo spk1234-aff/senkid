@@ -11,7 +11,8 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.2.5';
+export const VERSION = '1.3.0';
+export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
   constructor() {
@@ -40,7 +41,22 @@ class App {
     const last = prefs.lastOpen && await db.get('notebooks', prefs.lastOpen).catch(() => null);
     if (last) await this.openNotebook(last.id); else await this.openLibrary();
     if (!prefs.onboarded) this.onboarding();
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => { });
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      const had = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        const check = () => reg.update().catch(() => { });
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+        setInterval(check, 30 * 60 * 1000);
+      }).catch(() => { });
+      let shown = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!had || shown) return; shown = true;
+        const b = h('button', { class: 'pill prim', style: { height: '40px', marginLeft: '10px', pointerEvents: 'auto' } }, 'อัปเดตเลย');
+        b.onclick = async () => { await this.editor?.flush?.(); location.reload(); };
+        const t = h('div', { class: 'toast keep updbar' }, 'มีเส้นคิดรุ่นใหม่แล้ว', b);
+        document.getElementById('toasts').append(t);
+      });
+    }
   }
 
   async openLibrary() {
@@ -189,7 +205,8 @@ class App {
       card(
         row('วิธีติดตั้งและใช้งาน', (() => { const b = h('button', { class: 'btn sq' }, icon('chev')); b.onclick = () => this.openHelp(); return b; })()),
         row('ดูหน้าแนะนำอีกครั้ง', (() => { const b = h('button', { class: 'btn sq' }, icon('chev')); b.onclick = () => this.onboarding(); return b; })()),
-        row('เวอร์ชัน', h('span', { style: { color: 'var(--muted)' } }, VERSION + ' · ทำงานออฟไลน์ได้')))
+        row('เวอร์ชัน', h('span', { style: { color: 'var(--muted)' } }, VERSION + ' · ทำงานออฟไลน์ได้')),
+        row('ผู้พัฒนา', h('span', { style: { color: 'var(--muted)', textAlign: 'right' } }, DEV.name, h('br'), h('small', {}, DEV.org))))
     );
     this.sheet('ตั้งค่า', h('div', { class: 'cols' }, left, right));
   }
@@ -272,7 +289,7 @@ class App {
       next.onclick = () => { if (i === slides.length - 1) done(); else { i++; render(); } };
       const prev = h('button', { class: 'pill ghost', style: { visibility: i ? 'visible' : 'hidden' } }, 'ก่อนหน้า'); prev.onclick = () => { i--; render(); };
       const head = i === 0 ? h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '22px' } }, logoMark(56), brandWord(44)) : null;
-      el.append(skip, head || '', artEl, h('h2', {}, t), h('p', {}, p), h('div', { class: 'nav' }, prev, dots, next));
+      el.append(skip, head || '', artEl, h('h2', {}, t), h('p', {}, p), h('div', { class: 'nav' }, prev, dots, next), h('div', { class: 'onb-dev' }, `พัฒนาโดย ${DEV.name} · ${DEV.org}`));
     };
     render();
     document.getElementById('layer').append(el);

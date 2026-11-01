@@ -52,6 +52,7 @@ const P = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3 v2.5 M12 18.5 V21 M3 12 h2.5 M18.5 12 H21 M5.6 5.6 l1.8 1.8 M16.6 16.6 l1.8 1.8 M5.6 18.4 l1.8-1.8 M16.6 7.4 l1.8-1.8"/>',
   close: '<path d="M6 6 L18 18 M18 6 L6 18"/>',
   back: '<path d="M15 6 l-6 6 6 6"/>',
+  palette: '<path d="M12 3 a9 9 0 1 0 0 18 c1.4 0 2-1 1.6-2.1 -.5-1.3.4-2.4 1.8-2.4 H18 a3 3 0 0 0 3-3 C21 7 17 3 12 3 Z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11 a7 7 0 0 0 14 0 M12 18 V21"/>',
   chev: '<path d="M9 6 l6 6 -6 6"/>',
   down: '<path d="M6 9 l6 6 6-6"/>',

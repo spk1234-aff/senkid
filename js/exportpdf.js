@@ -2,6 +2,8 @@
 import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy } from './ui.js';
 import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo } from './render.js';
 import { pdfBytes } from './pdfdoc.js';
+import { prefs, savePrefs } from './prefs.js';
+const CREDIT = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
 
 let libP = null;
 const lib = () => (libP ||= import('../vendor/pdf-lib.esm.min.js'));
@@ -50,12 +52,26 @@ function drawPaperVector(L, pg, page, paperKey, W, H) {
   }
 }
 
-export async function exportPdf(pages, paperKey, { withBg = true, onProgress } = {}) {
+// small credit line at the bottom of each page (Thai text → rendered with the app font into a PNG)
+async function creditPng(text) {
+  try { await document.fonts.load('40px "TH Sarabun New"'); } catch { }
+  const c = document.createElement('canvas'), ctx = c.getContext('2d'), px = 40;
+  ctx.font = `${px}px "TH Sarabun New", sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + 8, hgt = Math.ceil(px * 1.35);
+  c.width = w; c.height = hgt;
+  ctx.font = `${px}px "TH Sarabun New", sans-serif`; ctx.fillStyle = 'rgba(110,112,120,0.85)'; ctx.textBaseline = 'middle'; ctx.fillText(text, 4, hgt / 2);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), ar: w / hgt };
+}
+
+export async function exportPdf(pages, paperKey, { withBg = true, onProgress, credit = '' } = {}) {
   const L = await lib();
   const out = await L.PDFDocument.create();
   out.setCreator('เส้นคิด'); out.setProducer('Senkid');
   const srcDocs = new Map();
   const dark = !!PAPERS[paperKey]?.dark && withBg;
+  let creditImg = null, creditAr = 1;
+  if (credit) { const cp = await creditPng(credit); creditImg = await out.embedPng(cp.bytes); creditAr = cp.ar; }
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i], D = dims(page);
     let pg, ox = 0, oy = 0, sc = 1, H;
@@ -84,6 +100,10 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
       const blend = s.t === 'hl' ? L.BlendMode.Multiply : undefined;
       if (v.kind === 'fill') pg.drawSvgPath(v.d, { ...place, color, opacity: s.t === 'hl' ? Math.min(1, (s.a ?? .4) * (v.alpha ?? 1)) : alpha, blendMode: blend });
       else pg.drawSvgPath(v.d, { ...place, borderColor: color, borderWidth: v.w * sc, borderOpacity: s.t === 'hl' ? (s.a ?? .4) : alpha, borderLineCap: v.cap === 'butt' ? L.LineCapStyle.Butt : L.LineCapStyle.Round, borderDashArray: v.dash ? v.dash.map(x => x * sc) : undefined, blendMode: blend });
+    }
+    if (creditImg) { // ~7pt high, bottom-right corner
+      const hh = 9 * sc, ww = hh * creditAr, W = D.w * sc;
+      pg.drawImage(creditImg, { x: ox + W - ww - 10 * sc, y: oy + 5 * sc, width: ww, height: hh });
     }
     onProgress && onProgress(i + 1, pages.length);
     if (i % 3 === 2) await new Promise(r => setTimeout(r, 0));
@@ -129,6 +149,8 @@ export function openExportDialog(ed) {
   });
   body.append(grid, h('div', { class: 'xp-range' }, ranges), info);
   body.append(h('div', { class: 'row' }, h('span', {}, 'รวมพื้นกระดาษ (เส้น/ตาราง/จุด)'), toggle(true, v => withBg = v)));
+  let withCredit = prefs.pdfCredit !== false;
+  body.append(h('div', { class: 'row' }, h('div', {}, h('span', {}, 'ใส่ชื่อผู้พัฒนาตัวเล็กที่มุมล่าง'), h('div', { class: 'sub' }, CREDIT)), toggle(withCredit, v => { withCredit = v; prefs.pdfCredit = v; savePrefs(); })));
   const bar = h('div', { style: { height: '10px', borderRadius: '5px', background: 'var(--line)', marginTop: '10px', overflow: 'hidden', display: 'none' } }, h('div', { style: { width: '0%', height: '100%', background: 'var(--acc)', transition: 'width .2s' } }));
   const prog = h('div', { style: { fontSize: '19px', color: 'var(--muted)', marginTop: '4px' } });
   body.append(bar, prog);
@@ -162,7 +184,7 @@ export function openExportDialog(ed) {
       await ed.flush();
       try {
         const pages = idx.map(i => ed.pageMap.get(ed.nb.pages[i]));
-        const blob = await exportPdf(pages, ed.paper, { withBg, onProgress: (a, b) => { bar.firstChild.style.width = Math.round(a / b * 100) + '%'; prog.textContent = `กำลังสร้างไฟล์… หน้า ${a} จาก ${b}`; bz.set('กำลังสร้างไฟล์ PDF…', `หน้า ${a} จาก ${b}`, a / b); } });
+        const blob = await exportPdf(pages, ed.paper, { withBg, credit: withCredit ? CREDIT : '', onProgress: (a, b) => { bar.firstChild.style.width = Math.round(a / b * 100) + '%'; prog.textContent = `กำลังสร้างไฟล์… หน้า ${a} จาก ${b}`; bz.set('กำลังสร้างไฟล์ PDF…', `หน้า ${a} จาก ${b}`, a / b); } });
         prog.textContent = 'เสร็จแล้ว'; bz.done(); io.disconnect();
         await deliverPdf(blob, ed.nb.name);
       } catch (e) { console.error(e); bz.done(); toast('ส่งออกไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); busyFlag = false; btn.disabled = false; return false; }

@@ -435,3 +435,29 @@ video.preview{width:100%;max-height:44vh;border-radius:12px;background:#000;marg
 /* presentation mode: nothing but paper (and ink) */
 .ed.present .pageno,.ed.present .zoomind{display:none!important}
 body.present #toasts .toast:not(.warn):not(.keep){display:none}
+/* library: folders */
+.lib-sec{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;font-weight:700;font-size:24px;margin:4px 0 -10px;color:var(--text)}
+.lib-sec .hint{font-weight:400;font-size:18px;color:var(--muted)}
+.fcard .fcover{position:relative;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;transition:transform .15s var(--ease)}
+.fcard .fart{width:100%;aspect-ratio:120/92;filter:drop-shadow(0 6px 12px rgba(0,0,0,.12))}
+.fcard .fcount{position:absolute;left:50%;top:56%;transform:translate(-50%,-50%);color:#fff;font-weight:700;font-size:30px;text-shadow:0 1px 3px rgba(0,0,0,.2)}
+.fcard.new .fcover{border:2.5px dashed var(--line);border-radius:14px;flex-direction:column;gap:6px;color:var(--muted);aspect-ratio:3/4}
+.fcard:active .fcover{transform:scale(.97)}
+.dropover .fcover,.fold.dropover{transform:scale(1.06);outline:3px solid var(--acc);outline-offset:4px;border-radius:14px;background:var(--acc-soft)}
+.nb.lifted{opacity:.35}
+.nbghost{border-radius:6px 14px 14px 6px;box-shadow:0 18px 40px rgba(0,0,0,.3);transform:rotate(-4deg)}
+.fdot{display:inline-block;width:18px;height:18px;border-radius:5px;flex:none}
+.lib-top .title{display:flex;align-items:center;gap:10px}
+.lib-top .title .back{margin-left:-10px}
+.mvlist{display:flex;flex-direction:column;gap:4px;max-height:55vh;overflow:auto}
+.mvitem{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--text);font-size:22px;text-align:left}
+.mvitem.on{background:var(--acc-soft);border-color:var(--acc)}
+.mvitem .n{margin-left:auto;color:var(--muted);font-size:18px}
+.fcol{width:96px;border:0;background:transparent;padding:6px;border-radius:12px}
+.fcol.on{outline:3px solid var(--acc)}
+.lib-grid .nb,.fcard{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.lib-top .title>span:not(.fdot){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.lib-top .title{min-width:0;flex:1 1 auto}
+.lib-top .search{flex:0 1 300px;min-width:150px}
+.onb-dev{position:absolute;left:0;right:0;bottom:calc(14px + var(--safe-b));text-align:center;font-size:18px;color:var(--muted);padding:0 20px}
+.updbar{display:flex;align-items:center;pointer-events:auto}

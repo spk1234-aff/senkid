@@ -5,6 +5,13 @@ import { PAPERS } from './render.js';
 import * as db from './db.js';
 
 const COVERS = ['#2F5BEA', '#1E9E5A', '#D9622B', '#7A4BD6', '#C2407A', '#0F8A7E', '#4A4E57', '#B8860B'];
+const FCOLORS = ['#4F7DF3', '#2BB673', '#F08A3E', '#9B6BE8', '#E0559B', '#1FA9A0', '#E3B341', '#7C828C'];
+const folderColor = (f) => prefs.folderColors?.[f] || FCOLORS[[...f].reduce((a, c) => a + c.charCodeAt(0), 0) % FCOLORS.length];
+function folderArt(color, size = 1) {
+  const s = h('div', { class: 'fart' });
+  s.innerHTML = `<svg viewBox="0 0 120 92" width="100%" height="100%"><path d="M6 14 a8 8 0 0 1 8-8 h30 l10 10 h52 a8 8 0 0 1 8 8 v4 H6Z" fill="${color}" opacity=".72"/><rect x="6" y="22" width="108" height="64" rx="9" fill="${color}"/><rect x="6" y="22" width="108" height="64" rx="9" fill="url(#fg)" opacity=".25"/><defs><linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs></svg>`;
+  return s;
+}
 
 export class Library {
   constructor(app) { this.app = app; this.folder = '*'; this.q = ''; this.el = h('div', { class: 'lib' }); }
@@ -23,7 +30,8 @@ export class Library {
     const folders = this.folders();
     const count = (f) => f === '*' ? this.nbs.length : f === '~recent' ? Math.min(8, this.nbs.length) : this.nbs.filter(n => n.folder === f).length;
     const fbtn = (key, label, ic = 'folder') => {
-      const b = h('button', { class: 'fold' + (this.folder === key ? ' on' : '') }, icon(ic), h('span', {}, label), h('span', { class: 'n' }, String(count(key))));
+      const isF = key !== '*' && key !== '~recent';
+      const b = h('button', { class: 'fold' + (this.folder === key ? ' on' : ''), 'data-drop': key === '~recent' ? null : (isF ? key : '') }, isF ? h('span', { class: 'fdot', style: { background: folderColor(key) } }) : icon(ic), h('span', {}, label), h('span', { class: 'n' }, String(count(key))));
       b.onclick = () => { this.folder = key; this.render(); };
       if (key !== '*' && key !== '~recent') b.addEventListener('contextmenu', (e) => { e.preventDefault(); this.folderMenu(b, key); });
       return b;
@@ -32,7 +40,7 @@ export class Library {
       h('div', { class: 'brand' }, logoMark(44), brandWord(32)),
       h('div', { class: 'folders' }, fbtn('*', 'ทั้งหมด', 'lib'), fbtn('~recent', 'ล่าสุด', 'pages'), ...folders.map(f => fbtn(f, f))));
     const nf = h('button', { class: 'fold', style: { color: 'var(--muted)' } }, icon('plus'), 'โฟลเดอร์ใหม่');
-    nf.onclick = async () => { const n = await ask('ชื่อโฟลเดอร์ใหม่', { placeholder: 'เช่น ม.4/1' }); if (n) { if (!prefs.folders.includes(n)) prefs.folders.push(n); savePrefs(); this.folder = n; this.render(); } };
+    nf.onclick = () => this.newFolder();
     side.querySelector('.folders').append(nf);
     if (this.folder !== '*' && this.folder !== '~recent') {
       const fm = h('button', { class: 'fold', style: { color: 'var(--muted)' } }, icon('edit'), 'จัดการโฟลเดอร์นี้');
@@ -48,6 +56,7 @@ export class Library {
     imp.onclick = () => this.app.openFile();
     const add = h('button', { class: 'pill prim' }, icon('plus'), 'สมุดใหม่');
     add.onclick = () => this.newNotebook();
+    const inFolder = this.folder !== '*' && this.folder !== '~recent';
     const title = this.folder === '*' ? 'สมุดทั้งหมด' : this.folder === '~recent' ? 'ล่าสุด' : this.folder;
     const more = h('button', { class: 'btn sq', title: 'เพิ่มเติม' }, icon('more'));
     more.onclick = () => menu(more, [
@@ -58,7 +67,15 @@ export class Library {
       { icon: 'gear', label: 'ตั้งค่า', action: () => this.app.openSettings() },
       { icon: 'help', label: 'วิธีใช้', action: () => this.app.openHelp() },
     ]);
-    const top = h('div', { class: 'lib-top' }, h('div', { class: 'title' }, title), h('div', { class: 'search' }, icon('search'), search), imp, add, more);
+    const titleEl = h('div', { class: 'title' });
+    if (inFolder) {
+      const back = h('button', { class: 'btn sq back', title: 'กลับหน้าแรก' }, icon('back'));
+      back.onclick = () => { this.folder = '*'; this.render(); };
+      const fmb = h('button', { class: 'btn sq', title: 'จัดการโฟลเดอร์' }, icon('more'));
+      fmb.onclick = () => this.folderMenu(fmb, this.folder);
+      titleEl.append(back, h('span', { class: 'fdot', style: { background: folderColor(this.folder) } }), h('span', {}, title), fmb);
+    } else titleEl.append(title);
+    const top = h('div', { class: 'lib-top' }, titleEl, h('div', { class: 'search' }, icon('search'), search), imp, add, more);
     const mob = h('div', { class: 'mobile-folders' }, fbtn('*', 'ทั้งหมด', 'lib'), ...folders.map(f => fbtn(f, f)));
     this.grid = h('div', { class: 'lib-grid' });
     el.append(side, h('div', { class: 'lib-main' }, top, mob, this.grid));
@@ -67,16 +84,34 @@ export class Library {
 
   list() {
     let l = this.nbs.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0));
-    if (this.folder === '~recent') l = l.slice(0, 8);
-    else if (this.folder !== '*') l = l.filter(n => n.folder === this.folder);
     const q = this.q.trim().toLowerCase();
-    if (q) l = l.filter(n => (n.name || '').toLowerCase().includes(q));
+    if (q) return l.filter(n => (n.name || '').toLowerCase().includes(q)); // search looks everywhere
+    if (this.folder === '~recent') l = l.slice(0, 8);
+    else if (this.folder === '*') l = l.filter(n => !n.folder || !this.folders().includes(n.folder));
+    else l = l.filter(n => n.folder === this.folder);
     return l;
   }
 
   renderGrid() {
     const g = this.grid; g.innerHTML = '';
     const l = this.list();
+    if (!this.q && this.folder === '*') {
+      const fs = this.folders();
+      const fsec = h('div', { class: 'lib-sec' }, h('span', {}, 'โฟลเดอร์'), h('span', { class: 'hint' }, 'กดค้างที่สมุดแล้วลากมาวางบนโฟลเดอร์เพื่อย้าย'));
+      g.append(fsec);
+      for (const f of fs) {
+        const n = this.nbs.filter(x => x.folder === f).length;
+        const more = h('button', { class: 'btn sq more', title: 'ตัวเลือก' }, icon('more'));
+        const t = h('div', { class: 'nb fcard', 'data-drop': f }, h('div', { class: 'fcover' }, folderArt(folderColor(f)), h('div', { class: 'fcount' }, String(n))), h('div', { class: 'name' }, f), h('div', { class: 'meta' }, n ? `${n} เล่ม` : 'ว่าง'), more);
+        t.onclick = (e) => { if (e.target.closest('.more')) return; this.folder = f; this.render(); };
+        more.onclick = (e) => { e.stopPropagation(); this.folderMenu(more, f); };
+        t.addEventListener('contextmenu', (e) => { e.preventDefault(); this.folderMenu(more, f); });
+        g.append(t);
+      }
+      const nf = h('div', { class: 'nb fcard new' }, h('div', { class: 'fcover' }, icon('plus'), 'โฟลเดอร์ใหม่'));
+      nf.onclick = () => this.newFolder(); g.append(nf);
+      g.append(h('div', { class: 'lib-sec' }, h('span', {}, fs.length ? 'สมุดที่ไม่อยู่ในโฟลเดอร์' : 'สมุด')));
+    }
     if (!this.q) {
       const nw = h('div', { class: 'nb new' }, h('div', { class: 'cover' }, icon('plus'), 'สมุดใหม่'));
       nw.onclick = () => this.newNotebook(); g.append(nw);
@@ -88,9 +123,11 @@ export class Library {
       const card = h('div', { class: 'nb' }, cover, h('div', { class: 'name' }, n.name || 'ไม่มีชื่อ'), h('div', { class: 'meta' }, `${fmtDate(n.updated || n.created)} · ${n.count || n.pages?.length || 1} หน้า`), more);
       card.onclick = (e) => { if (e.target.closest('.more')) return; this.app.openNotebook(n.id); };
       more.onclick = (e) => { e.stopPropagation(); this.cardMenu(more, n); };
-      card.addEventListener('contextmenu', (e) => { e.preventDefault(); this.cardMenu(more, n); });
+      card.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!this.dragging) this.cardMenu(more, n); });
+      this.armDrag(card, n);
       g.append(card);
     }
+    if (!l.length && !this.q && this.folder !== '*' && this.folder !== '~recent') g.append(h('div', { class: 'empty' }, 'โฟลเดอร์นี้ยังว่าง · กด "สมุดใหม่" หรือเปิด PDF เข้ามาในโฟลเดอร์นี้ได้เลย'));
     if (!l.length && this.q) g.append(h('div', { class: 'empty' }, 'ไม่พบสมุดที่ชื่อมีคำว่า "' + this.q + '"'));
   }
 
@@ -105,24 +142,83 @@ export class Library {
       { icon: 'trash', label: 'ลบสมุด', danger: true, action: async () => { if (await confirmBox(`ลบ "${n.name}"?`, 'ลบแล้วกู้คืนไม่ได้ ถ้ายังไม่แน่ใจให้สำรองไว้ก่อน', { ok: 'ลบสมุด', danger: true })) { const bz = busy('กำลังลบสมุด…', n.name); try { await db.deleteNotebook(n.id); } finally { bz.done(); } await this.load(); toast('ลบสมุดแล้ว'); } } },
     ]);
   }
+  async newFolder() {
+    const n = (await ask('ชื่อโฟลเดอร์ใหม่', { placeholder: 'เช่น คณิต ม.4/1' }))?.trim();
+    if (!n) return;
+    if (!prefs.folders.includes(n)) prefs.folders.push(n);
+    prefs.folderColors = { ...(prefs.folderColors || {}), [n]: folderColor(n) }; savePrefs();
+    this.render(); toast('สร้างโฟลเดอร์ "' + n + '" แล้ว');
+  }
   folderMenu(anchor, f) {
     menu(anchor, [
       { header: 'โฟลเดอร์ ' + f },
-      { icon: 'edit', label: 'เปลี่ยนชื่อโฟลเดอร์', action: async () => { const v = await ask('ชื่อโฟลเดอร์', { value: f }); if (v && v !== f) { for (const n of this.nbs.filter(x => x.folder === f)) { n.folder = v; await db.put('notebooks', n); } prefs.folders = prefs.folders.filter(x => x !== f).concat([v]); savePrefs(); this.folder = v; this.render(); } } },
-      { icon: 'trash', label: 'ลบโฟลเดอร์ (สมุดยังอยู่)', danger: true, action: async () => { for (const n of this.nbs.filter(x => x.folder === f)) { n.folder = ''; await db.put('notebooks', n); } prefs.folders = prefs.folders.filter(x => x !== f); savePrefs(); this.folder = '*'; this.render(); } },
+      { icon: 'edit', label: 'เปลี่ยนชื่อ', action: async () => { const v = (await ask('ชื่อโฟลเดอร์', { value: f }))?.trim(); if (v && v !== f) { for (const n of this.nbs.filter(x => x.folder === f)) { n.folder = v; await db.put('notebooks', n); } prefs.folders = prefs.folders.filter(x => x !== f).concat([v]); const fc = { ...(prefs.folderColors || {}) }; fc[v] = fc[f] || folderColor(f); delete fc[f]; prefs.folderColors = fc; savePrefs(); if (this.folder === f) this.folder = v; this.render(); } } },
+      { icon: 'palette', label: 'เปลี่ยนสี', action: () => this.colorDialog(f) },
+      { icon: 'plus', label: 'สร้างสมุดใหม่ในโฟลเดอร์นี้', action: () => { this.folder = f; this.render(); this.newNotebook(); } },
+      '-',
+      { icon: 'trash', label: 'ลบโฟลเดอร์ (สมุดข้างในไม่หาย)', danger: true, action: async () => { if (!(await confirmBox(`ลบโฟลเดอร์ "${f}"?`, 'สมุดในโฟลเดอร์จะย้ายออกมาไว้หน้าแรก ไม่ถูกลบ', { ok: 'ลบโฟลเดอร์', danger: true }))) return; for (const n of this.nbs.filter(x => x.folder === f)) { n.folder = ''; await db.put('notebooks', n); } prefs.folders = prefs.folders.filter(x => x !== f); savePrefs(); this.folder = '*'; this.render(); } },
     ]);
+  }
+  colorDialog(f) {
+    const box = h('div', { style: { display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center', padding: '6px 0' } });
+    const dg = dialog('สีโฟลเดอร์ ' + f, box, [], { width: 460 });
+    for (const c of FCOLORS) { const b = h('button', { class: 'fcol' + (c === folderColor(f) ? ' on' : '') }, folderArt(c)); b.onclick = () => { prefs.folderColors = { ...(prefs.folderColors || {}), [f]: c }; savePrefs(); dg.close(); this.render(); }; box.append(b); }
+  }
+  async moveTo(n, f) {
+    if ((n.folder || '') === f) return;
+    n.folder = f; if (f && !prefs.folders.includes(f)) { prefs.folders.push(f); savePrefs(); }
+    await db.put('notebooks', n); this.render();
+    toast(f ? `ย้าย "${n.name}" ไปที่ ${f}` : `ย้าย "${n.name}" ออกมาไว้หน้าแรก`);
   }
   moveDialog(n) {
     const fs = this.folders();
-    let v = n.folder || '';
-    const sel = h('select', { class: 'field' }, h('option', { value: '' }, '— ไม่อยู่ในโฟลเดอร์ —'), ...fs.map(f => h('option', { value: f, selected: f === v }, f)));
-    const nn = h('input', { class: 'field', type: 'text', placeholder: 'หรือพิมพ์ชื่อโฟลเดอร์ใหม่', style: { marginTop: '10px' } });
-    dialog('ย้ายไปโฟลเดอร์', h('div', {}, sel, nn), [{ label: 'ยกเลิก' }, {
-      label: 'ย้าย', cls: 'prim', flex: 2, action: async () => {
-        const f = nn.value.trim() || sel.value; n.folder = f; if (f && !prefs.folders.includes(f)) { prefs.folders.push(f); savePrefs(); }
-        await db.put('notebooks', n); this.render();
-      }
-    }]);
+    const list = h('div', { class: 'mvlist' });
+    const dg = dialog('ย้าย "' + n.name + '" ไปที่', list, [{ label: 'ยกเลิก' }], { width: 480 });
+    const item = (f, label) => { const b = h('button', { class: 'mvitem' + ((n.folder || '') === f ? ' on' : '') }, f ? h('span', { class: 'fdot', style: { background: folderColor(f) } }) : icon('lib'), h('span', {}, label), (n.folder || '') === f ? h('span', { class: 'n' }, 'อยู่ที่นี่') : ''); b.onclick = () => { dg.close(); this.moveTo(n, f); }; return b; };
+    list.append(item('', 'หน้าแรก (ไม่อยู่ในโฟลเดอร์)'), ...fs.map(f => item(f, f)));
+    const nf = h('button', { class: 'mvitem', style: { color: 'var(--acc)' } }, icon('plus'), 'โฟลเดอร์ใหม่…');
+    nf.onclick = async () => { dg.close(); const v = (await ask('ชื่อโฟลเดอร์ใหม่', { placeholder: 'เช่น คณิต ม.4/1' }))?.trim(); if (v) { prefs.folderColors = { ...(prefs.folderColors || {}), [v]: folderColor(v) }; await this.moveTo(n, v); } };
+    list.append(nf);
+  }
+  // long-press a notebook card, then drag it onto a folder (card or sidebar) to move it
+  armDrag(card, n) {
+    let t = null, st = null;
+    const cancel = () => { clearTimeout(t); t = null; };
+    card.addEventListener('pointerdown', (e) => {
+      if (e.button > 0 || e.target.closest('.more')) return;
+      st = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      t = setTimeout(() => this.startDrag(card, n, st), 420);
+    });
+    card.addEventListener('pointermove', (e) => { if (t && st && Math.hypot(e.clientX - st.x, e.clientY - st.y) > 10) cancel(); });
+    card.addEventListener('pointerup', cancel); card.addEventListener('pointercancel', cancel);
+  }
+  startDrag(card, n, st) {
+    this.dragging = true;
+    const r = card.querySelector('.cover').getBoundingClientRect();
+    const ghost = card.querySelector('.cover').cloneNode(true);
+    ghost.classList.add('drag-ghost', 'nbghost'); Object.assign(ghost.style, { width: r.width * 0.7 + 'px', height: r.height * 0.7 + 'px', left: st.x - r.width * 0.35 + 'px', top: st.y - r.height * 0.35 + 'px' });
+    document.body.append(ghost); card.classList.add('lifted'); navigator.vibrate?.(10);
+    const scroller = this.grid;
+    let over = null, lastY = st.y, raf = 0;
+    const targetAt = (x, y) => { ghost.style.display = 'none'; const el = document.elementFromPoint(x, y); ghost.style.display = ''; const d = el?.closest('[data-drop]'); return d && d.dataset.drop !== undefined ? d : null; };
+    const auto = () => { const gr = scroller.getBoundingClientRect(); if (lastY < gr.top + 60) scroller.scrollTop -= 12; else if (lastY > gr.bottom - 60) scroller.scrollTop += 12; raf = requestAnimationFrame(auto); };
+    raf = requestAnimationFrame(auto);
+    const move = (e) => {
+      e.preventDefault(); lastY = e.clientY;
+      ghost.style.left = e.clientX - r.width * 0.35 + 'px'; ghost.style.top = e.clientY - r.height * 0.35 + 'px';
+      const d = targetAt(e.clientX, e.clientY);
+      if (d !== over) { over?.classList.remove('dropover'); over = d; over?.classList.add('dropover'); }
+    };
+    const end = (e) => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end); window.removeEventListener('touchmove', block);
+      cancelAnimationFrame(raf); ghost.remove(); card.classList.remove('lifted'); over?.classList.remove('dropover');
+      setTimeout(() => { this.dragging = false; }, 50);
+      if (over && e.type === 'pointerup') this.moveTo(n, over.dataset.drop || '');
+    };
+    const block = (e) => e.preventDefault();
+    window.addEventListener('touchmove', block, { passive: false });
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+    card.addEventListener('click', (e) => { if (this.dragging) { e.stopImmediatePropagation(); e.preventDefault(); } }, { capture: true, once: true });
   }
   async duplicate(n) {
     const bz = busy('กำลังทำสำเนาสมุด…', n.name);
