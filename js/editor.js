@@ -742,7 +742,7 @@ export class Editor {
       this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
       this.markDirty(page); this.sel = ns.shape ? { pid: page.id, sid: ns.id } : null; this.need.main = this.need.ui = true;
       for (const b of bar.querySelectorAll('button')) b.classList.toggle('on', b.dataset.k === kind);
-      clearTimeout(this.saT); this.saT = setTimeout(() => this.hideShapeAlt(), 4000);
+      clearTimeout(this.saT); this.saT = setTimeout(() => this.hideShapeAlt(), 2000);
     };
     const k0 = s.shape.k === 'arrow' ? 'line' : s.shape.k === 'curve' ? 'quad' : s.shape.k;
     for (const [k, l] of [['line', 'เส้นตรง'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
@@ -753,7 +753,7 @@ export class Editor {
     const sx = this.ox + (r.x + ex) * this.z, sy = this.oy + (r.y + ey) * this.z;
     bar.style.left = Math.max(8, Math.min(this.W - 380, sx - 150)) + 'px'; bar.style.top = Math.max(60, Math.min(this.H - 60, sy + 26)) + 'px';
     this.stage.append(bar); this.shapeAltEl = bar;
-    this.saT = setTimeout(() => this.hideShapeAlt(), 4000);
+    this.saT = setTimeout(() => this.hideShapeAlt(), 2000);
   }
   hideShapeAlt() { clearTimeout(this.saT); this.shapeAltEl?.remove(); this.shapeAltEl = null; }
   pressureOf(e) {
