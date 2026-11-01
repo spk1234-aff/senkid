@@ -418,3 +418,12 @@ video.preview{width:100%;max-height:44vh;border-radius:12px;background:#000;marg
 .xp-range{margin-top:10px}
 .xp-info{font-size:19px;min-height:22px;margin-top:4px}
 .ctxbar .sw.lsz i{width:auto;height:auto;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.25)}
+/* projector menu */
+.scr-menu .scr-card{border:1px solid var(--line);border-radius:14px;padding:10px 12px 12px;margin-top:10px;display:flex;flex-direction:column;gap:4px}
+.scr-menu .scr-card b{font-size:23px}
+.scr-menu .scr-card .sub{line-height:1.25}
+.scr-menu .scr-card .pill{margin-top:6px;width:100%}
+.scr-step{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
+.scr-step .n{flex:none;width:32px;height:32px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px}
+.scr-step b{font-size:22px}
+.scr-warn{background:rgba(214,69,69,.12);color:var(--rec);border-radius:10px;padding:8px 12px;margin:0 0 8px;font-size:20px}

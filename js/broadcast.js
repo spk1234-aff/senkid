@@ -1,11 +1,11 @@
 // Teacher side of the student screen: sends pages, view, live ink, laser and timer over BroadcastChannel (no internet)
-import { h, icon, toast, popover, seg } from './ui.js';
+import { h, icon, toast, popover, seg, dialog } from './ui.js';
 import { prefs, savePrefs } from './prefs.js';
 import { serializePage } from './editor.js';
 
 export class Broadcast {
   constructor(app) {
-    this.app = app; this.lastAlive = 0; this.pending = new Map();
+    this.app = app; this.lastAlive = -1e9; this.pending = new Map();
     this.mode = prefs.studentMode || 'follow';
     try { this.ch = new BroadcastChannel('senkid-live'); } catch { this.ch = null; }
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
@@ -58,28 +58,59 @@ export class Broadcast {
   setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; }
 }
 
+let studentWin = null;
 export function openStudentWindow() {
   const url = new URL('student.html', location.href).href;
   const w = window.open(url, 'senkid-student', 'popup=yes,width=1280,height=800');
-  if (!w) toast('เปิดหน้าต่างใหม่ไม่ได้ ให้คัดลอกลิงก์ไปเปิดในหน้าต่าง Safari ใหม่', 4000, 'warn');
+  if (!w) toast('เปิดหน้าต่างใหม่ไม่ได้ ให้คัดลอกลิงก์ไปเปิดในหน้าต่าง Safari ใหม่', 5000, 'warn');
+  studentWin = w;
   return w;
+}
+// true = 2 screens, false = 1 screen, null = browser can't tell (Safari/iPad)
+const twoScreens = () => (typeof screen.isExtended === 'boolean' ? screen.isExtended : null);
+
+function presentMode(ed) {
+  prefs.toolbarHidden = true; savePrefs(); ed.applyPos();
+  toast('ซ่อนเครื่องมือแล้ว · แตะปุ่มมุมขวาบนเพื่อแสดงเครื่องมือกลับ', 4000);
+}
+
+// step-by-step check before opening a 2nd window (iPad can't detect a TV)
+function confirmSecondScreen(ed) {
+  const ext = twoScreens();
+  const step = (n, t, sub) => h('div', { class: 'scr-step' }, h('span', { class: 'n' }, String(n)), h('div', {}, h('b', {}, t), sub ? h('div', { class: 'sub' }, sub) : ''));
+  const body = h('div', {},
+    ext === false ? h('p', { class: 'scr-warn' }, 'ตอนนี้เครื่องนี้มีจอเดียว ถ้าเปิดต่อ หน้าต่างนักเรียน (จอดำ) จะขึ้นมาทับจอครู') :
+      h('p', { class: 'sub', style: { margin: '0 0 8px' } }, 'หน้าต่างนักเรียนจะเป็นจอดำที่แสดงแค่กระดาษ ต้องย้ายไปไว้บนทีวี จึงต้องเตรียม 3 อย่างนี้ก่อน'),
+    step(1, 'ต่อ iPad เข้าทีวีด้วยสาย USB‑C → HDMI', 'ไม่มีสาย หรือใช้ AirPlay ให้เลือก "ทีวีแสดงเหมือน iPad" แทน'),
+    step(2, 'เปิด Stage Manager', 'ปัดศูนย์ควบคุมลงจากมุมขวาบน แล้วแตะไอคอนสี่เหลี่ยมซ้อนกัน ทีวีจะกลายเป็นจอที่สอง'),
+    step(3, 'กด "เปิดเลย" แล้วลากหน้าต่างจอดำไปไว้บนทีวี', 'แตะมุมขวาล่างของหน้าต่างนั้นเพื่อขยายเต็มจอ'));
+  dialog('ทีวีเป็นจอที่สอง', body, [
+    { label: 'ใช้แบบเหมือน iPad แทน', action: () => presentMode(ed) },
+    { label: 'เปิดเลย', cls: 'prim', icon: 'screen', flex: 1.3, action: () => { openStudentWindow(); } },
+  ], { width: 560 });
 }
 
 export function studentMenu(app, anchor, ed) {
   const b = app.broadcast;
-  const box = h('div', { style: { width: 'min(430px, calc(100vw - 20px))' } });
-  box.append(h('div', { class: 'row' }, h('div', {}, h('b', {}, 'หน้าจอนักเรียน'), h('div', { class: 'sub' }, 'แสดงเฉพาะกระดาษ ไม่มีเครื่องมือ ใช้กับทีวี/โปรเจกเตอร์')),
-    h('span', { style: { color: b.connected ? '#1E9E5A' : 'var(--muted)', fontWeight: 700, whiteSpace: 'nowrap' } }, b.connected ? '● เชื่อมต่อแล้ว' : '○ ยังไม่เปิด')));
-  const open = h('button', { class: 'pill prim', style: { width: '100%', marginTop: '6px' } }, icon('screen'), 'เปิดหน้าจอนักเรียน');
-  open.onclick = () => { openStudentWindow(); close(); };
-  box.append(open);
-  box.append(h('div', { class: 'lbl' }, 'สิ่งที่นักเรียนเห็น'), seg([['follow', 'ตามที่ครูดู (ซูม/เลื่อนตาม)'], ['page', 'ทั้งหน้าเสมอ']], b.mode, v => b.setMode(v)));
-  const pres = h('button', { class: 'pill sec', style: { width: '100%', marginTop: '12px' } }, icon('hide'), 'โหมดนำเสนอ (ซ่อนเครื่องมือทั้งหมด)');
-  pres.onclick = () => { close(); prefs.toolbarHidden = true; savePrefs(); ed.applyPos(); toast('สำหรับสะท้อนจอแบบไร้สาย · แตะปุ่มมุมขวาบนเพื่อแสดงเครื่องมือ', 3500); };
-  box.append(pres);
+  const box = h('div', { class: 'scr-menu', style: { width: 'min(460px, calc(100vw - 20px))' } });
+  box.append(h('div', { class: 'row' }, h('div', {}, h('b', {}, 'ฉายขึ้นทีวี / โปรเจกเตอร์'), h('div', { class: 'sub' }, 'เลือกตามวิธีที่ต่อจอ')),
+    b.connected ? h('span', { style: { color: '#1E9E5A', fontWeight: 700, whiteSpace: 'nowrap' } }, '● จอนักเรียนเปิดอยู่') : ''));
+  const card = (title, sub, btn) => h('div', { class: 'scr-card' }, h('b', {}, title), h('div', { class: 'sub' }, sub), btn);
+  // A: mirroring
+  const pres = h('button', { class: 'pill sec' }, icon('hide'), 'ซ่อนเครื่องมือ (โหมดนำเสนอ)');
+  pres.onclick = () => { close(); presentMode(ed); };
+  box.append(card('ทีวีแสดงเหมือน iPad', 'ง่ายที่สุด · ใช้กับสายธรรมดาหรือ AirPlay · นักเรียนเห็นจอเดียวกับครู จึงซ่อนเครื่องมือให้เหลือแต่กระดาษ', pres));
+  // B: second screen
+  const open = h('button', { class: 'pill ' + (twoScreens() ? 'prim' : 'sec') }, icon('screen'), b.connected ? 'เปิดหน้าต่างนักเรียนอีกครั้ง' : 'เปิดหน้าจอนักเรียน');
+  open.onclick = () => { close(); if (twoScreens() === true) openStudentWindow(); else confirmSecondScreen(ed); };
+  box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
+  if (b.connected) {
+    box.append(h('div', { class: 'lbl' }, 'สิ่งที่นักเรียนเห็นบนทีวี'), seg([['follow', 'ตามที่ครูดู (ซูม/เลื่อนตาม)'], ['page', 'ทั้งหน้าเสมอ']], b.mode, v => b.setMode(v)));
+    if (studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; box.append(x); }
+  }
   const link = new URL('student.html', location.href).href;
-  const cp = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '4px' } }, 'คัดลอกลิงก์หน้าจอนักเรียน');
+  const cp = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '2px', fontSize: '19px' } }, 'คัดลอกลิงก์หน้าจอนักเรียน (สำหรับคอมพิวเตอร์)');
   cp.onclick = async () => { try { await navigator.clipboard.writeText(link); toast('คัดลอกลิงก์แล้ว'); } catch { toast(link, 5000); } };
-  box.append(cp, h('p', { style: { fontSize: '18px', color: 'var(--muted)', margin: '8px 2px 0' } }, 'บน iPad: เปิดเส้นคิดใน Safari แล้วกด "เปิดหน้าจอนักเรียน" ลากหน้าต่างใหม่ไปที่จอทีวีผ่าน Stage Manager (ดูวิธีทีละขั้นในเมนู ⋯ > วิธีใช้)'));
+  box.append(cp);
   const close = popover(anchor, box, ed.popOpts());
 }

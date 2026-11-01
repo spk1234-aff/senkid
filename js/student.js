@@ -80,3 +80,4 @@ function timer(st) {
 let ovT;
 addEventListener('pointerdown', () => { ov.style.display = 'flex'; clearTimeout(ovT); ovT = setTimeout(() => ov.style.display = 'none', 3500); });
 document.getElementById('fs').onclick = (e) => { e.stopPropagation(); const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el); ov.style.display = 'none'; };
+setTimeout(() => { if (!view) document.getElementById('hint2').style.display = 'block'; }, 7000);
