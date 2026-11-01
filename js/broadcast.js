@@ -52,7 +52,7 @@ export class Broadcast {
     if (L) { const s = ed.liveStroke(true); this.post({ type: 'live', pid: L.page.id, s: s.shape ? { ...s } : { ...s, pts: s.pts } }); this.hadLive = true; }
     else if (this.hadLive) { this.hadLive = false; this.post({ type: 'live', s: null }); }
     // laser (world coords + age)
-    if (ed.laser.length) { const now = performance.now(); this.post({ type: 'laser', pts: ed.laser.map(p => ({ x: p.x, y: p.y, a: 1 - (now - p.t) / 900 })), head: !!ed.lasering }); this.hadLaser = true; }
+    if (ed.laser.length) { this.post({ type: 'laser', pts: ed.laserWorld(), head: !!ed.lasering, opt: prefs.laser }); this.hadLaser = true; }
     else if (this.hadLaser) { this.hadLaser = false; this.post({ type: 'laser', pts: [] }); }
   }
   setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; }

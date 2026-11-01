@@ -230,6 +230,7 @@ export class Editor {
     if (['lasso', 'laser', 'text'].includes(t)) {
       const tips = { lasso: 'วาดวงล้อมสิ่งที่ต้องการเลือก แล้วลากเพื่อย้าย ลากมุมเพื่อย่อขยาย ลากจุดด้านบนเพื่อหมุน', laser: 'ลากเพื่อชี้ เส้นจะจางหายเอง และแสดงบนหน้าจอนักเรียนและในคลิป', text: 'แตะบนกระดาษเพื่อพิมพ์ข้อความ · กดค้างที่ข้อความเพื่อแก้ไข' };
       bar.append(h('span', { class: 'chip', style: { cursor: 'default' } }, icon(t), tips[t]));
+      if (t === 'laser') this.laserBar(bar);
       if (t === 'text') { bar.append(h('div', { class: 'vsep' })); for (const col of prefs.favorites.slice(0, 8)) { const on = col.toUpperCase() === prefs.penColor.toUpperCase(); const b = h('button', { class: 'sw' + (on ? ' on' : '') }, h('i', { style: { background: col } })); b.onclick = () => { prefs.penColor = col; savePrefs(); this.buildToolbar(); }; bar.append(b); } }
       if (prefs.toolbarHidden) { cap.classList.add('hidden'); bar.classList.add('hidden'); }
       this.stage.append(cap, bar); this.updateUndoBtns(); this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -652,7 +653,7 @@ export class Editor {
     const eraserBtn = e.button === 5 || (e.buttons & 32);
     if (!page) { if (e.pointerType !== 'touch') this.pointers.set(e.pointerId, { x: sx, y: sy, sx, sy }); this.startGesture(); return; }
     if (this.tool === 'eraser' || eraserBtn) { this.startErase(e, page, sx, sy); return; }
-    if (this.tool === 'laser') { this.lasering = { id: e.pointerId }; this.laserAdd(sx, sy); return; }
+    if (this.tool === 'laser') { this.laserSeq = (this.laserSeq || 0) + 1; this.lasering = { id: e.pointerId, s: this.laserSeq }; this.laserAdd(sx, sy); return; }
     if (this.tool === 'lasso') { this.startLasso(e, page, sx, sy); return; }
     if (this.tool === 'text') { const r0 = this.rects.get(page.id); this.textTap = { id: e.pointerId, page, x: wx - r0.x, y: wy - r0.y, sx, sy }; this.armLongPress(e, sx, sy); return; }
     this.armLongPress(e, sx, sy);
@@ -769,7 +770,7 @@ export class Editor {
 
   up(e, cancel) {
     if (this.lp && this.lp.id === e.pointerId) { clearTimeout(this.lp.t); this.lp = null; }
-    if (this.lasering && this.lasering.id === e.pointerId) { this.lasering = null; this.pointers.delete(e.pointerId); return; }
+    if (this.lasering && this.lasering.id === e.pointerId) { (this.laserEnd ||= new Map()).set(this.lasering.s, performance.now()); this.lasering = null; this.pointers.delete(e.pointerId); this.laserDirty = true; return; }
     if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { this.pointers.delete(e.pointerId); this.finishLasso(); return; }
     if (this.lxf && this.lxf.id === e.pointerId) { this.pointers.delete(e.pointerId); this.endLassoDrag(); return; }
     if (this.textTap && this.textTap.id === e.pointerId) { const tt = this.textTap; this.textTap = null; this.pointers.delete(e.pointerId); if (!cancel) this.openTextDialog(tt.page, null, tt.x, tt.y); return; }
@@ -993,15 +994,51 @@ export class Editor {
   }
 
   // ---------- laser pointer ----------
-  laserAdd(sx, sy) { const [wx, wy] = this.toWorld(sx, sy); this.laser.push({ x: wx, y: wy, t: performance.now() }); }
+  laserBar(bar) {
+    bar.lastChild?.remove(); // replace the long tip with controls
+    const L = prefs.laser, set = (k, v) => { L[k] = v; savePrefs(); this.buildToolbar(); this.laserDemo(); };
+    const chip = (k, v, label) => { const b = h('button', { class: 'chip' + (L[k] === v ? ' on' : '') }, label); b.onclick = () => set(k, v); return b; };
+    bar.append(h('span', { class: 'chip', style: { cursor: 'default' } }, icon('laser')),
+      chip('style', 'trail', 'เส้นจาง'), chip('style', 'ink', 'วงแล้วหาย'), chip('style', 'dot', 'จุดเดียว'), h('div', { class: 'vsep' }));
+    for (const [v, d] of [['s', 8], ['m', 13], ['l', 20]]) {
+      const b = h('button', { class: 'sw lsz' + (L.size === v ? ' on' : ''), title: { s: 'เล็ก', m: 'กลาง', l: 'ใหญ่' }[v] }, h('i', { style: { width: d + 'px', height: d + 'px', background: L.color } }));
+      b.onclick = () => set('size', v); bar.append(b);
+    }
+    bar.append(h('div', { class: 'vsep' }));
+    for (const col of ['#FF3B30', '#FF2D9A', '#2F7BFF', '#22C55E', '#FFB020']) {
+      const b = h('button', { class: 'sw' + (L.color.toUpperCase() === col ? ' on' : '') }, h('i', { style: { background: col } }));
+      b.onclick = () => set('color', col); bar.append(b);
+    }
+  }
+  laserDemo() { // short preview stroke in the middle of the screen
+    const s = (this.laserSeq = (this.laserSeq || 0) + 1), now = performance.now(), cx = this.W / 2, cy = this.H / 2;
+    this.laser = [];
+    for (let i = 0; i <= 24; i++) { const a = i / 24 * Math.PI * 1.6; const [wx, wy] = this.toWorld(cx + 70 * Math.cos(a), cy + 40 * Math.sin(a)); this.laser.push({ x: wx, y: wy, t: now - (24 - i) * 12, s }); }
+    (this.laserEnd ||= new Map()).set(s, now); this.laserDirty = true;
+  }
+  laserAdd(sx, sy) { const [wx, wy] = this.toWorld(sx, sy); this.laser.push({ x: wx, y: wy, t: performance.now(), s: this.lasering?.s || 0 }); if (prefs.laser?.style === 'dot' && this.laser.length > 4) this.laser.splice(0, this.laser.length - 4); }
+  // laser points in world coords with alpha; drops expired ones. Styles: trail (fades behind the tip), dot (tip only), ink (stays while drawing, fades after lifting)
+  laserWorld() {
+    const now = performance.now(), st = prefs.laser?.style || 'trail', ends = this.laserEnd || new Map();
+    const alpha = (p) => {
+      if (st === 'ink') { const e = ends.get(p.s); if (e == null) return 1; return 1 - Math.max(0, now - e - 1200) / 500; }
+      if (st === 'dot') { const e = ends.get(p.s); return e == null ? 1 : 1 - (now - e) / 250; }
+      return 1 - (now - p.t) / 900;
+    };
+    const out = [];
+    for (const p of this.laser) { const a = alpha(p); if (a > 0) out.push({ x: p.x, y: p.y, a, s: p.s }); }
+    if (out.length !== this.laser.length) { const keep = new Set(out.map(p => p.s)); this.laser = this.laser.filter(p => alpha(p) > 0); for (const k of ends.keys()) if (!keep.has(k)) ends.delete(k); }
+    if (st === 'dot' && out.length > 1) { const last = out[out.length - 1]; return [last]; }
+    return out;
+  }
   redrawLaser() {
-    const ctx = this.ctxLaser, R = this.R, now = performance.now(), LIFE = 900;
-    while (this.laser.length && now - this.laser[0].t > LIFE) this.laser.shift();
+    const ctx = this.ctxLaser, R = this.R;
+    const pts = this.laserWorld();
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, this.cvLaser.width, this.cvLaser.height);
-    this.laserDirty = this.laser.length > 0;
-    if (!this.laser.length) return;
+    this.laserDirty = pts.length > 0;
+    if (!pts.length) return;
     ctx.setTransform(R, 0, 0, R, 0, 0);
-    drawLaserTrail(ctx, this.laser.map(p => ({ x: this.ox + p.x * this.z, y: this.oy + p.y * this.z, a: 1 - (now - p.t) / LIFE })), !!this.lasering);
+    drawLaserTrail(ctx, pts.map(p => ({ x: this.ox + p.x * this.z, y: this.oy + p.y * this.z, a: p.a, s: p.s })), !!this.lasering, prefs.laser);
   }
 
   // ---------- lasso ----------

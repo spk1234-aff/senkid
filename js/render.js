@@ -434,18 +434,41 @@ export function penSample(canvas, pen, t, color, w, cssW, cssH, hs) {
   drawStroke(ctx, { t, pen, hs, c: color, a: t === 'hl' ? .45 : 1, w: Math.max(0.6, ww), pts }, dpr, false, true);
 }
 
-export function drawLaserTrail(ctx, pts, headOn) {
+export const LASER_SIZES = { s: 0.6, m: 1, l: 1.7 };
+function rgbOf(hex) { const v = parseInt((hex || '#FF3B30').slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+// pts: [{x,y,a,s}] in screen px; opt: {style, size, color}
+export function drawLaserTrail(ctx, pts, headOn, opt = {}) {
   if (!pts.length) return;
+  const k = LASER_SIZES[opt.size] || 1, [r, g, b] = rgbOf(opt.color), style = opt.style || 'trail';
+  const lr = Math.min(255, r + 40), lg = Math.min(255, g + 40), lb = Math.min(255, b + 40);
   ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (let i = 1; i < pts.length; i++) {
-    const p0 = pts[i - 1], p1 = pts[i], a = Math.max(0, p1.a);
-    ctx.strokeStyle = `rgba(255,59,48,${a * 0.35})`; ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-    ctx.strokeStyle = `rgba(255,90,80,${a})`; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+  if (style === 'ink') { // one smooth path per stroke (uniform alpha → no beads)
+    let i = 0;
+    while (i < pts.length) {
+      let j = i; while (j + 1 < pts.length && pts[j + 1].s === pts[i].s) j++;
+      const a = Math.max(0, pts[j].a);
+      if (j > i && a > 0) {
+        const path = new Path2D(); path.moveTo(pts[i].x, pts[i].y); for (let q = i + 1; q <= j; q++) path.lineTo(pts[q].x, pts[q].y);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${a * 0.35})`; ctx.lineWidth = 14 * k; ctx.stroke(path);
+        ctx.strokeStyle = `rgba(${lr},${lg},${lb},${a})`; ctx.lineWidth = 5 * k; ctx.stroke(path);
+      }
+      i = j + 1;
+    }
+  } else if (style !== 'dot') {
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1], p1 = pts[i]; if (p0.s !== p1.s) continue;
+      const a = Math.max(0, p1.a);
+      ctx.strokeStyle = `rgba(${r},${g},${b},${a * 0.35})`; ctx.lineWidth = 14 * k; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+      ctx.strokeStyle = `rgba(${lr},${lg},${lb},${a})`; ctx.lineWidth = 5 * k; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+    }
   }
   const h0 = pts[pts.length - 1];
-  if (headOn || h0.a > 0.6) {
-    const g = ctx.createRadialGradient(h0.x, h0.y, 0, h0.x, h0.y, 18); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.25, 'rgba(255,59,48,1)'); g.addColorStop(1, 'rgba(255,59,48,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h0.x, h0.y, 18, 0, Math.PI * 2); ctx.fill();
+  const ha = style === 'dot' ? Math.max(0, h0.a) : (headOn || h0.a > 0.6 ? 1 : 0);
+  if (ha > 0) {
+    const R = (style === 'dot' ? 24 : 18) * k;
+    const gr = ctx.createRadialGradient(h0.x, h0.y, 0, h0.x, h0.y, R);
+    gr.addColorStop(0, `rgba(255,255,255,${ha})`); gr.addColorStop(.25, `rgba(${r},${g},${b},${ha})`); gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(h0.x, h0.y, R, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
 }

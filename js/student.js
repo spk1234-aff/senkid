@@ -7,7 +7,7 @@ const cv = document.getElementById('cv'), ctx = cv.getContext('2d', { alpha: fal
 const wait = document.getElementById('wait'), tm = document.getElementById('tm'), tmf = document.getElementById('tmf'), ov = document.getElementById('ov');
 const ch = new BroadcastChannel('senkid-live');
 const pages = new Map();
-let nb = null, view = null, live = null, laser = [], laserHead = false, paper = 'cream', dirty = true, lastMsg = 0;
+let nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
 
 function size() { const d = Math.min(3, devicePixelRatio || 1); cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d); dirty = true; }
 addEventListener('resize', size); size();
@@ -23,7 +23,7 @@ ch.onmessage = (e) => {
     wait.style.display = 'none'; dirty = true;
   } else if (m.type === 'page') { if (m.nb === nb) { for (const s of m.page.strokes) if (s.pts && !(s.pts instanceof Float32Array)) s.pts = Float32Array.from(s.pts); pages.set(m.page.id, m.page); dirty = true; } }
   else if (m.type === 'live') { live = m.s ? { pid: m.pid, s: m.s } : null; dirty = true; }
-  else if (m.type === 'laser') { laser = m.pts || []; laserHead = !!m.head; dirty = true; }
+  else if (m.type === 'laser') { laser = m.pts || []; laserHead = !!m.head; laserOpt = m.opt || laserOpt; dirty = true; }
   else if (m.type === 'timer') timer(m.st);
 };
 ch.postMessage({ type: 'hello' });
@@ -56,7 +56,7 @@ function frame() {
   }
   if (laser.length) {
     ctx.setTransform(d, 0, 0, d, 0, 0);
-    drawLaserTrail(ctx, laser.map(p => ({ x: T.ox + p.x * T.z, y: T.oy + p.y * T.z, a: p.a })), laserHead);
+    drawLaserTrail(ctx, laser.map(p => ({ x: T.ox + p.x * T.z, y: T.oy + p.y * T.z, a: p.a, s: p.s })), laserHead, laserOpt);
   }
 }
 requestAnimationFrame(frame);

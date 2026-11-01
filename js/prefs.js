@@ -30,6 +30,7 @@ const defaults = () => ({
   newNb: { bg: 'grid', orient: 'P', paper: 'cream' },
   rec: { res: '2160', mic: '', warn25: true, fps: 30 },
   folders: [], tabs: [], lastOpen: null,
+  laser: { style: 'trail', size: 'm', color: '#FF3B30' },
 });
 
 function merge(d, s) {
