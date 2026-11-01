@@ -11,7 +11,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.2.2';
+export const VERSION = '1.2.3';
 
 class App {
   constructor() {
