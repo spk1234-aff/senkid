@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>เส้นคิด · หน้าจอนักเรียน</title>
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:"TH Sarabun New";src:url(fonts/THSarabunNew.woff) format("woff");font-weight:400;font-display:block}
+@font-face{font-family:"TH Sarabun New";src:url(fonts/THSarabunNew-Bold.woff) format("woff");font-weight:700;font-display:block}
+html,body{margin:0;height:100%;background:#0B0C0E;overflow:hidden;font-family:"TH Sarabun New",sans-serif;color:#fff;-webkit-user-select:none;user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#wait{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:30px}
+#wait h1{font-size:46px;margin:0}#wait p{font-size:26px;color:#9AA0AA;margin:0;max-width:760px}
+#tm{position:fixed;right:24px;top:20px;background:rgba(32,34,39,.92);border-radius:22px;padding:6px 26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.05;display:none;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#tmf{position:fixed;inset:0;background:rgba(14,15,18,.96);display:none;flex-direction:column;align-items:center;justify-content:center}
+#tmf .l{font-size:4.5vh;color:#9AA0AA}#tmf .t{font-weight:700;font-size:38vh;line-height:.95;font-variant-numeric:tabular-nums}
+#tmf .b{width:62vw;height:1.6vh;border-radius:1vh;background:#2E3138;margin-top:3vh;overflow:hidden}#tmf .b i{display:block;height:100%;background:#2F5BEA}
+.done{animation:fl 1s steps(2) infinite}@keyframes fl{50%{opacity:.25}}
+#ov{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(32,34,39,.94);border-radius:18px;padding:10px 14px;display:none;gap:10px;align-items:center;font-size:22px}
+#ov button{font:inherit;font-size:22px;border:0;border-radius:12px;padding:8px 18px;background:#2F5BEA;color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="wait"><h1>หน้าจอนักเรียน · เส้นคิด</h1><p>กำลังรอหน้าจอครู… เปิดสมุดในเส้นคิดบนเครื่องเดียวกัน (เบราว์เซอร์เดียวกัน) แล้วหน้านี้จะแสดงกระดาษอัตโนมัติ</p></div>
+<div id="tm"></div>
+<div id="tmf"><div class="l"></div><div class="t"></div><div class="b"><i></i></div></div>
+<div id="ov"><span>หน้าจอนักเรียน</span><button id="fs">เต็มจอ</button></div>
+<script type="module" src="js/student.js"></script>
+</body>
+</html>
