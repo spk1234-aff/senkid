@@ -461,3 +461,4 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .lib-top .search{flex:0 1 300px;min-width:150px}
 .onb-dev{position:absolute;left:0;right:0;bottom:calc(14px + var(--safe-b));text-align:center;font-size:18px;color:var(--muted);padding:0 20px}
 .updbar{display:flex;align-items:center;pointer-events:auto}
+.xp-credit{font-size:17px;color:var(--muted);margin-top:8px}

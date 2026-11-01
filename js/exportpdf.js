@@ -2,7 +2,6 @@
 import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy } from './ui.js';
 import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo } from './render.js';
 import { pdfBytes } from './pdfdoc.js';
-import { prefs, savePrefs } from './prefs.js';
 const CREDIT = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
 
 let libP = null;
@@ -64,10 +63,11 @@ async function creditPng(text) {
   return { bytes: new Uint8Array(await blob.arrayBuffer()), ar: w / hgt };
 }
 
-export async function exportPdf(pages, paperKey, { withBg = true, onProgress, credit = '' } = {}) {
+export async function exportPdf(pages, paperKey, { withBg = true, onProgress } = {}) {
+  const credit = CREDIT; // always on
   const L = await lib();
   const out = await L.PDFDocument.create();
-  out.setCreator('เส้นคิด'); out.setProducer('Senkid');
+  out.setCreator('เส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย'); out.setProducer('Senkid'); out.setAuthor('เส้นคิด (พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม)');
   const srcDocs = new Map();
   const dark = !!PAPERS[paperKey]?.dark && withBg;
   let creditImg = null, creditAr = 1;
@@ -149,8 +149,7 @@ export function openExportDialog(ed) {
   });
   body.append(grid, h('div', { class: 'xp-range' }, ranges), info);
   body.append(h('div', { class: 'row' }, h('span', {}, 'รวมพื้นกระดาษ (เส้น/ตาราง/จุด)'), toggle(true, v => withBg = v)));
-  let withCredit = prefs.pdfCredit !== false;
-  body.append(h('div', { class: 'row' }, h('div', {}, h('span', {}, 'ใส่ชื่อผู้พัฒนาตัวเล็กที่มุมล่าง'), h('div', { class: 'sub' }, CREDIT)), toggle(withCredit, v => { withCredit = v; prefs.pdfCredit = v; savePrefs(); })));
+  body.append(h('div', { class: 'xp-credit' }, 'ทุกหน้าจะมีบรรทัดเล็กที่มุมล่าง: ' + CREDIT));
   const bar = h('div', { style: { height: '10px', borderRadius: '5px', background: 'var(--line)', marginTop: '10px', overflow: 'hidden', display: 'none' } }, h('div', { style: { width: '0%', height: '100%', background: 'var(--acc)', transition: 'width .2s' } }));
   const prog = h('div', { style: { fontSize: '19px', color: 'var(--muted)', marginTop: '4px' } });
   body.append(bar, prog);
@@ -184,7 +183,7 @@ export function openExportDialog(ed) {
       await ed.flush();
       try {
         const pages = idx.map(i => ed.pageMap.get(ed.nb.pages[i]));
-        const blob = await exportPdf(pages, ed.paper, { withBg, credit: withCredit ? CREDIT : '', onProgress: (a, b) => { bar.firstChild.style.width = Math.round(a / b * 100) + '%'; prog.textContent = `กำลังสร้างไฟล์… หน้า ${a} จาก ${b}`; bz.set('กำลังสร้างไฟล์ PDF…', `หน้า ${a} จาก ${b}`, a / b); } });
+        const blob = await exportPdf(pages, ed.paper, { withBg,  onProgress: (a, b) => { bar.firstChild.style.width = Math.round(a / b * 100) + '%'; prog.textContent = `กำลังสร้างไฟล์… หน้า ${a} จาก ${b}`; bz.set('กำลังสร้างไฟล์ PDF…', `หน้า ${a} จาก ${b}`, a / b); } });
         prog.textContent = 'เสร็จแล้ว'; bz.done(); io.disconnect();
         await deliverPdf(blob, ed.nb.name);
       } catch (e) { console.error(e); bz.done(); toast('ส่งออกไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); busyFlag = false; btn.disabled = false; return false; }
