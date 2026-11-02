@@ -250,6 +250,7 @@ export class Editor {
       const tips = { lasso: 'วาดวงล้อมสิ่งที่ต้องการเลือก แล้วลากเพื่อย้าย ลากมุมเพื่อย่อขยาย ลากจุดด้านบนเพื่อหมุน', laser: 'ลากเพื่อชี้ เส้นจะจางหายเอง และแสดงบนหน้าจอนักเรียนและในคลิป', text: 'แตะบนกระดาษเพื่อพิมพ์ข้อความ · กดค้างที่ข้อความเพื่อแก้ไข' };
       bar.append(h('span', { class: 'chip', style: { cursor: 'default' } }, icon(t), tips[t]));
       if (t === 'laser') this.laserBar(bar);
+      if (t === 'lasso' && this.app.clip?.items.length) { const pb = h('button', { class: 'chip on' }, icon('copy'), `วาง (${this.app.clip.items.length})`); pb.onclick = () => this.paste(); bar.append(h('div', { class: 'vsep' }), pb); }
       if (t === 'text') this.textBar(bar);
       if (prefs.toolbarHidden && !this.peek) { cap.classList.add('hidden'); bar.classList.add('hidden'); }
       this.stage.append(cap, bar); this.updateUndoBtns(); this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -863,7 +864,13 @@ export class Editor {
   armLongPress(e, sx, sy) {
     clearTimeout(this.lp?.t);
     const [wx, wy] = this.toWorld(sx, sy); const page = this.pageAt(wx, wy); if (!page) { this.lp = null; return; }
-    const r = this.rects.get(page.id); const img = this.imgAt(page, wx - r.x, wy - r.y); if (!img) { this.lp = null; return; }
+    const r = this.rects.get(page.id); const img = this.imgAt(page, wx - r.x, wy - r.y);
+    if (!img) {
+      if (e.pointerType === 'touch' && this.app.clip?.items.length) {
+        this.lp = { id: e.pointerId, sx, sy, t: setTimeout(() => { if (!this.lp) return; this.lp = null; this.pan = null; this.gesture = null; this.pointers.delete(e.pointerId); navigator.vibrate?.(10); this.pasteMenu(page, wx - r.x, wy - r.y, sx, sy); }, 520) };
+      } else this.lp = null;
+      return;
+    }
     this.lp = { id: e.pointerId, sx, sy, t: setTimeout(() => {
       if (!this.lp) return;
       this.lp = null;
@@ -1144,6 +1151,42 @@ export class Editor {
     this.lsel = { pid: L.page.id, ids };
     this.updateLassoBB(); this.buildLassoBar();
   }
+  // ---------- copy / cut / paste (works across pages and notebooks while the app is open) ----------
+  clipItems() {
+    if (this.lsel) return this.lassoItems();
+    const sel = this.selImage(); return sel ? [sel.s] : [];
+  }
+  copySel(cut) {
+    const items = this.clipItems(); if (!items.length) { toast('เลือกสิ่งที่จะคัดลอกก่อน (ใช้บ่วงบาศ หรือกดค้างที่รูป/ข้อความ)'); return; }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const it of items) { const b = strokeBB(it); x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); }
+    this.app.clip = { items: items.map(it => ({ ...it, pts: it.pts ? new Float32Array(it.pts) : it.pts, shape: it.shape ? JSON.parse(JSON.stringify(it.shape)) : it.shape })), cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, from: this.currentPage()?.id };
+    if (cut) {
+      if (this.lsel) { this.lassoEdit((page) => { page.strokes = page.strokes.filter(x => !this.lsel.ids.has(x.id)); }); this.clearLasso(); }
+      else { const sel = this.selImage(); if (sel) { const before = sel.page.strokes.slice(); sel.page.strokes = sel.page.strokes.filter(x => x !== sel.s); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.deselectImage(); this.need.main = true; } }
+      toast(`ตัดแล้ว ${items.length} ชิ้น · ไปหน้าที่ต้องการแล้วกด "วาง"`);
+    } else toast(`คัดลอกแล้ว ${items.length} ชิ้น · ไปหน้า/สมุดที่ต้องการ แล้วกดค้างด้วยนิ้ว หรือใช้บ่วงบาศ > วาง`, 3200);
+    this.buildToolbar();
+  }
+  paste(page, px, py) { // px,py = page coords for the centre; default: centre of the screen
+    const C = this.app.clip; if (!C?.items.length) { toast('ยังไม่มีสิ่งที่คัดลอกไว้'); return; }
+    if (!page) { const [wx, wy] = this.toWorld(this.W / 2, this.H / 2); page = this.currentPage(); const r = this.rects.get(page.id); px = Math.max(30, Math.min(r.w - 30, wx - r.x)); py = Math.max(30, Math.min(r.h - 30, wy - r.y)); }
+    let dx = px - C.cx, dy = py - C.cy;
+    if (px == null) { dx = 18; dy = 18; }
+    if (C.from === page.id && Math.abs(dx) < 4 && Math.abs(dy) < 4) { dx += 18; dy += 18; }
+    const before = page.strokes.slice(), ids = new Set();
+    const copies = C.items.map(it => { const n = transformStroke(it, [1, 0, 0, 1, dx, dy], 1, 0); n.id = uid(); ids.add(n.id); return n; });
+    page.strokes.push(...copies);
+    this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
+    this.markDirty(page); this.need.main = true;
+    this.deselectImage(); this.setTool('lasso'); this.lsel = { pid: page.id, ids }; this.updateLassoBB(); this.buildLassoBar(); this.need.ui = true;
+    toast(`วางแล้ว ${copies.length} ชิ้น · ลากเพื่อย้ายได้`);
+  }
+  pasteMenu(page, px, py, sx, sy) {
+    const anchor = h('div', { style: { position: 'absolute', left: sx + 'px', top: sy + 'px', width: '1px', height: '1px' } }); this.stage.append(anchor);
+    menu(anchor, [{ icon: 'copy', label: `วาง (${this.app.clip.items.length} ชิ้น)`, action: () => this.paste(page, px, py) }], { onClose: () => anchor.remove() });
+    setTimeout(() => anchor.remove(), 8000);
+  }
   lassoItems() { const p = this.pageMap.get(this.lsel?.pid); return p ? p.strokes.filter(s => this.lsel.ids.has(s.id)) : []; }
   updateLassoBB() {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -1209,7 +1252,8 @@ export class Editor {
       bar.append(b);
     }
     bar.append(h('div', { class: 'vsep', style: { width: '1px', height: '26px', background: 'rgba(255,255,255,.2)', margin: '0 4px' } }),
-      B('copy', 'ทำสำเนา', () => this.lassoEdit((page) => { const ids = new Set(); const copies = this.lassoItems().map(s => { const n = transformStroke(s, [1, 0, 0, 1, 18, 18], 1, 0); n.id = uid(); ids.add(n.id); return n; }); page.strokes.push(...copies); this.lsel.ids = ids; })),
+      B('dup', 'ทำสำเนา', () => this.lassoEdit((page) => { const ids = new Set(); const copies = this.lassoItems().map(s => { const n = transformStroke(s, [1, 0, 0, 1, 18, 18], 1, 0); n.id = uid(); ids.add(n.id); return n; }); page.strokes.push(...copies); this.lsel.ids = ids; })),
+      B('copy', 'คัดลอก', () => this.copySel(false)), B('scissors', 'ตัด', () => this.copySel(true)),
       B('trash', 'ลบ', () => { this.lassoEdit((page) => { page.strokes = page.strokes.filter(s => !this.lsel.ids.has(s.id)); }); this.clearLasso(); }, true),
       B('check', 'เสร็จ', () => this.clearLasso()));
     this.placeLassoBar();
@@ -1405,7 +1449,8 @@ export class Editor {
     if (cur && cur.s.t === 'text') {
       const del = () => { const sel = this.selImage(); if (!sel) return; const before = sel.page.strokes.slice(); sel.page.strokes = sel.page.strokes.filter(x => x !== sel.s); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.deselectImage(); this.need.main = true; };
       bar.append(B('edit', 'แก้ไข', () => { const sel = this.selImage(); if (sel) this.editTextInline(sel.page, sel.s); }),
-        B('copy', 'ทำสำเนา', () => { const sel = this.selImage(); if (!sel) return; const ns = { ...sel.s, id: uid(), x: sel.s.x + 14, y: sel.s.y + 14, bb: null }; const before = sel.page.strokes.slice(); sel.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.selectImage(sel.page.id, ns.id); this.need.main = true; }),
+        B('copy', 'คัดลอก', () => this.copySel(false)),
+        B('dup', 'ทำสำเนา', () => { const sel = this.selImage(); if (!sel) return; const ns = { ...sel.s, id: uid(), x: sel.s.x + 14, y: sel.s.y + 14, bb: null }; const before = sel.page.strokes.slice(); sel.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.selectImage(sel.page.id, ns.id); this.need.main = true; }),
         B('trash', 'ลบ', del, true), B('check', 'เสร็จ', () => this.deselectImage()));
       this.placeImgBar(); return;
     }
@@ -1413,7 +1458,8 @@ export class Editor {
       B('crop', 'ครอป/ตัด', async () => { const sel = this.selImage(); if (!sel) return; const r = await openCropper(sel.s, { title: 'ครอปหรือตัดรูป', okLabel: 'ใช้' }); if (!r) return; const s0 = sel.s; const aw0 = s0.crop.w * s0.iw, ah0 = s0.crop.h * s0.ih, aw = r.crop.w * s0.iw, ah = r.crop.h * s0.ih; const k = s0.w / aw0; const ns = { ...s0, crop: r.crop, mask: r.mask, w: aw * k, h: ah * k, x: s0.x + (r.crop.x - s0.crop.x) * s0.iw * k, y: s0.y + (r.crop.y - s0.crop.y) * s0.ih * k }; this.replaceImg(sel.page, s0, ns); }),
       B('rotate', 'หมุน', async () => { const sel = this.selImage(); if (!sel) return; const ns = await rotateBlob(sel.s); ns.id = uid(); this.replaceImg(sel.page, sel.s, ns); }),
       B('layer', 'ไว้หลังสุด', () => { const sel = this.selImage(); if (!sel) return; const before = sel.page.strokes.slice(); const st = sel.page.strokes.filter(x => x !== sel.s); st.unshift(sel.s); sel.page.strokes = st; this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: st.slice() }] }); this.markDirty(sel.page); this.need.main = true; toast('ย้ายรูปไปไว้ล่างสุดแล้ว', 1200); }),
-      B('copy', 'ทำสำเนา', () => { const sel = this.selImage(); if (!sel) return; const ns = { ...sel.s, id: uid(), x: sel.s.x + 16, y: sel.s.y + 16, bb: null }; const before = sel.page.strokes.slice(); sel.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.selectImage(sel.page.id, ns.id); this.need.main = true; }),
+      B('copy', 'คัดลอก', () => this.copySel(false)),
+      B('dup', 'ทำสำเนา', () => { const sel = this.selImage(); if (!sel) return; const ns = { ...sel.s, id: uid(), x: sel.s.x + 16, y: sel.s.y + 16, bb: null }; const before = sel.page.strokes.slice(); sel.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.selectImage(sel.page.id, ns.id); this.need.main = true; }),
       B('trash', 'ลบ', () => { const sel = this.selImage(); if (!sel) return; const before = sel.page.strokes.slice(); sel.page.strokes = sel.page.strokes.filter(x => x !== sel.s); this.pushHistory({ k: 'str', items: [{ pid: sel.page.id, before, after: sel.page.strokes.slice() }] }); this.markDirty(sel.page); this.deselectImage(); this.need.main = true; }, true),
       B('check', 'เสร็จ', () => this.deselectImage()));
     this.placeImgBar();
@@ -1720,6 +1766,9 @@ export class Editor {
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? this.redo() : this.undo(); }
     else if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); this.redo(); }
+    else if (mod && e.key.toLowerCase() === 'c' && (this.lsel || this.imgSel)) { e.preventDefault(); this.copySel(false); }
+    else if (mod && e.key.toLowerCase() === 'x' && (this.lsel || this.imgSel)) { e.preventDefault(); this.copySel(true); }
+    else if (mod && e.key.toLowerCase() === 'v' && this.app.clip?.items.length) { e.preventDefault(); this.paste(); }
     else if (e.key === ' ') { this.spaceDown = e.type === 'keydown'; }
     else if (!mod && e.key === 'p') this.setTool('pen');
     else if (!mod && e.key === 'h') this.setTool('hl');

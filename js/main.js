@@ -12,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.3.8';
+export const VERSION = '1.3.9';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -36,11 +36,12 @@ class App {
   }
   async start() {
     applyTheme();
+    const boot = document.getElementById('boot'); if (boot) { boot.querySelector('p').textContent = 'กำลังโหลดสมุด…'; }
     try { await db.openDB(); } catch (e) { this.root.append(h('div', { style: { padding: '40px', textAlign: 'center' } }, 'เปิดที่เก็บข้อมูลไม่ได้ (' + e.message + ') ถ้าเปิดในโหมดส่วนตัว ให้ปิดโหมดนั้นก่อน')); return; }
     try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch { }
     // continue where the user left off
     const last = prefs.lastOpen && await db.get('notebooks', prefs.lastOpen).catch(() => null);
-    if (last) await this.openNotebook(last.id); else await this.openLibrary();
+    try { if (last) await this.openNotebook(last.id); else await this.openLibrary(); } finally { document.getElementById('boot')?.remove(); }
     if (!prefs.onboarded) this.onboarding();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       const had = !!navigator.serviceWorker.controller;
@@ -71,8 +72,10 @@ class App {
   }
   async openNotebook(id) {
     const nb = await db.get('notebooks', id); if (!nb) { toast('ไม่พบสมุด'); return; }
-    const bz = (nb.count || 0) > 15 ? busy('กำลังเปิดสมุด…', nb.name) : null;
-    let pages; try { pages = await db.pagesOf(id); } finally { bz?.done(); }
+    // show a loading message if opening takes more than a moment
+    let bz = null; const bzT = setTimeout(() => { bz = busy('กำลังเปิดสมุด…', `${nb.name} · ${nb.count || nb.pages?.length || 1} หน้า`); }, 200);
+    const endBz = () => { clearTimeout(bzT); bz?.done(); bz = null; };
+    let pages; try { pages = await db.pagesOf(id); } catch (e) { endBz(); throw e; }
     const byId = new Map(pages.map(p => [p.id, p]));
     nb.pages = (nb.pages || []).filter(pid => byId.has(pid));
     for (const p of pages) if (!nb.pages.includes(p.id)) nb.pages.push(p.id); // recover orphans
@@ -88,7 +91,7 @@ class App {
     this.library?.destroy();
     this.root.innerHTML = '';
     this.editor = new Editor(this, nb, pages);
-    this.editor.mount(this.root);
+    try { this.editor.mount(this.root); } finally { endBz(); }
     this.broadcast.reset();
   }
   tabList() { return (prefs.tabs || []).map(id => ({ id, name: this.tabNames?.get(id) || 'สมุด' })); }
