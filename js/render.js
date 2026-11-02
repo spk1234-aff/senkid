@@ -178,18 +178,41 @@ export function shapePolyline(sh, steps = 72) {
   return out;
 }
 function arrowHead(sh, w) {
-  const n = sh.pts.length, x1 = sh.pts[n - 2], y1 = sh.pts[n - 1], x0 = sh.pts[n - 4], y0 = sh.pts[n - 3];
+  const q = sh.k === 'quad' || sh.k === 'arc3' || sh.k === 'curve' ? shapePolyline(sh, 48) : sh.pts, n = q.length;
+  const x1 = q[n - 2], y1 = q[n - 1]; let x0 = q[n - 4], y0 = q[n - 3];
+  if (n >= 10 && q !== sh.pts) { x0 = q[n - 8]; y0 = q[n - 7]; }
   const a = Math.atan2(y1 - y0, x1 - x0), L = Math.max(w * 5, 12), sp = 0.48;
   return [x1 - L * Math.cos(a - sp), y1 - L * Math.sin(a - sp), x1, y1, x1 - L * Math.cos(a + sp), y1 - L * Math.sin(a + sp)];
+}
+// polygon (open or closed) with rounded corners of radius r
+function roundedPoly(p, pts, closed, r) {
+  const n = pts.length / 2, P = (i) => [pts[((i % n) + n) % n * 2], pts[((i % n) + n) % n * 2 + 1]];
+  const corner = (i) => {
+    const [x, y] = P(i), [ax, ay] = P(i - 1), [bx, by] = P(i + 1);
+    const la = Math.hypot(ax - x, ay - y) || 1, lb = Math.hypot(bx - x, by - y) || 1, rr = Math.min(r, la / 2, lb / 2);
+    return [x + (ax - x) / la * rr, y + (ay - y) / la * rr, x, y, x + (bx - x) / lb * rr, y + (by - y) / lb * rr];
+  };
+  if (closed) {
+    const c0 = corner(0); p.moveTo(c0[4], c0[5]);
+    for (let i = 1; i <= n; i++) { const c = corner(i); p.lineTo(c[0], c[1]); p.quadraticCurveTo(c[2], c[3], c[4], c[5]); }
+    p.closePath();
+  } else {
+    p.moveTo(pts[0], pts[1]);
+    for (let i = 1; i < n - 1; i++) { const c = corner(i); p.lineTo(c[0], c[1]); p.quadraticCurveTo(c[2], c[3], c[4], c[5]); }
+    p.lineTo(pts[pts.length - 2], pts[pts.length - 1]);
+  }
 }
 function shapePath(sh, w) {
   const p = NewPath();
   if (sh.k === 'ellipse') { p.ellipse(sh.cx, sh.cy, Math.max(.1, sh.rx), Math.max(.1, sh.ry), sh.rot || 0, 0, Math.PI * 2); return p; }
-  if (sh.k === 'arc3' || sh.k === 'curve' || sh.k === 'quad') { const q = sh.k === 'arc3' ? arcPts(sh, 96) : sh.k === 'quad' ? quadPts(sh, 64) : curvePts(sh, 16); p.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) p.lineTo(q[i], q[i + 1]); return p; }
-  p.moveTo(sh.pts[0], sh.pts[1]);
-  for (let i = 2; i < sh.pts.length; i += 2) p.lineTo(sh.pts[i], sh.pts[i + 1]);
-  if (sh.closed) p.closePath();
-  if (sh.k === 'arrow') { const hd = arrowHead(sh, w); p.moveTo(hd[0], hd[1]); p.lineTo(hd[2], hd[3]); p.lineTo(hd[4], hd[5]); }
+  if (sh.k === 'arc3' || sh.k === 'curve' || sh.k === 'quad') { const q = sh.k === 'arc3' ? arcPts(sh, 96) : sh.k === 'quad' ? quadPts(sh, 64) : curvePts(sh, 16); p.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) p.lineTo(q[i], q[i + 1]); }
+  else if (sh.rr > 0 && sh.pts.length >= 6) roundedPoly(p, sh.pts, !!sh.closed, sh.rr);
+  else {
+    p.moveTo(sh.pts[0], sh.pts[1]);
+    for (let i = 2; i < sh.pts.length; i += 2) p.lineTo(sh.pts[i], sh.pts[i + 1]);
+    if (sh.closed) p.closePath();
+  }
+  if ((sh.k === 'arrow' || sh.head) && !sh.closed) { const hd = arrowHead(sh, w); p.moveTo(hd[0], hd[1]); p.lineTo(hd[2], hd[3]); p.lineTo(hd[4], hd[5]); }
   return p;
 }
 

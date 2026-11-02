@@ -263,8 +263,8 @@ export class Editor {
     const penBtn = B(prefs.penType, 'ปากกา: ' + PEN_LABEL[prefs.penType], (b) => { if (this.tool === 'pen') openPenPanel(b, this, this.popOpts()); else this.setTool('pen'); }, t === 'pen');
     const hlBtn = B('hl', 'ไฮไลต์', (b) => { if (this.tool === 'hl') openPenPanel(b, this, this.popOpts()); else this.setTool('hl'); }, t === 'hl');
     const erBtn = B('eraser', 'ยางลบ', (b) => { if (this.tool === 'eraser') openEraserPanel(b, this, this.popOpts()); else this.setTool('eraser'); }, t === 'eraser');
-    const shBtn = B('shape', 'แปลงเป็นรูปทรงอัตโนมัติ (ขีดแล้วกดค้าง)', () => { prefs.shapeRecog = !prefs.shapeRecog; savePrefs(); shBtn.classList.toggle('on', prefs.shapeRecog); toast(prefs.shapeRecog ? 'เปิดแปลงรูปทรง: ขีดแล้วกดค้างไว้ครึ่งวินาที' : 'ปิดแปลงรูปทรงแล้ว'); }, prefs.shapeRecog);
-    const g2 = h('div', { class: 'grp' }, penBtn, hlBtn, erBtn, B('lasso', 'บ่วงบาศ', () => this.setTool('lasso'), t === 'lasso'), shBtn, B('ruler', 'ไม้บรรทัด', () => this.toggleRuler(), !!this.ruler), B('image', 'แทรกรูปภาพ', () => this.pickImage()), B('text', 'กล่องข้อความ', () => this.setTool('text'), t === 'text'), B('laser', 'เลเซอร์พอยเตอร์', () => this.setTool('laser'), t === 'laser'), B('timer', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b)), B('screen', 'หน้าจอนักเรียน', (b) => this.app.studentMenu(b)));
+    const shBtn = B('shape', 'รูปทรงและลูกศร', () => this.setTool('shapes'), t === 'shapes');
+    const g2 = h('div', { class: 'grp' }, penBtn, hlBtn, erBtn, B('lasso', 'บ่วงบาศ', () => this.setTool('lasso'), t === 'lasso'), shBtn, B('ruler', 'ไม้บรรทัด', () => this.toggleRuler(), !!this.ruler), B('sticker', 'สติกเกอร์', (b) => this.stickerPanel(b)), B('image', 'แทรกรูปภาพ', () => this.pickImage()), B('text', 'กล่องข้อความ', () => this.setTool('text'), t === 'text'), B('laser', 'เลเซอร์พอยเตอร์', () => this.setTool('laser'), t === 'laser'), B('timer', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b)), B('screen', 'หน้าจอนักเรียน', (b) => this.app.studentMenu(b)));
     // colors
     const g3 = h('div', { class: 'grp' });
     const c = this.cur();
@@ -322,7 +322,8 @@ export class Editor {
       B(prefs.penType, 'ปากกา', (b) => { if (this.tool === 'pen') openPenPanel(b, this, {}); else this.setTool('pen'); }, t === 'pen'),
       B('hl', 'ไฮไลต์', (b) => { if (this.tool === 'hl') openPenPanel(b, this, {}); else this.setTool('hl'); }, t === 'hl'),
       B('eraser', 'ยางลบ', (b) => { if (this.tool === 'eraser') openEraserPanel(b, this, {}); else this.setTool('eraser'); }, t === 'eraser'),
-      (() => { const b = B('shape', 'แปลงเป็นรูปทรงอัตโนมัติ (ขีดแล้วกดค้าง)', () => { prefs.shapeRecog = !prefs.shapeRecog; savePrefs(); b.classList.toggle('on', prefs.shapeRecog); toast(prefs.shapeRecog ? 'เปิดแปลงรูปทรง: ขีดแล้วกดค้างไว้ครึ่งวินาที' : 'ปิดแปลงรูปทรงแล้ว'); }, prefs.shapeRecog); return b; })(),
+      B('shape', 'รูปทรงและลูกศร (ทำแผนผัง)', () => this.setTool('shapes'), t === 'shapes'),
+      B('sticker', 'สติกเกอร์', (b) => this.stickerPanel(b)),
       B('ruler', 'ไม้บรรทัด (ใช้นิ้วลากย้าย สองนิ้วหมุน ลากปากกาชิดขอบได้เส้นตรง)', () => this.toggleRuler(), !!this.ruler),
       B('lasso', 'บ่วงบาศ (เลือก ย้าย ย่อขยาย หมุน)', () => this.setTool('lasso'), t === 'lasso'),
       B('image', 'แทรกรูปภาพ', () => this.pickImage()),
@@ -364,10 +365,24 @@ export class Editor {
       const mk = (m, label) => { const b = h('button', { class: 'chip' + (prefs.eraser.mode === m ? ' on' : '') }, label); b.onclick = () => { prefs.eraser.mode = m; savePrefs(); this.buildToolbar(); }; return b; };
       bar.append(mk('stroke', 'ลบทั้งเส้น'), mk('area', 'ลบส่วนที่ถู'));
     } else {
+      if (t === 'shapes') {
+        // Goodnotes-style shapes bar: auto-shape toggle · connectors · shapes · rounded corners
+        const auto = h('button', { class: 'chip ico' + (prefs.shapeRecog ? ' on' : ''), title: 'ขีดแล้วกดค้าง แปลงเป็นรูปทรงอัตโนมัติ (ใช้กับปากกา)' }, icon('magic'));
+        auto.onclick = () => { prefs.shapeRecog = !prefs.shapeRecog; savePrefs(); this.buildToolbar(); toast(prefs.shapeRecog ? 'เปิดแปลงรูปทรงเมื่อขีดแล้วกดค้าง' : 'ปิดแปลงรูปทรงอัตโนมัติ', 1500); };
+        bar.append(auto, h('div', { class: 'vsep' }));
+        const kind = prefs.shapeKind || 'rect';
+        const K = (id, ic, lab) => { const b = h('button', { class: 'chip ico' + (kind === id ? ' on' : ''), title: lab, 'aria-label': lab }, icon(ic)); b.onclick = () => { prefs.shapeKind = id; savePrefs(); this.buildToolbar(); }; return b; };
+        bar.append(K('line', 'shline', 'เส้นตรง'), K('arrow', 'sharrow', 'ลูกศร'), K('elbow', 'shelbow', 'ลูกศรหักมุม (เชื่อมแผนผัง)'), K('curve', 'shcurve', 'ลูกศรโค้ง'), h('div', { class: 'vsep' }),
+          K('rect', 'shrect', 'สี่เหลี่ยม'), K('ellipse', 'shellipse', 'วงกลม/วงรี'), K('tri', 'shtri', 'สามเหลี่ยม'), K('diamond', 'shdiamond', 'ข้าวหลามตัด'), K('pill', 'shpill', 'สี่เหลี่ยมมุมมน'));
+        const rd = h('button', { class: 'chip ico' + (prefs.shapeRound ? ' on' : ''), title: 'มุมมน' }, icon('shround'));
+        rd.onclick = () => { prefs.shapeRound = !prefs.shapeRound; savePrefs(); this.buildToolbar(); };
+        bar.append(h('div', { class: 'vsep' }), rd);
+      } else {
       const chip = h('button', { class: 'chip main' }, icon(c.kind === 'hl' ? 'hl' : prefs.penType), h('span', {}, c.kind === 'hl' ? 'ไฮไลต์' : PEN_LABEL[prefs.penType]), icon('down'));
       chip.onclick = () => openPenPanel(chip, this, {});
       bar.append(chip);
-      if (c.kind !== 'hl') {
+      }
+      if (c.kind !== 'hl' && t !== 'shapes') {
         // Goodnotes-style quick pen picks + line style (solid / dashed / dotted)
         const solid = ['dash', 'dot'].includes(prefs.penType) ? (prefs.solidPen || 'fount') : prefs.penType;
         for (const id of ['fount', 'ball', 'pencil', 'brush', 'marker']) {
@@ -681,6 +696,7 @@ export class Editor {
     const ctx = this.ctxUI, R = this.R;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, this.cvUI.width, this.cvUI.height);
     if (this.ruler) { this.drawRuler(ctx); ctx.setTransform(1, 0, 0, 1, 0, 0); }
+    if (this.shDraw?.moved) { const D = this.shDraw, st = this.shapeToolStroke(D), r0 = this.rects.get(D.page.id); if (st) { ctx.setTransform(R * this.z, 0, 0, R * this.z, R * (this.ox + r0.x * this.z), R * (this.oy + r0.y * this.z)); drawStroke(ctx, st, this.z * R, this.darkPaper, true); ctx.setTransform(1, 0, 0, 1, 0, 0); } }
     if (this.erCursor) {
       ctx.setTransform(R, 0, 0, R, 0, 0);
       ctx.beginPath(); ctx.arc(this.erCursor.x, this.erCursor.y, Math.max(3, prefs.eraser.size / 2 * this.z), 0, Math.PI * 2);
@@ -810,6 +826,7 @@ export class Editor {
     if (this.tool === 'eraser' || eraserBtn) { this.startErase(e, page, sx, sy); return; }
     if (this.tool === 'laser') { this.laserSeq = (this.laserSeq || 0) + 1; this.lasering = { id: e.pointerId, s: this.laserSeq }; this.laserAdd(sx, sy); return; }
     if (this.tool === 'lasso') { const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return; } this.startLasso(e, page, sx, sy); return; }
+    if (this.tool === 'shapes') { const r0 = this.rects.get(page.id); this.shDraw = { id: e.pointerId, page, x0: wx - r0.x, y0: wy - r0.y, x1: wx - r0.x, y1: wy - r0.y, sx, sy, moved: false }; return; }
     if (this.tool === 'text') { const r0 = this.rects.get(page.id); this.textTap = { id: e.pointerId, page, x: wx - r0.x, y: wy - r0.y, sx, sy }; this.armLongPress(e, sx, sy); return; }
     this.armLongPress(e, sx, sy);
     const c = this.cur(), r = this.rects.get(page.id);
@@ -910,6 +927,7 @@ export class Editor {
 
   move(e) {
     const [sx, sy] = this.local(e);
+    if (this.shDraw && this.shDraw.id === e.pointerId) { const D = this.shDraw, [wx, wy] = this.toWorld(sx, sy), r0 = this.rects.get(D.page.id); D.x1 = wx - r0.x; D.y1 = wy - r0.y; if (Math.hypot(sx - D.sx, sy - D.sy) > 6) D.moved = true; this.need.ui = true; return; }
     if (this.rgrab && this.rgrab.pts.has(e.pointerId)) { this.rulerMove(e, sx, sy); return; }
     if (this.imgDrag && this.imgDrag.id === e.pointerId) { this.dragImage(sx, sy); return; }
     if (this.lasering && this.lasering.id === e.pointerId) { const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; const r = this.stage.getBoundingClientRect(); for (const ce of (evs.length ? evs : [e])) this.laserAdd(ce.clientX - r.left, ce.clientY - r.top); return; }
@@ -958,6 +976,7 @@ export class Editor {
   }
 
   up(e, cancel) {
+    if (this.shDraw && this.shDraw.id === e.pointerId) { const D = this.shDraw; this.shDraw = null; this.need.ui = true; if (!cancel) this.commitShapeTool(D); this.pointers.delete(e.pointerId); return; }
     if (this.rgrab && this.rgrab.pts.has(e.pointerId)) { this.rulerUp(e); return; }
     if (this.lp && this.lp.id === e.pointerId) { clearTimeout(this.lp.t); this.lp = null; }
     if (this.lasering && this.lasering.id === e.pointerId) { (this.laserEnd ||= new Map()).set(this.lasering.s, performance.now()); this.lasering = null; this.pointers.delete(e.pointerId); this.laserDirty = true; return; }
@@ -1222,6 +1241,11 @@ export class Editor {
         bar.append(b);
       }
     }
+    if (sel.s.shape.k === 'poly' && sel.s.shape.pts.length >= 6) {
+      const rb = h('button', { class: 'chip' + (sel.s.shape.rr ? ' on' : '') }, icon('shround'), h('span', {}, 'มุมมน'));
+      rb.onclick = () => edit(ns => { const sh = JSON.parse(JSON.stringify(ns.shape)); if (sh.rr) delete sh.rr; else { const xs = [], ys = []; for (let i = 0; i < sh.pts.length; i += 2) { xs.push(sh.pts[i]); ys.push(sh.pts[i + 1]); } sh.rr = sh.closed ? Math.max(6, Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) * 0.18) : 14; } ns.shape = sh; return ns; });
+      bar.append(rb);
+    }
     if (closed) {
       // Goodnotes-style fill: none, or a colour + how solid it is
       bar.append(h('div', { class: 'brk' }), sec('พื้นที่'));
@@ -1352,6 +1376,38 @@ export class Editor {
     if (!pts.length) return;
     ctx.setTransform(R, 0, 0, R, 0, 0);
     drawLaserTrail(ctx, pts.map(p => ({ x: this.ox + p.x * this.z, y: this.oy + p.y * this.z, a: p.a, s: p.s })), !!this.lasering, prefs.laser);
+  }
+
+  // ---------- shapes tool: drag a box / a connector ----------
+  shapeToolStroke(D) {
+    const k = prefs.shapeKind || 'rect', pc = prefs.pens[prefs.penType] || { size: 1.5 };
+    let { x0, y0, x1, y1 } = D;
+    if (!D.moved) { x1 = x0 + 70; y1 = y0 + 50; x0 -= 70; y0 -= 50; if (['line', 'arrow', 'elbow', 'curve'].includes(k)) { y0 = y1 = D.y0; x0 = D.x0 - 60; x1 = D.x0 + 60; } }
+    const L = Math.min(x0, x1), T = Math.min(y0, y1), Rr = Math.max(x0, x1), B = Math.max(y0, y1), w = Rr - L, hh = B - T;
+    if (w < 3 && hh < 3) return null;
+    const round = prefs.shapeRound ? Math.min(w, hh) * 0.18 : 0;
+    let sh;
+    if (k === 'line') sh = { k: 'line', pts: [x0, y0, x1, y1] };
+    else if (k === 'arrow') sh = { k: 'arrow', pts: [x0, y0, x1, y1] };
+    else if (k === 'elbow') { const hor = Math.abs(x1 - x0) >= Math.abs(y1 - y0), m = hor ? (x0 + x1) / 2 : (y0 + y1) / 2; sh = { k: 'poly', closed: false, head: true, rr: 14, pts: hor ? [x0, y0, m, y0, m, y1, x1, y1] : [x0, y0, x0, m, x1, m, x1, y1] }; }
+    else if (k === 'curve') { const dx = x1 - x0, dy = y1 - y0; sh = { k: 'quad', head: true, pts: [x0, y0, (x0 + x1) / 2 - dy * 0.22, (y0 + y1) / 2 + dx * 0.22, x1, y1] }; }
+    else if (k === 'ellipse') sh = { k: 'ellipse', cx: L + w / 2, cy: T + hh / 2, rx: w / 2, ry: hh / 2, rot: 0 };
+    else if (k === 'tri') sh = { k: 'poly', closed: true, rr: round, pts: [L + w / 2, T, Rr, B, L, B] };
+    else if (k === 'diamond') sh = { k: 'poly', closed: true, rr: round, pts: [L + w / 2, T, Rr, T + hh / 2, L + w / 2, B, L, T + hh / 2] };
+    else if (k === 'pill') sh = { k: 'poly', closed: true, rr: Math.min(w, hh) / 2, pts: [L, T, Rr, T, Rr, B, L, B] };
+    else sh = { k: 'poly', closed: true, rr: round, pts: [L, T, Rr, T, Rr, B, L, B] };
+    if (!sh.rr) delete sh.rr;
+    const s = { t: 'pen', pen: ['dash', 'dot'].includes(prefs.penType) ? prefs.penType : 'ball', c: prefs.penColor, a: prefs.penAlpha, w: Math.max(1, pc.size), shape: sh };
+    if ((sh.closed || sh.k === 'ellipse') && prefs.shapeFill) s.fill = prefs.shapeFillA || 0.14;
+    return s;
+  }
+  commitShapeTool(D) {
+    const s = this.shapeToolStroke(D); if (!s) return;
+    s.id = uid(); s.bb = null; s.ts = Date.now();
+    const page = D.page, before = page.strokes.slice(); page.strokes.push(s);
+    this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
+    this.markDirty(page); this.need.main = true;
+    if (s.c) pushRecent(s.c);
   }
 
   // ---------- ruler (Goodnotes-style: finger moves, two fingers rotate, pen along an edge draws straight) ----------
@@ -1679,7 +1735,8 @@ export class Editor {
     const f = await pickFile('image/*', { hint: 'รูปจากคลังรูปภาพ/iCloud เครื่องต้องแปลงและดาวน์โหลดก่อน อาจใช้เวลาสักครู่' }); if (!f) return;
     this.insertImage(f, { crop: false, select: true }); // insert right away; crop later from the image bar
   }
-  async insertImage(file, { crop = true, select = false } = {}) {
+  async stickerPanel(anchor) { const m = await import('./stickers.js'); m.stickerPanel(this, anchor); }
+  async insertImage(file, { crop = true, select = false, sticker = false } = {}) {
     let n; const bz = busy('กำลังเปิดรูป…');
     try { n = await normalizeImage(file); } catch (e) { toast('เปิดรูปนี้ไม่ได้', 2500, 'warn'); return; } finally { bz.done(); }
     let obj = { id: uid(), t: 'img', blob: n.blob, iw: n.iw, ih: n.ih, crop: { x: 0, y: 0, w: 1, h: 1 }, mask: null, x: 0, y: 0, w: 1, h: 1, ts: Date.now() };
@@ -1690,7 +1747,7 @@ export class Editor {
     }
     const page = this.currentPage(), P = dims(page), rc = this.rects.get(page.id);
     const aw = obj.crop.w * obj.iw, ah = obj.crop.h * obj.ih;
-    const w = Math.min(P.w * 0.6, aw * 0.75), hh = w * ah / aw;
+    const w = sticker ? Math.min(120, aw * 0.5) : Math.min(P.w * 0.6, aw * 0.75), hh = w * ah / aw;
     const fitH = Math.min(1, P.h * 0.6 / hh);
     obj.w = w * fitH; obj.h = hh * fitH;
     // centre of the visible part of the page
@@ -1702,7 +1759,8 @@ export class Editor {
     this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
     this.markDirty(page); this.need.main = true;
     this.selectImage(page.id, obj.id);
-    if (select) toast('แทรกรูปแล้ว · กด “ครอป/ตัด” เพื่อตัดรูป', 2600);
+    if (sticker) { }
+    else if (select) toast('แทรกรูปแล้ว · กด “ครอป/ตัด” เพื่อตัดรูป', 2600);
     else if (!crop) toast('วางรูปแล้ว · กดค้างบนรูปเพื่อเลือกอีกครั้ง', 2200);
   }
   tapShape(e) { const r = this.stage.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return false; const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return true; } if (this.sel) this.deselect(); return false; }
