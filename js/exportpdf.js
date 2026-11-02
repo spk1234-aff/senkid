@@ -175,8 +175,24 @@ export function openExportDialog(ed) {
     cells[r[0]]?.scrollIntoView({ block: 'nearest' });
   });
   let busyFlag = false;
+  const make = async (btn) => {   // สร้าง PDF จากหน้าที่เลือก → { blob, n } หรือ null
+    if (busyFlag) return null;
+    const idx = [...sel].sort((a, b) => a - b); if (!idx.length) return null;
+    busyFlag = true; btn.disabled = true; bar.style.display = '';
+    const bz = busy('กำลังสร้างไฟล์ PDF…', `${idx.length} หน้า`, 0);
+    await ed.flush();
+    try {
+      const pages = idx.map(i => ed.pageMap.get(ed.nb.pages[i]));
+      const blob = await exportPdf(pages, ed.paper, { withBg, onProgress: (a, b) => { bar.firstChild.style.width = Math.round(a / b * 100) + '%'; prog.textContent = `กำลังสร้างไฟล์… หน้า ${a} จาก ${b}`; bz.set('กำลังสร้างไฟล์ PDF…', `หน้า ${a} จาก ${b}`, a / b); } });
+      prog.textContent = 'เสร็จแล้ว'; bz.done(); io.disconnect(); return { blob, n: idx.length };
+    } catch (e) { console.error(e); bz.done(); toast('ส่งออกไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); busyFlag = false; btn.disabled = false; return null; }
+  };
   const dg = dialog('ส่งออกเป็น PDF', body, [
     { label: 'ยกเลิก' },
+    { label: 'ส่งงานให้ครู', icon: 'upload', flex: 2, action: async (btn) => {
+      const r = await make(btn); if (!r) return false;
+      openSubmitDialog(r.blob, r.n, ed.nb.name);
+    } },
     { label: 'ส่งออก', cls: 'prim', flex: 2, icon: 'pdf', action: async (btn) => {
       if (busyFlag) return false;
       const idx = [...sel].sort((a, b) => a - b); if (!idx.length) return false;
@@ -194,6 +210,93 @@ export function openExportDialog(ed) {
   okBtn = dg.el.querySelector('.foot .pill.prim');
   paint();
   requestAnimationFrame(() => cells[curIdx]?.scrollIntoView({ block: 'nearest' }));
+}
+
+/* ---------- 📤 ส่งงานเข้า Sir’Earth Class (ห้องเรียนออนไลน์ของครู) โดยตรง ---------- */
+const SE_API = 'https://script.google.com/macros/s/AKfycbytfA0FUcixIlzJ1Im3ISGQLjE7mZeY4mZ1fmxa9yZS_lrHb2ngDJsx0nSvH0JGhAb-cg/exec';
+const seLS = { get: k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { } }, del: k => { try { localStorage.removeItem(k); } catch { } } };
+async function seCall(fn, args) {
+  let r; try { r = await fetch(SE_API, { method: 'POST', body: JSON.stringify({ fn, args }) }); } catch { throw new Error('ต่ออินเทอร์เน็ตไม่ได้ ลองใหม่อีกครั้ง'); }
+  const j = await r.json(); if (!j.ok) throw new Error(String(j.e || 'ผิดพลาด').replace(/^Error:\s*/, '')); return j.r;
+}
+async function seB64(blob) { const u = new Uint8Array(await blob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }
+const seDate = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); if (!m) return ''; const M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']; return `${+m[3]} ${M[+m[2] - 1]} ${m[4]}:${m[5]} น.`; };
+const seDue = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 7, +m[5]) : 0; };
+function seOpen(data) {   // งานที่เปิดรับอยู่ (ภาคเรียนล่าสุด)
+  const t = (data && data.terms || [])[0], out = []; if (!t) return out;
+  t.subjects.forEach(sb => sb.items.forEach(it => { if (it.submit && !(it.due && seDue(it.due) <= Date.now())) out.push({ sb, it }); }));
+  return out;
+}
+export function openSubmitDialog(blob, pages, name) {
+  if (blob.size > 24 * 1024 * 1024) { toast('ไฟล์ใหญ่เกิน 24 MB ลองเลือกหน้าให้น้อยลง', 4000, 'warn'); return; }
+  let S = null; try { S = JSON.parse(seLS.get('se_sess') || 'null'); } catch { }
+  if (S && Date.now() - S.at > 5.5 * 3600e3) S = null;
+  const body = h('div', { style: { fontSize: '20px', lineHeight: '1.45' } });
+  let pick = null, mates = new Set(), sendBtn = null;
+  const loginView = (msg) => {
+    body.innerHTML = ''; pick = null; if (sendBtn) sendBtn.disabled = true;
+    const id = h('input', { class: 'field', type: 'text', inputmode: 'numeric', placeholder: 'เลขประจำตัวนักเรียน', value: seLS.get('se_id'), maxlength: 6 });
+    const pin = h('input', { class: 'field', type: 'password', inputmode: 'numeric', placeholder: 'PIN 4 หลัก', maxlength: 4, style: { marginTop: '8px' } });
+    const err = h('div', { style: { color: 'var(--rec)', minHeight: '1.4em', marginTop: '6px' } }, msg || '');
+    const go = h('button', { class: 'pill prim', style: { width: '100%', marginTop: '6px' } }, 'เข้าสู่ระบบ');
+    const run = async () => {
+      err.textContent = ''; go.disabled = true; go.textContent = 'กำลังเข้าสู่ระบบ…';
+      try {
+        const r = await seCall('login', [id.value.trim(), pin.value.trim()]);
+        if (!r.ok) throw new Error(r.msg || 'เข้าสู่ระบบไม่สำเร็จ');
+        seLS.set('se_id', id.value.trim()); S = { tok: r.tok, data: r.data, at: Date.now() }; seLS.set('se_sess', JSON.stringify(S)); listView();
+      } catch (e) { err.textContent = e.message; go.disabled = false; go.textContent = 'เข้าสู่ระบบ'; }
+    };
+    go.onclick = run; pin.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+    body.append(h('div', { style: { color: 'var(--muted)', marginBottom: '8px' } }, `ส่ง PDF ${pages} หน้า เข้า Sir’Earth Class — ใช้เลขประจำตัวและ PIN เดียวกับที่ดูคะแนน`), id, pin, err, go);
+    setTimeout(() => (id.value ? pin : id).focus(), 60);
+  };
+  const listView = () => {
+    body.innerHTML = ''; pick = null; mates = new Set(); if (sendBtn) sendBtn.disabled = true;
+    const list = seOpen(S.data);
+    body.append(h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', color: 'var(--muted)', marginBottom: '6px' } }, h('span', {}, `${S.data.name} · ส่ง PDF ${pages} หน้า`),
+      h('button', { class: 'pill sec', style: { padding: '2px 12px' }, onclick: () => { seLS.del('se_sess'); S = null; loginView(); } }, 'เปลี่ยนคน / ดูงานล่าสุด')));
+    if (!list.length) { body.append(h('div', { style: { padding: '18px 4px' } }, 'ตอนนี้ยังไม่มีงานที่ครูเปิดรับ — ถ้าครูเพิ่งเปิดรับ กด “เปลี่ยนคน / ดูงานล่าสุด” แล้วเข้าสู่ระบบใหม่')); return; }
+    const mbox = h('div');
+    body.append(h('div', { style: { fontWeight: 700, margin: '4px 0' } }, 'เลือกงานที่จะส่ง'));
+    list.forEach(({ sb, it }) => {
+      const row = h('label', { style: { display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '8px 10px', border: '1px solid var(--line)', borderRadius: '12px', marginBottom: '6px', cursor: 'pointer' } },
+        h('input', { type: 'radio', name: 'se_it', style: { width: '22px', height: '22px', marginTop: '4px' } }),
+        h('div', {}, h('div', { style: { fontWeight: 700 } }, it.name), h('div', { style: { fontSize: '17px', color: 'var(--muted)' } },
+          `${sb.code} ${sb.name}` + (it.due ? ` · ส่งภายใน ${seDate(it.due)}` : '') + (it.group ? ' · งานกลุ่ม' : '') + (it.sent ? ' · ✅ ส่งแล้ว (ส่งใหม่จะแทนที่)' : ''))));
+      row.querySelector('input').onchange = () => {
+        pick = it; mates = new Set(); sendBtn.disabled = false; mbox.innerHTML = '';
+        if (it.group && it.mates && it.mates.length) {
+          mbox.append(h('div', { style: { fontWeight: 700, margin: '8px 0 4px' } }, '👥 เลือกเพื่อนในกลุ่ม (คุณเป็นผู้ส่ง)'));
+          const g = h('div', { style: { maxHeight: '220px', overflow: 'auto', border: '1px solid var(--line)', borderRadius: '12px', padding: '4px 8px' } });
+          it.mates.forEach(m => { const c = h('input', { type: 'checkbox', style: { width: '20px', height: '20px' } }); c.onchange = () => c.checked ? mates.add(m.id) : mates.delete(m.id); g.append(h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', padding: '4px 0' } }, c, `${m.no}. ${m.name}`)); });
+          mbox.append(g);
+        }
+      };
+      body.append(row);
+    });
+    body.append(mbox);
+  };
+  const dg = dialog('ส่งงานให้ครู (Sir’Earth Class)', body, [
+    { label: 'ยกเลิก' },
+    { label: 'ส่งงาน', cls: 'prim', flex: 2, icon: 'upload', action: async (btn) => {
+      if (!S || !pick) return false;
+      if (pick.group && !mates.size && !confirm('ยังไม่ได้เลือกเพื่อนในกลุ่ม — ส่งในนามคุณคนเดียวใช่ไหม?')) return false;
+      btn.disabled = true; const bz = busy('กำลังส่งงาน…', pick.name);
+      try {
+        const r = await seCall('submitWork', [S.tok, pick.id, { data: await seB64(blob), pages }, [...mates]]);
+        bz.done(); pick.sent = r; seLS.set('se_sess', JSON.stringify(S));
+        toast(`✅ ส่ง “${pick.name}” แล้ว (${r.n} หน้า)` + (r.members && r.members.length ? ` · กลุ่ม ${r.members.length} คน` : ''), 4200);
+      } catch (e) {
+        bz.done(); btn.disabled = false;
+        if (/SESSION/.test(e.message)) { seLS.del('se_sess'); S = null; loginView('หมดเวลาเข้าสู่ระบบ กรุณาเข้าสู่ระบบใหม่แล้วกดส่งอีกครั้ง'); }
+        else toast('ส่งไม่สำเร็จ: ' + e.message, 5000, 'warn');
+        return false;
+      }
+    } },
+  ], { width: 560 });
+  sendBtn = dg.el.querySelector('.foot .pill.prim'); sendBtn.disabled = true;
+  S ? listView() : loginView();
 }
 
 async function deliverPdf(blob, name) {
