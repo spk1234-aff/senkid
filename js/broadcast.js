@@ -141,11 +141,33 @@ export function studentMenu(app, anchor, ed) {
   const box = h('div', { class: 'scr-menu', style: { width: 'min(460px, calc(100vw - 20px))' } });
   box.append(h('div', { class: 'row' }, h('div', {}, h('b', {}, 'ฉายขึ้นทีวี / โปรเจกเตอร์'), h('div', { class: 'sub' }, 'เลือกตามวิธีที่ต่อจอ')),
     b.connected ? h('span', { style: { color: '#1E9E5A', fontWeight: 700, whiteSpace: 'nowrap' } }, '● จอนักเรียนเปิดอยู่') : ''));
+  // Goodnotes-style: what the audience sees
+  const kind = prefs.presentKind || (b.mode === 'page' ? 'page' : 'present');
+  const kinds = [
+    ['screen', 'ฉายทั้งหน้าจอ', 'ผู้ชมจะเห็นสิ่งที่ผู้นำเสนอเห็น', 'screen'],
+    ['present', 'ฉายหน้านำเสนอ', 'ผู้ชมจะไม่เห็นคำสั่งใช้งาน', 'hide'],
+    ['page', 'ฉายเฉพาะหน้า', 'ผู้ชมจะไม่เห็นคำสั่งใช้งานและการซูม', 'pages'],
+  ];
+  const pk = h('div', { class: 'pkind' });
+  for (const [id, t, sub, ic] of kinds) {
+    const r = h('button', { class: 'pk' + (kind === id ? ' on' : '') }, icon(ic), h('div', {}, h('b', {}, t), h('div', { class: 'sub' }, sub)), h('span', { class: 'ck' }, kind === id ? '✓' : ''));
+    r.onclick = () => {
+      prefs.presentKind = id; savePrefs(); close();
+      b.setMode(id === 'page' ? 'page' : 'follow');
+      if (id === 'screen') { if (prefs.toolbarHidden) ed.exitPresent(); toast('ฉายทั้งหน้าจอ · ผู้ชมเห็นเหมือนจอครู', 2200); return; }
+      if (b.connected) { toast(id === 'page' ? 'จอนักเรียนแสดงทั้งหน้าเสมอ ไม่ซูมตามครู' : 'จอนักเรียนซูม/เลื่อนตามครู ไม่เห็นเครื่องมือ', 2600); return; }
+      // mirroring: the TV shows the iPad screen, so hide the tools here
+      if (id === 'page') ed.fit();
+      presentMode(ed);
+    };
+    pk.append(r);
+  }
+  box.append(h('div', { class: 'lbl' }, 'โหมดพรีเซนเทชั่น'), pk);
   const card = (title, sub, btn) => h('div', { class: 'scr-card' }, h('b', {}, title), h('div', { class: 'sub' }, sub), btn);
   // A: mirroring
   const pres = h('button', { class: 'pill sec' }, icon('hide'), 'ซ่อนเครื่องมือ (โหมดนำเสนอ)');
   pres.onclick = () => { close(); presentMode(ed); };
-  box.append(card('ทีวีแสดงเหมือน iPad', 'ง่ายที่สุด · ใช้กับสายธรรมดาหรือ AirPlay · นักเรียนเห็นจอเดียวกับครู จึงซ่อนเครื่องมือให้เหลือแต่กระดาษ', pres));
+  box.append(h('div', { class: 'sub', style: { margin: '6px 2px 0' } }, 'สะท้อนจอ (AirPlay/AirServer/สายธรรมดา): ทีวีเห็นเหมือน iPad จึงซ่อนเครื่องมือบน iPad ให้แทน · ถ้าอยากให้ครูยังเห็นเครื่องมือ ใช้ "ทีวีเป็นจอที่สอง" ด้านล่าง'));
   // B: second screen
   const open = h('button', { class: 'pill ' + (twoScreens() ? 'prim' : 'sec') }, icon('screen'), b.connected ? 'เปิดหน้าต่างนักเรียนอีกครั้ง' : 'เปิดหน้าจอนักเรียน');
   open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
@@ -165,7 +187,6 @@ export function studentMenu(app, anchor, ed) {
     if (isIOS()) { const back = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, icon('home'), 'ส่งสมุดนี้กลับไปแอปบนหน้าจอโฮม'); back.onclick = () => { close(); transferDialog(ed, 'app'); }; box.append(back); }
   }
   if (b.connected) {
-    box.append(h('div', { class: 'lbl' }, 'สิ่งที่นักเรียนเห็นบนทีวี'), seg([['follow', 'ตามที่ครูดู (ซูม/เลื่อนตาม)'], ['page', 'ทั้งหน้าเสมอ']], b.mode, v => b.setMode(v)));
     if (studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; box.append(x); }
   }
   const link = new URL('student.html', location.href).href;

@@ -434,6 +434,12 @@ video.preview{width:100%;max-height:44vh;border-radius:12px;background:#000;marg
 .xp-info{font-size:19px;min-height:22px;margin-top:4px}
 .ctxbar .sw.lsz i{width:auto;height:auto;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.25)}
 /* projector menu */
+.scr-menu .pkind{border-radius:14px;background:var(--chip,rgba(127,127,127,.1));overflow:hidden;margin-top:4px}
+.scr-menu .pk{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:10px 14px;font:inherit;cursor:pointer}
+.scr-menu .pk+.pk{border-top:1px solid var(--line)}
+.scr-menu .pk svg.i{width:28px;height:28px;flex:none}
+.scr-menu .pk>div{flex:1}
+.scr-menu .pk .ck{color:var(--acc);font-size:24px;font-weight:700;width:20px}
 .scr-menu .scr-card{border:1px solid var(--line);border-radius:14px;padding:10px 12px 12px;margin-top:10px;display:flex;flex-direction:column;gap:4px}
 .scr-menu .scr-card b{font-size:23px}
 .scr-menu .scr-card .sub{line-height:1.25}
