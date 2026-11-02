@@ -44,6 +44,7 @@ const P = {
   dot: '<circle cx="5" cy="19" r="1.2" fill="currentColor"/><circle cx="10" cy="14" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="20" cy="4" r="1.2" fill="currentColor"/>',
   hl: '<path d="M7 15 L14 5 L19 9 L12 19 Z"/><path d="M7 15 L5 19 H12"/>',
   eraser: '<path d="M8 19 L4 15 L14 5 L20 11 L12 19 Z"/><path d="M9 10 l6 6"/><path d="M12 19 H20"/>',
+  ruler: '<rect x="1.8" y="8.2" width="20.4" height="7.6" rx="1.4" transform="rotate(-35 12 12)"/><path d="M7.2 15.6l1.5 2.1M9.9 13.7l.9 1.3M12.6 11.8l1.5 2.1M15.3 9.9l.9 1.3M18 8l1.5 2.1" transform="rotate(-35 12 12) rotate(35 12 12)"/>',
   shape: '<circle cx="9" cy="9" r="5"/><rect x="11" y="11" width="9" height="9" rx="1"/>',
   more: '<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16 l4 4"/>',

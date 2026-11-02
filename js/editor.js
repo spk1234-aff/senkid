@@ -204,7 +204,7 @@ export class Editor {
     const hlBtn = B('hl', 'ไฮไลต์', (b) => { if (this.tool === 'hl') openPenPanel(b, this, this.popOpts()); else this.setTool('hl'); }, t === 'hl');
     const erBtn = B('eraser', 'ยางลบ', (b) => { if (this.tool === 'eraser') openEraserPanel(b, this, this.popOpts()); else this.setTool('eraser'); }, t === 'eraser');
     const shBtn = B('shape', 'แปลงเป็นรูปทรงอัตโนมัติ (ขีดแล้วกดค้าง)', () => { prefs.shapeRecog = !prefs.shapeRecog; savePrefs(); shBtn.classList.toggle('on', prefs.shapeRecog); toast(prefs.shapeRecog ? 'เปิดแปลงรูปทรง: ขีดแล้วกดค้างไว้ครึ่งวินาที' : 'ปิดแปลงรูปทรงแล้ว'); }, prefs.shapeRecog);
-    const g2 = h('div', { class: 'grp' }, penBtn, hlBtn, erBtn, B('lasso', 'บ่วงบาศ', () => this.setTool('lasso'), t === 'lasso'), shBtn, B('image', 'แทรกรูปภาพ', () => this.pickImage()), B('text', 'กล่องข้อความ', () => this.setTool('text'), t === 'text'), B('laser', 'เลเซอร์พอยเตอร์', () => this.setTool('laser'), t === 'laser'), B('timer', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b)), B('screen', 'หน้าจอนักเรียน', (b) => this.app.studentMenu(b)));
+    const g2 = h('div', { class: 'grp' }, penBtn, hlBtn, erBtn, B('lasso', 'บ่วงบาศ', () => this.setTool('lasso'), t === 'lasso'), shBtn, B('ruler', 'ไม้บรรทัด', () => this.toggleRuler(), !!this.ruler), B('image', 'แทรกรูปภาพ', () => this.pickImage()), B('text', 'กล่องข้อความ', () => this.setTool('text'), t === 'text'), B('laser', 'เลเซอร์พอยเตอร์', () => this.setTool('laser'), t === 'laser'), B('timer', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b)), B('screen', 'หน้าจอนักเรียน', (b) => this.app.studentMenu(b)));
     // colors
     const g3 = h('div', { class: 'grp' });
     const c = this.cur();
@@ -263,6 +263,7 @@ export class Editor {
       B('hl', 'ไฮไลต์', (b) => { if (this.tool === 'hl') openPenPanel(b, this, {}); else this.setTool('hl'); }, t === 'hl'),
       B('eraser', 'ยางลบ', (b) => { if (this.tool === 'eraser') openEraserPanel(b, this, {}); else this.setTool('eraser'); }, t === 'eraser'),
       (() => { const b = B('shape', 'แปลงเป็นรูปทรงอัตโนมัติ (ขีดแล้วกดค้าง)', () => { prefs.shapeRecog = !prefs.shapeRecog; savePrefs(); b.classList.toggle('on', prefs.shapeRecog); toast(prefs.shapeRecog ? 'เปิดแปลงรูปทรง: ขีดแล้วกดค้างไว้ครึ่งวินาที' : 'ปิดแปลงรูปทรงแล้ว'); }, prefs.shapeRecog); return b; })(),
+      B('ruler', 'ไม้บรรทัด (ใช้นิ้วลากย้าย สองนิ้วหมุน ลากปากกาชิดขอบได้เส้นตรง)', () => this.toggleRuler(), !!this.ruler),
       B('lasso', 'บ่วงบาศ (เลือก ย้าย ย่อขยาย หมุน)', () => this.setTool('lasso'), t === 'lasso'),
       B('image', 'แทรกรูปภาพ', () => this.pickImage()),
       B('text', 'กล่องข้อความ', () => this.setTool('text'), t === 'text'),
@@ -613,6 +614,7 @@ export class Editor {
   redrawUI() {
     const ctx = this.ctxUI, R = this.R;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, this.cvUI.width, this.cvUI.height);
+    if (this.ruler) { this.drawRuler(ctx); ctx.setTransform(1, 0, 0, 1, 0, 0); }
     if (this.erCursor) {
       ctx.setTransform(R, 0, 0, R, 0, 0);
       ctx.beginPath(); ctx.arc(this.erCursor.x, this.erCursor.y, Math.max(3, prefs.eraser.size / 2 * this.z), 0, Math.PI * 2);
@@ -681,6 +683,7 @@ export class Editor {
       if (this.live && this.live.type === 'pen') return;
       if (this.erasing && this.erasing.type === 'pen') return;
       if (performance.now() - this.lastHover < 350) return;
+      if (this.ruler && (this.rgrab || (this.pointers.size === 0 && this.rulerHit(sx, sy)))) { this.rulerDown(e, sx, sy); return; }
       this.pointers.set(e.pointerId, { x: sx, y: sy, sx, sy });
       if (!this.gesture) this.gesture = { t0: performance.now(), max: 0, moved: 0 };
       this.gesture.max = Math.max(this.gesture.max, this.pointers.size);
@@ -702,6 +705,8 @@ export class Editor {
     if (this.pointers.size) { this.pointers.clear(); this.gesture = null; this.pan = null; }
     try { this.stage.setPointerCapture(e.pointerId); } catch { }
     if (this.tryHandle(sx, sy, e)) return;
+    const rh = this.ruler && this.rulerHit(sx, sy);
+    if (rh?.body) { if (type === 'mouse') this.rulerDown(e, sx, sy); return; } // pen resting on the ruler draws nothing
     this.startAction(e, sx, sy);
   }
 
@@ -746,6 +751,7 @@ export class Editor {
       id: e.pointerId, type: e.pointerType, page, kind: c.kind, pen: c.type, color: c.color, alpha: c.alpha, size: c.size,
       pts: [], pred: [], shape: null, sx, sy, holdX: sx, holdY: sy, rx: r.x, ry: r.y, t0: performance.now(), far: 0,
     };
+    { const rh = this.ruler && this.rulerHit(sx, sy); if (rh?.edge) this.live.rul = rh.edge * (this.rulerDims.H / 2 + (c.size || 1) * this.z / 2); }
     this.addPoint(e, sx, sy);
     this.armHold();
     this.need.live = true;
@@ -753,7 +759,7 @@ export class Editor {
   // hold detection: the pen stayed inside a small circle for HOLD_MS (tolerates hand tremor and drift)
   armHold() {
     clearInterval(this.holdTimer);
-    const L = this.live; if (!L || L.shape) return;
+    const L = this.live; if (!L || L.shape || L.rul != null) return;
     if (!prefs.shapeRecog || (L.kind === 'hl' && prefs.hl.straight)) return;
     L.track = [{ t: performance.now(), x: L.sx, y: L.sy, n: L.pts.length }];
     this.holdTimer = setInterval(() => this.checkHold(), 40);
@@ -827,6 +833,7 @@ export class Editor {
   }
   addPoint(e, sx, sy) {
     const L = this.live;
+    if (L.rul != null && this.ruler) { const Rr = this.ruler, co = Math.cos(Rr.ang), si = Math.sin(Rr.ang), a = (sx - Rr.cx) * co + (sy - Rr.cy) * si; sx = Rr.cx + a * co - L.rul * si; sy = Rr.cy + a * si + L.rul * co; }
     L.far = Math.max(L.far || 0, Math.hypot(sx - L.sx, sy - L.sy));
     const x = (sx - this.ox) / this.z - L.rx, y = (sy - this.oy) / this.z - L.ry;
     const n = L.pts.length;
@@ -836,6 +843,7 @@ export class Editor {
 
   move(e) {
     const [sx, sy] = this.local(e);
+    if (this.rgrab && this.rgrab.pts.has(e.pointerId)) { this.rulerMove(e, sx, sy); return; }
     if (this.imgDrag && this.imgDrag.id === e.pointerId) { this.dragImage(sx, sy); return; }
     if (this.lasering && this.lasering.id === e.pointerId) { const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; const r = this.stage.getBoundingClientRect(); for (const ce of (evs.length ? evs : [e])) this.laserAdd(ce.clientX - r.left, ce.clientY - r.top); return; }
     if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { const [wx, wy] = this.toWorld(sx, sy); const L = this.lassoDraw; L.pts.push(wx - L.rx, wy - L.ry); this.need.ui = true; return; }
@@ -864,7 +872,7 @@ export class Editor {
       if (evs && evs.length) for (const ce of evs) this.addPoint(ce, ce.clientX - r.left, ce.clientY - r.top);
       else this.addPoint(e, sx, sy);
       L.pred = [];
-      if (e.getPredictedEvents && !prefs.economy) {
+      if (e.getPredictedEvents && !prefs.economy && L.rul == null) {
         const pe = e.getPredictedEvents();
         for (const p of pe.slice(0, 3)) L.pred.push((p.clientX - r.left - this.ox) / this.z - L.rx, (p.clientY - r.top - this.oy) / this.z - L.ry, this.pressureOf(e), this.tiltOf(e));
       }
@@ -883,6 +891,7 @@ export class Editor {
   }
 
   up(e, cancel) {
+    if (this.rgrab && this.rgrab.pts.has(e.pointerId)) { this.rulerUp(e); return; }
     if (this.lp && this.lp.id === e.pointerId) { clearTimeout(this.lp.t); this.lp = null; }
     if (this.lasering && this.lasering.id === e.pointerId) { (this.laserEnd ||= new Map()).set(this.lasering.s, performance.now()); this.lasering = null; this.pointers.delete(e.pointerId); this.laserDirty = true; return; }
     if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { this.pointers.delete(e.pointerId); this.finishLasso(); return; }
@@ -999,6 +1008,7 @@ export class Editor {
   }
   wheel(e) {
     if (this.inStageUI(e)) return;
+    if (this.ruler && !e.ctrlKey) { const [qx, qy] = this.local(e); if (this.rulerHit(qx, qy)) { e.preventDefault(); this.ruler.ang = this.snapAng(this.ruler.ang + Math.sign(e.deltaY || e.deltaX) * Math.PI / 180); this.need.ui = true; return; } }
     e.preventDefault(); this.pinPid = null;
     const [sx, sy] = this.local(e);
     if (e.ctrlKey || e.metaKey) {
@@ -1256,6 +1266,65 @@ export class Editor {
     if (!pts.length) return;
     ctx.setTransform(R, 0, 0, R, 0, 0);
     drawLaserTrail(ctx, pts.map(p => ({ x: this.ox + p.x * this.z, y: this.oy + p.y * this.z, a: p.a, s: p.s })), !!this.lasering, prefs.laser);
+  }
+
+  // ---------- ruler (Goodnotes-style: finger moves, two fingers rotate, pen along an edge draws straight) ----------
+  toggleRuler() { this.ruler = this.ruler ? null : { cx: this.W / 2, cy: this.H * 0.45, ang: 0 }; this.rgrab = null; this.need.ui = true; this.buildToolbar(); if (this.ruler) toast('ใช้นิ้วลากเพื่อย้าย · สองนิ้วหมุน · ลากปากกาชิดขอบได้เส้นตรง', 3000); }
+  get rulerDims() { return { L: Math.hypot(this.W, this.H) * 1.3, H: 84 }; }
+  rulerHit(sx, sy) {
+    const Rr = this.ruler; if (!Rr) return null;
+    const co = Math.cos(Rr.ang), si = Math.sin(Rr.ang), dx = sx - Rr.cx, dy = sy - Rr.cy, a = dx * co + dy * si, b = -dx * si + dy * co, { L, H } = this.rulerDims;
+    if (Math.abs(a) > L / 2) return null;
+    const d = Math.abs(b) - H / 2;
+    if (Math.abs(d) < 22) return { edge: b < 0 ? -1 : 1 };
+    return d < 0 ? { body: true } : null;
+  }
+  snapAng(a) { const q = Math.PI / 4, k = Math.round(a / q); return Math.abs(a - k * q) < Math.PI / 90 ? k * q : a; }
+  rulerBase() { const g = this.rgrab; g.start = { ...this.ruler }; g.p0 = new Map([...g.pts].map(([k, v]) => [k, v.slice()])); }
+  rulerDown(e, sx, sy) {
+    this.rgrab ||= { pts: new Map() };
+    if (this.rgrab.pts.size >= 2) return;
+    this.rgrab.pts.set(e.pointerId, [sx, sy]); this.rulerBase();
+    try { this.stage.setPointerCapture(e.pointerId); } catch { }
+  }
+  rulerMove(e, sx, sy) {
+    const g = this.rgrab; g.pts.set(e.pointerId, [sx, sy]);
+    const ids = [...g.pts.keys()], A = g.p0.get(ids[0]), a = g.pts.get(ids[0]);
+    if (ids.length === 1) { this.ruler.cx = g.start.cx + a[0] - A[0]; this.ruler.cy = g.start.cy + a[1] - A[1]; }
+    else {
+      const B = g.p0.get(ids[1]), b = g.pts.get(ids[1]);
+      const m0 = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2], m1 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const da = Math.atan2(b[1] - a[1], b[0] - a[0]) - Math.atan2(B[1] - A[1], B[0] - A[0]);
+      const ang = this.snapAng(g.start.ang + da), dA = ang - g.start.ang, co = Math.cos(dA), si = Math.sin(dA);
+      // rotate the ruler centre around the fingers' midpoint, then follow the midpoint
+      const vx = g.start.cx - m0[0], vy = g.start.cy - m0[1];
+      this.ruler.cx = m1[0] + vx * co - vy * si; this.ruler.cy = m1[1] + vx * si + vy * co; this.ruler.ang = ang;
+    }
+    this.need.ui = true;
+  }
+  rulerUp(e) { const g = this.rgrab; g.pts.delete(e.pointerId); if (!g.pts.size) this.rgrab = null; else this.rulerBase(); this.need.ui = true; }
+  drawRuler(ctx) {
+    const Rr = this.ruler, { L, H } = this.rulerDims;
+    ctx.setTransform(this.R, 0, 0, this.R, 0, 0); ctx.save(); ctx.translate(Rr.cx, Rr.cy); ctx.rotate(Rr.ang);
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-L / 2, -H / 2, L, H, 8) : ctx.rect(-L / 2, -H / 2, L, H);
+    ctx.fillStyle = 'rgba(46,50,58,.72)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.stroke();
+    const mm = 72 / 25.4 * this.z; // page points per mm, on screen
+    const step = mm < 2.2 ? 10 : 1, n = Math.min(4000, Math.floor(L / 2 / mm));
+    ctx.beginPath();
+    for (let i = -n - (-n % step); i <= n; i += step) {
+      const x = i * mm, len = i % 10 === 0 ? 20 : i % 5 === 0 ? 13 : 7;
+      ctx.moveTo(x, -H / 2); ctx.lineTo(x, -H / 2 + len); ctx.moveTo(x, H / 2); ctx.lineTo(x, H / 2 - len);
+    }
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '15px "TH Sarabun New", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const cmStep = mm * 10 < 26 ? 5 : 1;
+    for (let i = -Math.floor(n / 10); i <= n / 10; i++) if (i % cmStep === 0) ctx.fillText(String(Math.abs(i)), i * mm * 10, -H / 2 + 21);
+    // angle readout
+    let deg = Math.round(((-Rr.ang * 180 / Math.PI) % 180 + 180) % 180);
+    const tx = deg + '°'; ctx.font = 'bold 20px "TH Sarabun New", sans-serif'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(tx).width + 22; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-tw / 2, 6, tw, 26, 13) : ctx.rect(-tw / 2, 6, tw, 26); ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fill();
+    ctx.fillStyle = '#1E2A55'; ctx.fillText(tx, 0, 20);
+    ctx.restore();
   }
 
   // ---------- lasso ----------
