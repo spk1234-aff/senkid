@@ -1,5 +1,5 @@
 // Offline cache for เส้นคิด. Bump VERSION on every release.
-const VERSION = 'senkid-1.3.6-1';
+const VERSION = 'senkid-1.3.7-1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/ui.js', 'js/db.js', 'js/prefs.js', 'js/render.js', 'js/shapes.js', 'js/editor.js', 'js/penpanel.js', 'js/recorder.js', 'js/library.js', 'js/images.js', 'js/files.js', 'js/pdfdoc.js', 'js/exportpdf.js', 'js/timer.js', 'js/broadcast.js', 'js/student.js', 'student.html', 'vendor/pdfjs/pdf.min.mjs', 'vendor/pdfjs/pdf.worker.min.mjs', 'vendor/pdf-lib.esm.min.js',

@@ -1252,7 +1252,18 @@ export class Editor {
       this.buildToolbar();
     };
     bar.append(h('span', { class: 'chip', style: { cursor: 'default' } }, icon('text')));
-    for (const [v, l] of [[18, 'เล็ก'], [24, 'กลาง'], [32, 'ใหญ่'], [44, 'ใหญ่มาก'], [60, 'หัวข้อ']]) { const b = h('button', { class: 'chip' + (cur.size === v ? ' on' : '') }, l); b.onpointerdown = (e) => e.preventDefault(); b.onclick = () => apply('size', v); bar.append(b); }
+    // font size in pt (page units are points on A4, so 16 pt prints as 16 pt)
+    const SIZES = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 60, 72, 96];
+    const clampPt = (v) => Math.max(6, Math.min(200, Math.round(v * 2) / 2));
+    const step = (d) => { const v = cur.size; const nx = d > 0 ? (SIZES.find(x => x > v) ?? v + 8) : ([...SIZES].reverse().find(x => x < v) ?? Math.max(6, v - 2)); apply('size', clampPt(nx)); };
+    const minus = h('button', { class: 'chip', title: 'เล็กลง' }, '−'); minus.onpointerdown = (e) => e.preventDefault(); minus.onclick = () => step(-1);
+    const plus = h('button', { class: 'chip', title: 'ใหญ่ขึ้น' }, '+'); plus.onpointerdown = (e) => e.preventDefault(); plus.onclick = () => step(1);
+    const num = h('input', { class: 'ptin', type: 'text', inputmode: 'decimal', value: String(cur.size), title: 'ขนาดตัวอักษร (pt)' });
+    const commitNum = () => { const v = parseFloat(String(num.value).replace(',', '.')); if (v > 0 && v !== cur.size) apply('size', clampPt(v)); else num.value = String(cur.size); };
+    num.addEventListener('focus', () => { this.txKeep = true; num.select(); });
+    num.addEventListener('blur', () => { commitNum(); setTimeout(() => { this.txKeep = false; }, 250); });
+    num.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); num.blur(); } });
+    bar.append(minus, h('span', { class: 'ptbox' }, num, h('span', {}, 'pt')), plus);
     const bb = h('button', { class: 'chip' + (cur.bold ? ' on' : ''), style: { fontWeight: 700 } }, 'B'); bb.onpointerdown = (e) => e.preventDefault(); bb.onclick = () => apply('bold', !cur.bold); bar.append(bb);
     bar.append(h('div', { class: 'vsep' }));
     for (const col of prefs.favorites.slice(0, 8)) { const on = col.toUpperCase() === String(cur.c).toUpperCase(); const b = h('button', { class: 'sw' + (on ? ' on' : '') }, h('i', { style: { background: col } })); b.onpointerdown = (e) => e.preventDefault(); b.onclick = () => apply('c', col); bar.append(b); }
