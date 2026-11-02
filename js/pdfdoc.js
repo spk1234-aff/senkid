@@ -24,7 +24,9 @@ export function getDoc(pdfId) {
 
 // store a PDF file and return its page list [{w,h}] in points
 export async function importPdf(file, onProgress) {
+  onProgress && onProgress(0, 0, 'read');
   const buf = new Uint8Array(await file.arrayBuffer());
+  onProgress && onProgress(0, 0, 'open');
   const doc = await openPdfData(buf.slice());
   const n = doc.numPages, sizes = [];
   for (let i = 1; i <= n; i++) {
@@ -33,6 +35,7 @@ export async function importPdf(file, onProgress) {
     if (onProgress && (i % 10 === 0 || i === n)) onProgress(i, n);
   }
   const id = 'pdf-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  onProgress && onProgress(n, n, 'store');
   await db.put('pdfs', { id, name: file.name || 'เอกสาร.pdf', blob: new Blob([buf], { type: 'application/pdf' }), pages: n, created: Date.now() });
   docs.set(id, Promise.resolve(doc));
   return { id, sizes, name: (file.name || 'เอกสาร').replace(/\.pdf$/i, '') };

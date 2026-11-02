@@ -195,11 +195,24 @@ export function downloadBlob(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-export function pickFile(accept) {
+export function pickFile(accept, { hint } = {}) {
+  // iPad: the system file picker can take a while to appear and to copy the file (iCloud) — show a message the whole time
   return new Promise((res) => {
     const i = h('input', { type: 'file', accept, style: { display: 'none' } });
-    i.onchange = () => { res(i.files[0] || null); i.remove(); };
-    document.body.append(i); i.click();
+    let done = false, ov = null;
+    const msg = h('div', { class: 'busy-msg' }, 'กำลังเปิดหน้าเลือกไฟล์…');
+    const sub = h('div', { class: 'busy-sub' }, hint || 'เลือกไฟล์ในหน้าต่างของเครื่อง');
+    const cancel = h('button', { class: 'pill sec', style: { marginTop: '14px', height: '42px' } }, 'ยกเลิก');
+    const finish = (f) => { if (done) return; done = true; ov?.remove(); window.removeEventListener('focus', onFocus); i.remove(); res(f); };
+    const onFocus = () => setTimeout(() => { if (done) return; msg.textContent = 'กำลังโหลดไฟล์จากเครื่อง…'; sub.textContent = 'ไฟล์ใหญ่ หรือไฟล์ที่อยู่บน iCloud / Drive อาจใช้เวลาสักครู่'; }, 400);
+    cancel.onclick = () => finish(null);
+    i.onchange = () => finish(i.files[0] || null);
+    i.addEventListener('cancel', () => finish(null));
+    window.addEventListener('focus', onFocus);
+    document.body.append(i);
+    ov = h('div', { class: 'busy picking' }, h('div', { class: 'busy-box' }, h('div', { class: 'spin' }), msg, sub, cancel));
+    setTimeout(() => { if (!done) document.body.append(ov); }, 250);
+    i.click();
   });
 }
 

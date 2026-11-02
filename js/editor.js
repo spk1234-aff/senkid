@@ -1540,7 +1540,7 @@ export class Editor {
   async insertPdf(file, afterId) {
     const b = busy('กำลังแทรก PDF…', file.name);
     let r;
-    try { r = await importPdf(file, (i, n) => b.set(null, `อ่านแล้ว ${i} จาก ${n} หน้า`, i / n)); }
+    try { r = await importPdf(file, (i, n, st) => st ? b.set(null, st === 'read' ? 'กำลังโหลดไฟล์จากเครื่อง…' : st === 'open' ? 'กำลังเปิด PDF…' : 'กำลังเก็บ PDF ไว้ในแอป…') : b.set(null, `อ่านแล้ว ${i} จาก ${n} หน้า`, i / n)); }
     catch (e) { console.error(e); toast('เปิด PDF ไม่ได้: ' + (e.message || e), 3500, 'warn'); return; }
     finally { b.done(); }
     const before = this.nb.pages.slice();

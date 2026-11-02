@@ -12,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.3.7';
+export const VERSION = '1.3.8';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -129,9 +129,17 @@ class App {
     else if (this.library && !this.editor) this.library.load();
   }
   async notebookFromPdf(file) {
-    const b = busy('กำลังเปิด PDF…', file.name);
+    const mb = file.size ? ` · ${fmtBytes(file.size)}` : '';
+    const b = busy('กำลังโหลด PDF จากเครื่อง…', file.name + mb);
     let r;
-    try { r = await importPdf(file, (i, n) => b.set('กำลังเปิด PDF…', `อ่านแล้ว ${i} จาก ${n} หน้า`, i / n)); }
+    try {
+      r = await importPdf(file, (i, n, stage) => {
+        if (stage === 'read') b.set('กำลังโหลด PDF จากเครื่อง…', file.name + mb);
+        else if (stage === 'open') b.set('กำลังเปิด PDF…', 'ตรวจโครงสร้างไฟล์');
+        else if (stage === 'store') b.set('กำลังเก็บ PDF ไว้ในแอป…', `${n} หน้า`, 1);
+        else b.set('กำลังเปิด PDF…', `อ่านแล้ว ${i} จาก ${n} หน้า`, i / n);
+      });
+    }
     catch (e) { console.error(e); b.done(); toast('เปิด PDF ไม่ได้ (ไฟล์อาจเสียหรือมีรหัสผ่าน)', 3500, 'warn'); return; }
     b.set('กำลังสร้างสมุด…', `${r.sizes.length} หน้า`, 1);
     const id = uid();
