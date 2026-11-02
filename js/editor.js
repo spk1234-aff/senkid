@@ -213,18 +213,22 @@ export class Editor {
   placeDock(dock) {
     const P = prefs.dockXY; if (!P) return;
     const W = this.stage.clientWidth, H = this.stage.clientHeight;
-    const horiz = P.y < 0.16 || P.y > 0.84; dock.classList.toggle('horiz', horiz);
-    const bw = dock.offsetWidth, bh = dock.offsetHeight;
-    const x = Math.max(6, Math.min(W - bw - 6, P.x * W - bw / 2)), y = Math.max(6, Math.min(H - bh - 6, P.y * H - bh / 2));
+    // the grip follows the finger; near the top or bottom edge the dock lies flat (decided by the finger, not the dock centre)
+    const horiz = P.y < 0.18 || P.y > 0.82; dock.classList.toggle('horiz', horiz);
+    const bw = dock.offsetWidth, bh = dock.offsetHeight, fx = P.x * W, fy = P.y * H;
+    let x = horiz ? fx - 14 : fx - bw / 2, y = horiz ? fy - bh / 2 : fy - 10;
+    if (horiz && fx > W * 0.6) x = fx - bw + 14; // grabbed near the right: grow leftwards
+    if (!horiz && fy > H * 0.5) y = fy - bh + 10;
+    x = Math.max(6, Math.min(W - bw - 6, x)); y = Math.max(6, Math.min(H - bh - 6, y));
+    if (horiz && P.y < 0.18 && prefs.toolbarPos === 'top' && x < 120) y = Math.max(y, 62); // keep clear of the undo buttons
     Object.assign(dock.style, { left: x + 'px', top: y + 'px', right: 'auto', transform: 'none' });
   }
   armDockDrag(dock, grip) {
     grip.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation();
-      const W = this.stage.clientWidth, H = this.stage.clientHeight, r0 = dock.getBoundingClientRect(), sr = this.stage.getBoundingClientRect();
-      const dx = e.clientX - (r0.left + r0.width / 2), dy = e.clientY - (r0.top + r0.height / 2);
+      const W = this.stage.clientWidth, H = this.stage.clientHeight, sr = this.stage.getBoundingClientRect();
       dock.classList.add('dragging'); try { grip.setPointerCapture(e.pointerId); } catch { }
-      const mv = (ev) => { prefs.dockXY = { x: Math.max(0, Math.min(1, (ev.clientX - dx - sr.left) / W)), y: Math.max(0, Math.min(1, (ev.clientY - dy - sr.top) / H)) }; this.placeDock(dock); };
+      const mv = (ev) => { prefs.dockXY = { x: Math.max(0, Math.min(1, (ev.clientX - sr.left) / W)), y: Math.max(0, Math.min(1, (ev.clientY - sr.top) / H)) }; this.placeDock(dock); };
       const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); dock.classList.remove('dragging'); savePrefs(); };
       grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
     });

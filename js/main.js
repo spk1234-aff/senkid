@@ -12,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.6.0';
+export const VERSION = '1.6.1';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
