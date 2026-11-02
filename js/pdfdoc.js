@@ -8,9 +8,35 @@ export function pdfjs() {
 }
 const base = new URL('../vendor/pdfjs/', import.meta.url).href;
 const docs = new Map(); // pdfId -> Promise<PDFDocumentProxy>
+// Safari has no canvas `filter`, which pdf.js uses for soft masks → masked areas came out black.
+// Detect that and convert the mask to alpha by hand (luminosity or alpha + optional transfer map).
+(function canvasFilterFallback() {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 1; const x = c.getContext('2d');
+    x.filter = 'invert(1)'; x.fillStyle = '#fff'; x.fillRect(0, 0, 1, 1);
+    const works = x.getImageData(0, 0, 1, 1).data[0] < 128;
+    if (works) return;
+  } catch { }
+  globalThis.__senkidNoFilter = true;
+  globalThis.__senkidMask = (src, sx, sy, w, h, type, map) => {
+    const c = document.createElement('canvas'); c.width = Math.max(1, w); c.height = Math.max(1, h);
+    const x = c.getContext('2d'); x.drawImage(src, sx, sy, w, h, 0, 0, w, h);
+    const im = x.getImageData(0, 0, c.width, c.height), d = im.data;
+    const tf = map && map.length >= 256 ? map : null;
+    for (let i = 0; i < d.length; i += 4) {
+      let a = type === 'Luminosity' ? Math.round(0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]) : d[i + 3];
+      if (tf) a = tf[a];
+      d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = a;
+    }
+    x.putImageData(im, 0, 0); return c;
+  };
+})();
+
 export async function openPdfData(data) {
   const lib = await pdfjs();
-  return lib.getDocument({ data, cMapUrl: base + 'cmaps/', cMapPacked: true, standardFontDataUrl: base + 'standard_fonts/', isEvalSupported: false, disableAutoFetch: true }).promise;
+  return lib.getDocument({ data, cMapUrl: base + 'cmaps/', cMapPacked: true, standardFontDataUrl: base + 'standard_fonts/', isEvalSupported: false, disableAutoFetch: true,
+    // iPad Safari: OffscreenCanvas / ImageDecoder paths can paint soft-masked or transparent parts black
+    isOffscreenCanvasSupported: false, isImageDecoderSupported: false }).promise;
 }
 export function getDoc(pdfId) {
   let p = docs.get(pdfId);
