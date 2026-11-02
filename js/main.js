@@ -12,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.4.7';
+export const VERSION = '1.4.8';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -290,15 +290,25 @@ class App {
     if (!navigator.onLine) { toast('ต้องต่ออินเทอร์เน็ตก่อนจึงจะตรวจหาอัปเดตได้', 3000, 'warn'); return; }
     const bz = busy('กำลังตรวจหาอัปเดต…', 'รุ่นที่ใช้อยู่ ' + VERSION);
     try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (!reg) { bz.done(); location.reload(); return; }
-      await reg.update(); // downloads sw.js fresh; a changed file means a new version
-      const w = reg.installing || reg.waiting;
-      if (!w) { bz.done(); toast('ใช้รุ่นล่าสุดอยู่แล้ว (' + VERSION + ')', 2600); return; }
-      bz.set('กำลังดาวน์โหลดรุ่นใหม่…', 'อีกสักครู่แอปจะเปิดใหม่เอง');
+      // what is on the server right now?
+      let latest = null;
+      try { const t = await (await fetch('sw.js?fresh=' + Date.now(), { cache: 'no-store' })).text(); latest = (t.match(/senkid-([\d.]+)-/) || [])[1] || null; } catch { }
+      if (latest && latest === VERSION) { bz.done(); toast('ใช้รุ่นล่าสุดอยู่แล้ว (' + VERSION + ')', 2600); return; }
       await this.editor?.flush?.();
       this.updating = true;
-      await new Promise((res) => { if (w.state === 'activated') return res(); w.addEventListener('statechange', () => { if (w.state === 'activated' || w.state === 'redundant') res(); }); setTimeout(res, 20000); });
+      bz.set('กำลังดาวน์โหลดรุ่นใหม่…', (latest ? 'รุ่น ' + latest + ' · ' : '') + 'อีกสักครู่แอปจะเปิดใหม่เอง');
+      const reg = await navigator.serviceWorker.getRegistration();
+      let ok = false;
+      if (reg) {
+        try { await reg.update(); } catch { }
+        const w = reg.installing || reg.waiting;
+        if (w) ok = await new Promise((res) => { if (w.state === 'activated') return res(true); w.addEventListener('statechange', () => { if (w.state === 'activated') res(true); else if (w.state === 'redundant') res(false); }); setTimeout(() => res(false), 25000); });
+      }
+      if (!ok) { // stuck: drop the offline copy and load fresh (notebooks are kept — they live in a separate store)
+        bz.set('กำลังล้างไฟล์แอปเก่าแล้วโหลดใหม่…', 'สมุดทั้งหมดยังอยู่ครบ');
+        for (const k of await caches.keys()) if (k.startsWith('senkid-')) await caches.delete(k);
+        try { await reg?.unregister(); } catch { }
+      }
       location.reload();
     } catch (e) { bz.done(); toast('ตรวจหาอัปเดตไม่สำเร็จ: ' + (e.message || e), 3500, 'warn'); }
   }

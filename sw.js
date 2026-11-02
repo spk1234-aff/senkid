@@ -1,12 +1,19 @@
 // Offline cache for เส้นคิด. Bump VERSION on every release.
-const VERSION = 'senkid-1.4.7-1';
+const VERSION = 'senkid-1.4.8-1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/ui.js', 'js/db.js', 'js/prefs.js', 'js/render.js', 'js/shapes.js', 'js/editor.js', 'js/penpanel.js', 'js/recorder.js', 'js/library.js', 'js/images.js', 'js/files.js', 'js/pdfdoc.js', 'js/exportpdf.js', 'js/timer.js', 'js/broadcast.js', 'js/student.js', 'student.html', 'vendor/pdfjs/pdf.min.mjs', 'vendor/pdfjs/pdf.worker.min.mjs', 'vendor/pdf-lib.esm.min.js',
   'fonts/THSarabunNew.woff', 'fonts/THSarabunNew-Bold.woff',
   'icons/favicon.svg', 'icons/favicon.ico', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-192.png', 'icons/icon-maskable-512.png',
 ];
-self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
+// install never fails because of one slow/missing file (slow hotspot): missing files are fetched later on demand
+self.addEventListener('install', (e) => {
+  e.waitUntil((async () => {
+    const c = await caches.open(VERSION);
+    await Promise.allSettled(SHELL.map(u => fetch(u, { cache: 'no-cache' }).then(r => { if (r.ok) return c.put(u, r); })));
+    await self.skipWaiting();
+  })());
+});
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('senkid-') && k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 // copy of a response without the "redirected" flag
 async function plain(r) {
@@ -17,6 +24,7 @@ async function plain(r) {
 self.addEventListener('fetch', (e) => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url); if (url.origin !== location.origin) return;
+  if (req.cache === 'no-store' || url.searchParams.has('fresh')) return; // version checks go straight to the network
   // pages: answer from the offline copy at once (fast on a slow hotspot) and refresh it in the background.
   if (req.mode === 'navigate') {
     // which page: the app shell (./ or index.html) or another page such as student.html
