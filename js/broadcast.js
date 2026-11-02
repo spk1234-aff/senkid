@@ -18,7 +18,8 @@ export class Broadcast {
     if (!m) return;
     if (m.type === 'alive' || m.type === 'hello') {
       const was = this.connected; this.lastAlive = performance.now();
-      if (m.type === 'hello' || !was) { this.lastView = null; this.sendMeta(); this.app.editor?.buildToolbar(); if (m.type === 'hello') toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); }
+      try { this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
+      if (m.type === 'hello' || !was) { this.lastView = null; this.sendMeta(); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
     } else if (m.type === 'need') {
       const ed = this.app.editor; if (!ed) return;
       for (const pid of m.pids || []) { const p = ed.pageMap.get(pid); if (p) this.post({ type: 'page', nb: ed.nb.id, page: serializePage(p) }); }
@@ -147,7 +148,7 @@ export function studentMenu(app, anchor, ed) {
   box.append(card('ทีวีแสดงเหมือน iPad', 'ง่ายที่สุด · ใช้กับสายธรรมดาหรือ AirPlay · นักเรียนเห็นจอเดียวกับครู จึงซ่อนเครื่องมือให้เหลือแต่กระดาษ', pres));
   // B: second screen
   const open = h('button', { class: 'pill ' + (twoScreens() ? 'prim' : 'sec') }, icon('screen'), b.connected ? 'เปิดหน้าต่างนักเรียนอีกครั้ง' : 'เปิดหน้าจอนักเรียน');
-  open.onclick = () => { close(); if (twoScreens() === true) openStudentWindow(); else confirmSecondScreen(ed); };
+  open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
   if (isHomeApp() && isIOS()) {
     // the student window only works inside Safari on iPad
     const send = h('button', { class: 'pill prim' }, icon('screen'), 'ส่งสมุดนี้ไปฉายใน Safari');

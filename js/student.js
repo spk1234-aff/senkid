@@ -14,7 +14,7 @@ addEventListener('resize', size); size();
 setPdfReadyHook(() => dirty = true); setImageReadyHook(() => dirty = true);
 
 ch.onmessage = (e) => {
-  const m = e.data; if (!m) return; lastMsg = performance.now();
+  const m = e.data; if (!m) return; lastMsg = performance.now(); window.__senkidLast = lastMsg;
   if (m.type === 'meta') { if (m.nb !== nb) { nb = m.nb; pages.clear(); } paper = m.paper || paper; dirty = true; }
   else if (m.type === 'view') {
     if (m.nb !== nb) { nb = m.nb; pages.clear(); }

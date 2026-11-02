@@ -19,14 +19,32 @@ canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
 .done{animation:fl 1s steps(2) infinite}@keyframes fl{50%{opacity:.25}}
 #ov{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(32,34,39,.94);border-radius:18px;padding:10px 14px;display:none;gap:10px;align-items:center;font-size:22px}
 #ov button{font:inherit;font-size:22px;border:0;border-radius:12px;padding:8px 18px;background:#2F5BEA;color:#fff;cursor:pointer}
+#guide{position:fixed;inset:0;z-index:8;background:rgba(11,12,15,.96);display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:30px;text-align:left}
+#guide h2{font-size:44px;margin:0 0 6px;text-align:center}
+#guide .st{display:flex;gap:18px;align-items:center;background:#1C1E24;border-radius:20px;padding:16px 24px;width:min(760px,92vw);font-size:28px;line-height:1.25}
+#guide .st b{color:#fff}#guide .st small{display:block;color:#9AA0AA;font-size:22px}
+#guide .n{flex:none;width:52px;height:52px;border-radius:50%;background:#2F5BEA;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:30px}
+#guide .dots{display:inline-flex;gap:6px;vertical-align:middle;margin:0 4px}#guide .dots i{width:16px;height:16px;border-radius:50%;display:inline-block}
+#guide .skip{font:inherit;font-size:22px;border:0;border-radius:999px;padding:8px 22px;background:#2E3138;color:#C9CDD5;margin-top:6px}
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div id="wait"><h1>หน้าจอนักเรียน · เส้นคิด</h1><p>หน้านี้คือจอของนักเรียน ให้ลากหน้าต่างนี้ไปไว้บนทีวี แล้วกลับไปเขียนในหน้าต่างเส้นคิดของครู กระดาษจะขึ้นที่นี่เอง</p><p id="hint2" style="display:none;font-size:22px">ถ้าค้างหน้านี้นาน: ต้องเปิดจากปุ่มในเส้นคิดบนเครื่องและเบราว์เซอร์เดียวกัน (บน iPad ใช้ Safari) และต้องมีสมุดเปิดอยู่</p></div>
+<div id="guide"><h2>ย้ายหน้านี้ไปขึ้นทีวี</h2>
+<div class="st"><span class="n">1</span><div><b>แตะเมนู "หน้าต่าง" ด้านบน → "ย้ายแท็บไปยังหน้าต่างใหม่"</b><small>หรือกดค้างที่แท็บ "หน้าจอนักเรียน" แล้วลากลงมากลางจอ · ถ้าเป็นหน้าต่างแยกอยู่แล้ว ข้ามขั้นนี้</small></div></div>
+<div class="st"><span class="n">2</span><div><b>กดค้างที่จุดสีเขียว <span class="dots"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></span> มุมซ้ายบน → "ย้ายไปยัง…" ชื่อทีวี</b><small>ถ้ามีคำสั่ง "เติมเต็ม" หรือ "เต็มจอ" ให้เลือกด้วย หน้านี้จะเต็มทีวี</small></div></div>
+<div class="st"><span class="n">3</span><div><b>กลับไปเขียนในหน้าต่างเส้นคิดบน iPad ได้เลย</b><small>หน้านี้จะแสดงกระดาษเองเมื่ออยู่บนทีวี · ครั้งต่อไป iPad มักจำตำแหน่งหน้าต่างไว้ให้</small></div></div>
+<button class="skip" id="gskip">ซ่อนคำแนะนำ</button></div>
 <div id="tm"></div>
 <div id="tmf"><div class="l"></div><div class="t"></div><div class="b"><i></i></div></div>
 <div id="ov"><span>หน้าจอนักเรียน</span><button id="fs">เต็มจอ</button></div>
+<script>
+// still on the iPad (4:3-ish screen)? show how to move this page to the TV. On a wide TV screen: hide.
+(function(){var g=document.getElementById('guide'),skip=false;document.getElementById('gskip').onclick=function(){skip=true;g.style.display='none'};
+function chk(){var w=screen.width,h=screen.height,r=Math.max(w,h)/Math.min(w,h),ipad=/iPad|Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1;var silent=!(window.__senkidLast)||performance.now()-window.__senkidLast>4000;g.style.display=(!skip&&ipad&&r<1.5&&silent&&!location.hash.includes('noguide'))?'flex':'none'}
+chk();addEventListener('resize',chk);setInterval(chk,1500);})();
+</script>
 <script type="module" src="js/student.js"></script>
 </body>
 </html>
