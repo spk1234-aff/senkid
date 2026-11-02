@@ -119,5 +119,46 @@ function evict() {
   for (const [k, e] of arr) { if (tot <= budget * 0.8) break; cache.delete(k); e.c.width = e.c.height = 0; tot -= e.px; }
 }
 
+// ---- zoomed-in detail tiles: only the visible part of a page, rendered at screen resolution ----
+const tiles = new Map(); // ref key -> {c, x, y, w, h, s}
+let tileJob = null, tileBusy = false, tileMax = 10;
+export function setPdfDetailMax(s) { tileMax = s; }
+export function pdfDetail(page, scale, vis) {
+  const ref = page.pdf; if (!ref) return null;
+  const id = ref.id + '#' + ref.n, s = Math.min(scale, tileMax);
+  const t = tiles.get(id);
+  const fits = t && t.x <= vis.x + 0.5 && t.y <= vis.y + 0.5 && t.x + t.w >= vis.x + vis.w - 0.5 && t.y + t.h >= vis.y + vis.h - 0.5;
+  if (fits && t.s >= s * 0.9 && t.s <= s * 1.5) return t;
+  // pad a little so small pans reuse the tile, but keep the canvas within Safari's limits
+  const pad = 0.12, P = { w: page.pw || vis.pw, h: page.ph || vis.ph };
+  let x = vis.x - vis.w * pad, y = vis.y - vis.h * pad, w = vis.w * (1 + 2 * pad), h = vis.h * (1 + 2 * pad);
+  x = Math.max(0, x); y = Math.max(0, y); w = Math.min(P.w - x, w); h = Math.min(P.h - y, h);
+  let ss = s; const MAXPX = 14e6; if (w * h * ss * ss > MAXPX) ss = Math.sqrt(MAXPX / (w * h));
+  tileJob = { id, ref, x, y, w, h, s: ss, pw: P.w };
+  pumpTile();
+  return fits || (t && t.s > s * 0.5) ? t : null; // keep showing the old tile while the new one renders
+}
+async function pumpTile() {
+  if (tileBusy) return; tileBusy = true;
+  while (tileJob) {
+    const j = tileJob; tileJob = null;
+    try {
+      const doc = await getDoc(j.ref.id);
+      const pg = await doc.getPage(j.ref.n);
+      const base = pg.getViewport({ scale: 1 }), k = j.s * base.width / j.pw; // page units -> pdf units
+      const vp = pg.getViewport({ scale: k });
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(j.w * j.s)); c.height = Math.max(1, Math.ceil(j.h * j.s));
+      const ctx = c.getContext('2d', { alpha: false }); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      await pg.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, -j.x * j.s, -j.y * j.s] }).promise;
+      const old = tiles.get(j.id); tiles.set(j.id, { c, x: j.x, y: j.y, w: c.width / j.s, h: c.height / j.s, s: j.s });
+      if (old && old.c !== c) old.c.width = old.c.height = 0;
+      while (tiles.size > 3) { const [k0, v] = tiles.entries().next().value; v.c.width = v.c.height = 0; tiles.delete(k0); }
+      readyHook && readyHook();
+    } catch (e) { console.warn('pdf tile', e); }
+  }
+  tileBusy = false;
+}
+export function dropPdfDetail() { for (const v of tiles.values()) v.c.width = v.c.height = 0; tiles.clear(); }
+
 // raw bytes for export
 export async function pdfBytes(pdfId) { const rec = await db.get('pdfs', pdfId); return rec ? new Uint8Array(await rec.blob.arrayBuffer()) : null; }

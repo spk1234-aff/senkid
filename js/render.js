@@ -1,6 +1,6 @@
 // Stroke + page rendering (Canvas 2D). Coordinates are page points (1/72 in).
 import { drawImageObj } from './images.js';
-import { pdfBitmap } from './pdfdoc.js';
+import { pdfDetail, pdfBitmap } from './pdfdoc.js';
 import { circle3 } from './shapes.js';
 export const PAGE = { P: { w: 595.28, h: 841.89 }, L: { w: 841.89, h: 595.28 } };
 export const STRIDE = 4;
@@ -372,6 +372,17 @@ export function drawPaper(ctx, page, paperKey, k) {
     ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, P.w, P.h);
     const bm = pdfBitmap(page, k, pdfMaxBucket);
     if (bm) { ctx.imageSmoothingQuality = 'high'; ctx.drawImage(bm, 0, 0, P.w, P.h); }
+    if (bm && k > pdfMaxBucket * 1.05 && ctx.canvas && ctx.getTransform) {
+      // zoomed in past the full-page bitmap: overlay a sharp tile of just the visible area
+      const m = ctx.getTransform(), cw = ctx.canvas.width, ch = ctx.canvas.height;
+      if (m.b === 0 && m.c === 0 && m.a > 0) {
+        const x0 = Math.max(0, -m.e / m.a), y0 = Math.max(0, -m.f / m.d), x1 = Math.min(P.w, (cw - m.e) / m.a), y1 = Math.min(P.h, (ch - m.f) / m.d);
+        if (x1 > x0 && y1 > y0) {
+          const t = pdfDetail(page, k, { x: x0, y: y0, w: x1 - x0, h: y1 - y0, pw: P.w, ph: P.h });
+          if (t) ctx.drawImage(t.c, t.x, t.y, t.w, t.h);
+        }
+      }
+    }
     else { ctx.fillStyle = '#9AA0AA'; ctx.font = `${18}px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.fillText('กำลังโหลดหน้า PDF…', P.w / 2, P.h / 2); }
     return;
   }
