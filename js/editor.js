@@ -306,6 +306,22 @@ export class Editor {
       const chip = h('button', { class: 'chip main' }, icon(c.kind === 'hl' ? 'hl' : prefs.penType), h('span', {}, c.kind === 'hl' ? 'ไฮไลต์' : PEN_LABEL[prefs.penType]), icon('down'));
       chip.onclick = () => openPenPanel(chip, this, {});
       bar.append(chip);
+      if (c.kind !== 'hl') {
+        // Goodnotes-style quick pen picks + line style (solid / dashed / dotted)
+        const solid = ['dash', 'dot'].includes(prefs.penType) ? (prefs.solidPen || 'fount') : prefs.penType;
+        for (const id of ['fount', 'ball', 'pencil', 'brush', 'marker']) {
+          const pb = h('button', { class: 'chip ico' + (prefs.penType === id ? ' on' : ''), title: PEN_LABEL[id], 'aria-label': PEN_LABEL[id] }, icon(id));
+          pb.onclick = () => { prefs.solidPen = id; this.setPenType(id); };
+          bar.append(pb);
+        }
+        bar.append(h('div', { class: 'vsep' }));
+        for (const [id, lab, cls] of [[solid, 'เส้นทึบ', 'solid'], ['dash', 'เส้นประ', 'dash'], ['dot', 'เส้นจุด', 'dot']]) {
+          const on = cls === 'solid' ? !['dash', 'dot'].includes(prefs.penType) : prefs.penType === id;
+          const lb = h('button', { class: 'chip ico lsty' + (on ? ' on' : ''), title: lab, 'aria-label': lab }, h('i', { class: cls }));
+          lb.onclick = () => { if (cls !== 'solid' && !['dash', 'dot'].includes(prefs.penType)) prefs.solidPen = prefs.penType; this.setPenType(id); };
+          bar.append(lb);
+        }
+      }
       if (c.kind === 'hl') {
         const br = h('button', { class: 'chip' + ((prefs.hl.style || 'brush') === 'brush' ? ' on' : ''), title: 'แบบแปรง: ปลายสะบัด เข้มอ่อนตามแรงกด' }, 'แปรง');
         br.onclick = () => { prefs.hl.style = (prefs.hl.style || 'brush') === 'brush' ? 'flat' : 'brush'; savePrefs(); this.buildToolbar(); };
@@ -625,9 +641,9 @@ export class Editor {
       for (const hd of shapeHandles(s.shape)) {
         const [x, y] = toS(hd.x, hd.y);
         ctx.beginPath();
-        if (hd.id === 'move') { ctx.rect(x - 9, y - 9, 18, 18); } else ctx.arc(x, y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#2F5BEA'; ctx.stroke();
-        if (hd.id === 'move') { ctx.beginPath(); ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y); ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5); ctx.lineWidth = 2; ctx.stroke(); }
+        if (hd.id === 'move') { ctx.rect(x - 6, y - 6, 12, 12); } else ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#2F5BEA'; ctx.stroke();
+        if (hd.id === 'move') { ctx.beginPath(); ctx.moveTo(x - 3.5, y); ctx.lineTo(x + 3.5, y); ctx.moveTo(x, y - 3.5); ctx.lineTo(x, y + 3.5); ctx.lineWidth = 1.5; ctx.stroke(); }
       }
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -722,13 +738,13 @@ export class Editor {
     if (!page) { if (e.pointerType !== 'touch') this.pointers.set(e.pointerId, { x: sx, y: sy, sx, sy }); this.startGesture(); return; }
     if (this.tool === 'eraser' || eraserBtn) { this.startErase(e, page, sx, sy); return; }
     if (this.tool === 'laser') { this.laserSeq = (this.laserSeq || 0) + 1; this.lasering = { id: e.pointerId, s: this.laserSeq }; this.laserAdd(sx, sy); return; }
-    if (this.tool === 'lasso') { const hit = this.shapeAt(page, sx, sy); if (hit) { this.clearLasso(); this.sel = { pid: page.id, sid: hit.id }; this.need.ui = true; this.buildShapeBar(); return; } this.startLasso(e, page, sx, sy); return; }
+    if (this.tool === 'lasso') { const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return; } this.startLasso(e, page, sx, sy); return; }
     if (this.tool === 'text') { const r0 = this.rects.get(page.id); this.textTap = { id: e.pointerId, page, x: wx - r0.x, y: wy - r0.y, sx, sy }; this.armLongPress(e, sx, sy); return; }
     this.armLongPress(e, sx, sy);
     const c = this.cur(), r = this.rects.get(page.id);
     this.live = {
       id: e.pointerId, type: e.pointerType, page, kind: c.kind, pen: c.type, color: c.color, alpha: c.alpha, size: c.size,
-      pts: [], pred: [], shape: null, sx, sy, holdX: sx, holdY: sy, rx: r.x, ry: r.y,
+      pts: [], pred: [], shape: null, sx, sy, holdX: sx, holdY: sy, rx: r.x, ry: r.y, t0: performance.now(), far: 0,
     };
     this.addPoint(e, sx, sy);
     this.armHold();
@@ -784,7 +800,7 @@ export class Editor {
       else { const sh = shapeAs(xy, kind); if (!sh) return; ns = { ...st, id: uid(), shape: sh, bb: null }; }
       page.strokes = page.strokes.map(x => x === st ? ns : x); cur.id = ns.id;
       this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
-      this.markDirty(page); this.sel = ns.shape ? { pid: page.id, sid: ns.id } : null; this.need.main = this.need.ui = true;
+      this.markDirty(page); this.need.main = this.need.ui = true;
       for (const b of bar.querySelectorAll('button')) b.classList.toggle('on', b.dataset.k === kind);
       clearTimeout(this.saT); this.saT = setTimeout(() => this.hideShapeAlt(), 2000);
     };
@@ -811,6 +827,7 @@ export class Editor {
   }
   addPoint(e, sx, sy) {
     const L = this.live;
+    L.far = Math.max(L.far || 0, Math.hypot(sx - L.sx, sy - L.sy));
     const x = (sx - this.ox) / this.z - L.rx, y = (sy - this.oy) / this.z - L.ry;
     const n = L.pts.length;
     if (n >= STRIDE) { const dx = x - L.pts[n - 4], dy = y - L.pts[n - 3]; if (dx * dx + dy * dy < 0.01) { L.pts[n - 2] = Math.max(L.pts[n - 2], this.pressureOf(e)); return; } }
@@ -896,6 +913,7 @@ export class Editor {
         if (g && !cancel && performance.now() - g.t0 < 320 && g.moved < 14) {
           if (g.max === 1 && this.tool === 'text') { if (this.imgSel) this.deselectImage(); this.textAtFinger(e); }
           else if (g.max === 1 && this.imgSel) this.deselectImage();
+          else if (g.max === 1 && this.tapShape(e)) { }
           if (g.max === 2) { this.undo(); toast('ย้อนกลับ', 900); }
           else if (g.max === 3) { this.redo(); toast('ทำซ้ำ', 900); }
         }
@@ -1029,6 +1047,7 @@ export class Editor {
   commitLive() {
     clearInterval(this.holdTimer);
     const L = this.live; if (!L) return;
+    if (L.far < 6 && performance.now() - L.t0 < 350 && L.kind !== 'hl') { const hit = this.shapeAt(L.page, L.sx, L.sy, true); if (hit) { this.live = null; this.need.live = true; this.selectShape(L.page, hit); return; } }
     const s = this.liveStroke(false);
     this.live = null; this.need.live = true;
     if (!s) return;
@@ -1045,7 +1064,7 @@ export class Editor {
     // keep the last frame visible until main is repainted
     this.need.live = true;
     if (s.c) pushRecent(s.c);
-    if (s.shape) { this.sel = { pid: page.id, sid: s.id }; this.need.ui = true; if (L.rawXY && !s.shape.closed && ['line', 'arc3', 'curve', 'quad', 'arrow'].includes(s.shape.k)) this.showShapeAlt(page, s, L.rawXY, L.rawPts); }
+    if (s.shape) { if (L.rawXY && !s.shape.closed && ['line', 'arc3', 'curve', 'quad', 'arrow'].includes(s.shape.k)) this.showShapeAlt(page, s, L.rawXY, L.rawPts); }
   }
   scribbleErase(page, s) {
     const rs = scribblePath(s.pts); if (!rs) return false;
@@ -1077,9 +1096,10 @@ export class Editor {
     const s = page.strokes.find(x => x.id === this.sel.sid); if (!s || !s.shape) return null;
     return { page, s };
   }
+  selectShape(page, st) { this.clearLasso(); this.sel = { pid: page.id, sid: st.id }; this.need.ui = true; this.buildShapeBar(); }
   deselect() { if (this.sel) { this.sel = null; this.need.ui = true; } if (this.imgBar?.dataset.kind === 'shape') this.imgBar.classList.add('hidden'); }
   // shape under a screen point (on its outline, or inside a closed shape)
-  shapeAt(page, sx, sy) {
+  shapeAt(page, sx, sy, edgeOnly) {
     const r = this.rects.get(page.id), [wx, wy] = this.toWorld(sx, sy), x = wx - r.x, y = wy - r.y, tol = 14 / this.z;
     for (let i = page.strokes.length - 1; i >= 0; i--) {
       const st = page.strokes[i]; if (!st.shape) continue;
@@ -1092,7 +1112,7 @@ export class Editor {
         const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / L2));
         if (Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)) < tol + st.w / 2) near = true;
       }
-      if (near || (closed && inside)) return st;
+      if (near || (!edgeOnly && closed && inside)) return st;
     }
     return null;
   }
@@ -1194,6 +1214,8 @@ export class Editor {
     const alpha = (p) => {
       if (st === 'ink') { const e = ends.get(p.s); if (e == null) return 1; return 1 - Math.max(0, now - e - 1200) / 500; }
       if (st === 'dot') { const e = ends.get(p.s); return e == null ? 1 : 1 - (now - e) / 250; }
+      if (this.lasering && p.s === this.lasering.s) return 1; // stays while the pen is held
+      const e = ends.get(p.s); if (e != null) return 1 - Math.max(0, now - e - 250) / 650;
       return 1 - (now - p.t) / 900;
     };
     const out = [];
@@ -1503,6 +1525,7 @@ export class Editor {
     this.selectImage(page.id, obj.id);
     if (!crop) toast('วางรูปแล้ว · กดค้างบนรูปเพื่อเลือกอีกครั้ง', 2200);
   }
+  tapShape(e) { const r = this.stage.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return false; const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return true; } if (this.sel) this.deselect(); return false; }
   textAtFinger(e) { // finger tap with the text tool: new text box, or edit the text under the finger
     if (performance.now() - (this.txDone || 0) < 700) return;
     const [sx, sy] = this.local(e), [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return;
