@@ -153,6 +153,10 @@ export class Editor {
     const tog = h('button', { class: 'db dtog', title: prefs.dockMini ? 'แสดงเครื่องมือ (กดค้างเพื่อย้ายข้าง)' : 'ย่อ (กดค้างเพื่อย้ายข้าง)' }, icon((!!prefs.dockMini !== (prefs.dockSide === 'left')) ? 'back' : 'chev'));
     tog.onclick = (e) => { e.stopPropagation(); prefs.dockMini = !prefs.dockMini; savePrefs(); this.buildDock(); };
     dock.append(tog);
+    // page navigation — always available, even when the dock is folded
+    this.dockPg = h('button', { class: 'db dpg', title: 'ภาพย่อหน้า (เลือกหน้า)' }, '');
+    this.dockPg.onclick = (e) => { e.stopPropagation(); this.toggleThumbs(); };
+    dock.append(B('up', 'หน้าก่อนหน้า', () => this.gotoRel(-1)), this.dockPg, B('down', 'หน้าถัดไป', () => this.gotoRel(1)), h('i', { class: 'dsep' }));
     if (!prefs.dockMini) {
       const cur = t === 'hl' ? prefs.hl.color : prefs.penColor;
       dock.append(
@@ -171,7 +175,7 @@ export class Editor {
     }
     // long-press the arrow to move the dock to the other side
     onLongPress(tog, () => { prefs.dockSide = prefs.dockSide === 'left' ? 'right' : 'left'; savePrefs(); this.buildDock(); toast('ย้ายแถบเครื่องมือไปอีกข้างแล้ว', 1500, 'keep'); });
-    this.stage.append(dock);
+    this.stage.append(dock); this.updatePageNo();
   }
   // fill the screen width with the page (bigger for students on a TV) ↔ whole page
   toggleFitWide() {
@@ -230,7 +234,7 @@ export class Editor {
     const g4 = h('div', { class: 'grp' }, this.micBtn, this.recBtn,
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
-      B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · เปลี่ยนปากกา สี ยางลบ ได้จากแถบเล็กด้านขวา · ↔ = ขยายเต็มความกว้าง · × = ออก', 4500, 'keep'); }));
+      B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · แถบเล็กด้านขวา: ˄˅ เปลี่ยนหน้า · แตะเลขหน้าเพื่อดูภาพย่อ · ↔ เต็มความกว้าง · × ออก', 4500, 'keep'); }));
     tb.append(g1, sep(), g2, sep(), g3, sep(), this.gSizes, h('div', { class: 'grow' }), g4);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -280,7 +284,7 @@ export class Editor {
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('share', 'ส่งออก / สำรอง', (b) => this.exportMenu(b)),
       B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
-      B('hide', 'ซ่อนแถบเครื่องมือ (โหมดนำเสนอ)', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · เปลี่ยนปากกา สี ยางลบ ได้จากแถบเล็กด้านขวา · ↔ = ขยายเต็มความกว้าง · × = ออก', 4500, 'keep'); }));
+      B('hide', 'ซ่อนแถบเครื่องมือ (โหมดนำเสนอ)', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · แถบเล็กด้านขวา: ˄˅ เปลี่ยนหน้า · แตะเลขหน้าเพื่อดูภาพย่อ · ↔ เต็มความกว้าง · × ออก', 4500, 'keep'); }));
     tb.append(tabs, h('div', { class: 'trow' }, left, center, right));
     // undo capsule
     this.btnUndo = B('undo', 'ย้อนกลับ', () => this.undo());
@@ -520,8 +524,14 @@ export class Editor {
     const p = this.currentPage(); if (!p) return;
     const i = this.nb.pages.indexOf(p.id);
     const n = this.nb.pages.length;
+    if (this.dockPg?.isConnected) this.dockPg.textContent = `${i + 1}/${n}`;
     this.pageno.textContent = this.cols === 2 && i + 1 < n ? `หน้า ${i + 1 - (i % 2)}–${Math.min(n, i + 2 - (i % 2))} / ${n}` : `หน้า ${i + 1} / ${n}`;
     if (this.curPid !== p.id) { this.curPid = p.id; $$('.th', this.thumbs).forEach(t => t.classList.toggle('cur', t.dataset.pid === p.id)); if (this.mounted && this.nb.lastPage !== p.id) { this.nb.lastPage = p.id; this.saveNb(); } }
+  }
+  gotoRel(d) {
+    const ids = this.nb.pages, cur = this.currentPage(), i = ids.indexOf(cur?.id), step = this.cols === 2 ? 2 : 1;
+    const j = Math.max(0, Math.min(ids.length - 1, i + d * step)); if (j === i) { toast(d > 0 ? 'หน้าสุดท้ายแล้ว' : 'หน้าแรกแล้ว', 900); return; }
+    this.scrollToPage(ids[j]);
   }
   scrollToPage(pid) {
     const r = this.rects.get(pid); if (!r) return;
@@ -1861,7 +1871,7 @@ export class Editor {
       const cv = h('canvas');
       const th = h('div', { class: 'th' + (cur && cur.id === pid ? ' cur' : ''), 'data-pid': pid }, h('div', { class: 'pg', style: { width: w + 'px', height: hh + 'px' } }, cv), h('span', { class: 'no' }, String(i + 1)));
       th._w = w;
-      th.onclick = () => { this.scrollToPage(pid); this.markThumbCur(true); };
+      th.onclick = () => { this.scrollToPage(pid); this.markThumbCur(true); if (prefs.toolbarHidden && !this.peek) setTimeout(() => this.toggleThumbs(false), 120); };
       list.append(th);
       const c = this.thumbCache.get(pid);
       if (c) { cv.width = c.c.width; cv.height = c.c.height; cv.getContext('2d').drawImage(c.c, 0, 0); }

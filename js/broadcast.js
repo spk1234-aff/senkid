@@ -117,7 +117,7 @@ const twoScreens = () => (typeof screen.isExtended === 'boolean' ? screen.isExte
 
 function presentMode(ed) {
   prefs.toolbarHidden = true; savePrefs(); ed.applyPos();
-  toast('โหมดนำเสนอ · เปลี่ยนปากกา สี ยางลบ ได้จากแถบเล็กด้านขวา · ↔ = ขยายเต็มความกว้าง · × = ออก', 5000, 'keep');
+  toast('โหมดนำเสนอ · แถบเล็กด้านขวา: ˄˅ เปลี่ยนหน้า · แตะเลขหน้าเพื่อดูภาพย่อ · ↔ เต็มความกว้าง · × ออก', 5000, 'keep');
 }
 
 // step-by-step check before opening a 2nd window (iPad can't detect a TV)
