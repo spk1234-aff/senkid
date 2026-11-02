@@ -509,6 +509,14 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .pdock .dtxt{font-size:16px;font-weight:600}
 .ed.present .undocap{opacity:.75;background:rgba(32,34,39,.82)}
 .pdock .dsep{width:26px;height:1px;background:rgba(255,255,255,.2);margin:4px 0;flex:none}
+.pdock .dgrip{width:40px;height:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:grab;touch-action:none;flex:none}
+.pdock .dgrip i{display:block;width:22px;height:2.5px;border-radius:2px;background:rgba(255,255,255,.6)}
+.pdock.dragging{opacity:1;transition:none}
+.pdock.horiz{flex-direction:row;padding:4px 6px;max-width:calc(100% - 12px);max-height:none;overflow-x:auto;overflow-y:hidden}
+.pdock.horiz .dsep{width:1px;height:26px;margin:0 4px}
+.pdock.horiz .dgrip{width:16px;height:40px;flex-direction:row}
+.pdock.horiz .dgrip i{width:2.5px;height:22px}
+.pdock.horiz .db,.pdock.horiz .dsw{width:40px}
 .pdock.mini{padding:4px}
 .pdock .db.dtog{font-size:30px;line-height:1;color:rgba(255,255,255,.75)}
 .scr-card a.pill{display:flex;align-items:center;gap:8px;width:100%;margin-top:6px}

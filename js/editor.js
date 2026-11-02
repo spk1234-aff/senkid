@@ -150,6 +150,8 @@ export class Editor {
     const t = this.tool;
     const B = (ic, title, fn, on, cls = '') => { const b = h('button', { class: 'db' + (on ? ' on' : '') + cls, title }, icon(ic)); b.onclick = (e) => { e.stopPropagation(); fn(b); }; return b; };
     const dock = h('div', { class: 'pdock' + (prefs.dockMini ? ' mini' : '') + (prefs.dockSide === 'left' ? ' left' : '') });
+    const grip = h('div', { class: 'dgrip', title: 'ลากเพื่อย้ายแถบ' }, h('i'), h('i'));
+    dock.append(grip); this.armDockDrag(dock, grip);
     const tog = h('button', { class: 'db dtog', title: prefs.dockMini ? 'แสดงเครื่องมือ (กดค้างเพื่อย้ายข้าง)' : 'ย่อ (กดค้างเพื่อย้ายข้าง)' }, icon((!!prefs.dockMini !== (prefs.dockSide === 'left')) ? 'back' : 'chev'));
     tog.onclick = (e) => { e.stopPropagation(); prefs.dockMini = !prefs.dockMini; savePrefs(); this.buildDock(); };
     dock.append(tog);
@@ -188,9 +190,9 @@ export class Editor {
       }
       if (t === 'pen' || t === 'hl' || (t === 'eraser' && prefs.eraser.mode === 'area')) {
         dock.append(h('i', { class: 'dsep' }));
-        const ps = c.presets, pick = [ps[0], ps[Math.floor(ps.length / 2)], ps[ps.length - 1]], mx = ps[ps.length - 1];
+        const ps = c.presets, pick = ps.includes(c.size) ? ps : [...ps.slice(0, 4), c.size], mx = Math.max(...pick);
         for (const v of pick) {
-          const d = Math.round(5 + 15 * Math.sqrt(v / mx));
+          const d = Math.round(4 + 16 * Math.sqrt(v / mx));
           const b = h('button', { class: 'db dsz' + (Math.abs(v - c.size) < 1e-6 ? ' on' : ''), title: 'ขนาด ' + v }, h('i', { style: { width: d + 'px', height: d + 'px' } }));
           b.onclick = (e) => { e.stopPropagation(); this.setSize(v); this.buildDock(); }; dock.append(b);
         }
@@ -205,8 +207,27 @@ export class Editor {
         B('close', 'ออกจากโหมดนำเสนอ', () => this.exitPresent()));
     }
     // long-press the arrow to move the dock to the other side
-    onLongPress(tog, () => { prefs.dockSide = prefs.dockSide === 'left' ? 'right' : 'left'; savePrefs(); this.buildDock(); toast('ย้ายแถบเครื่องมือไปอีกข้างแล้ว', 1500, 'keep'); });
-    this.stage.append(dock); this.updatePageNo();
+    this.stage.append(dock); this.placeDock(dock); this.updatePageNo();
+  }
+  // the dock floats: drag the grip anywhere; near the top or bottom edge it lies flat
+  placeDock(dock) {
+    const P = prefs.dockXY; if (!P) return;
+    const W = this.stage.clientWidth, H = this.stage.clientHeight;
+    const horiz = P.y < 0.16 || P.y > 0.84; dock.classList.toggle('horiz', horiz);
+    const bw = dock.offsetWidth, bh = dock.offsetHeight;
+    const x = Math.max(6, Math.min(W - bw - 6, P.x * W - bw / 2)), y = Math.max(6, Math.min(H - bh - 6, P.y * H - bh / 2));
+    Object.assign(dock.style, { left: x + 'px', top: y + 'px', right: 'auto', transform: 'none' });
+  }
+  armDockDrag(dock, grip) {
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const W = this.stage.clientWidth, H = this.stage.clientHeight, r0 = dock.getBoundingClientRect(), sr = this.stage.getBoundingClientRect();
+      const dx = e.clientX - (r0.left + r0.width / 2), dy = e.clientY - (r0.top + r0.height / 2);
+      dock.classList.add('dragging'); try { grip.setPointerCapture(e.pointerId); } catch { }
+      const mv = (ev) => { prefs.dockXY = { x: Math.max(0, Math.min(1, (ev.clientX - dx - sr.left) / W)), y: Math.max(0, Math.min(1, (ev.clientY - dy - sr.top) / H)) }; this.placeDock(dock); };
+      const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); dock.classList.remove('dragging'); savePrefs(); };
+      grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+    });
   }
   // fill the screen width with the page (bigger for students on a TV) ↔ whole page
   toggleFitWide() {
@@ -265,7 +286,7 @@ export class Editor {
     const g4 = h('div', { class: 'grp' }, this.micBtn, this.recBtn,
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
-      B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · แถบเล็กด้านขวา: ˄˅ เปลี่ยนหน้า · แตะเลขหน้าเพื่อดูภาพย่อ · ↔ เต็มความกว้าง · × ออก', 4500, 'keep'); }));
+      B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · ลากขีดบนแถบเล็กเพื่อย้ายไปไหนก็ได้ · ˄˅ เปลี่ยนหน้า · แตะเครื่องมือซ้ำเพื่อตั้งค่า · × ออก', 4500, 'keep'); }));
     tb.append(g1, sep(), g2, sep(), g3, sep(), this.gSizes, h('div', { class: 'grow' }), g4);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -315,7 +336,7 @@ export class Editor {
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('share', 'ส่งออก / สำรอง', (b) => this.exportMenu(b)),
       B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
-      B('hide', 'ซ่อนแถบเครื่องมือ (โหมดนำเสนอ)', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · แถบเล็กด้านขวา: ˄˅ เปลี่ยนหน้า · แตะเลขหน้าเพื่อดูภาพย่อ · ↔ เต็มความกว้าง · × ออก', 4500, 'keep'); }));
+      B('hide', 'ซ่อนแถบเครื่องมือ (โหมดนำเสนอ)', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · ลากขีดบนแถบเล็กเพื่อย้ายไปไหนก็ได้ · ˄˅ เปลี่ยนหน้า · แตะเครื่องมือซ้ำเพื่อตั้งค่า · × ออก', 4500, 'keep'); }));
     tb.append(tabs, h('div', { class: 'trow' }, left, center, right));
     // undo capsule
     this.btnUndo = B('undo', 'ย้อนกลับ', () => this.undo());
@@ -831,7 +852,8 @@ export class Editor {
     // ignore the jitter after the pen stopped moving (the hold itself)
     const upto = Math.max(4 * STRIDE, Math.min(L.pts.length, (L.holdIdx || L.pts.length) + STRIDE));
     const xy = []; for (let i = 0; i < upto; i += STRIDE) xy.push(L.pts[i], L.pts[i + 1]);
-    const sh = recognize(xy);
+    let sh = recognize(xy);
+    if (sh && !sh.closed && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh;
     if (sh) { L.shape = sh; L.rawXY = xy; L.rawPts = Array.from(L.pts.slice(0, upto)); this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
   }
   // after hold-to-shape on an open stroke: chips to switch line / arc / curve / hand-drawn
