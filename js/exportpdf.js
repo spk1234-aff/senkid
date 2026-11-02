@@ -99,6 +99,7 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
       const color = rgb(s.t === 'hl' ? s.c : inkFor(s.c, dark && !page.pdf), L);
       const alpha = (s.a ?? 1) * (v.alpha ?? 1);
       const blend = s.t === 'hl' ? L.BlendMode.Multiply : undefined;
+      if (s.shape && s.fill && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse')) pg.drawSvgPath(v.d, { ...place, color, opacity: Math.min(1, alpha * s.fill) });
       if (v.kind === 'fill') pg.drawSvgPath(v.d, { ...place, color, opacity: s.t === 'hl' ? Math.min(1, (s.a ?? .4) * (v.alpha ?? 1)) : alpha, blendMode: blend });
       else pg.drawSvgPath(v.d, { ...place, borderColor: color, borderWidth: v.w * sc, borderOpacity: s.t === 'hl' ? (s.a ?? .4) : alpha, borderLineCap: v.cap === 'butt' ? L.LineCapStyle.Butt : L.LineCapStyle.Round, borderDashArray: v.dash ? v.dash.map(x => x * sc) : undefined, blendMode: blend });
     }

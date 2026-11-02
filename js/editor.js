@@ -611,8 +611,9 @@ export class Editor {
       ctx.lineWidth = 2; ctx.strokeStyle = '#2F5BEA'; ctx.strokeRect(X0, Y0, Wd, Hd);
       for (const [x, y] of [[X0, Y0], [X0 + Wd, Y0], [X0, Y0 + Hd], [X0 + Wd, Y0 + Hd]]) { ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.stroke(); }
       if (!this.imgDrag) this.placeImgBar();
-    } else if (!isel && !this.lsel && this.imgBar && !this.imgBar.classList.contains('hidden')) this.imgBar.classList.add('hidden');
+    } else if (!isel && !this.lsel && this.imgBar && !this.imgBar.classList.contains('hidden') && !(this.imgBar.dataset.kind === 'shape' && this.selStroke())) this.imgBar.classList.add('hidden');
     const sel = this.selStroke();
+    if (sel && this.imgBar?.dataset.kind === 'shape' && !this.imgBar.classList.contains('hidden')) { if (this.drag) this.imgBar.style.visibility = 'hidden'; else { this.imgBar.style.visibility = ''; this.placeShapeBar(); } }
     if (sel) {
       const { page, s } = sel; const r = this.rects.get(page.id);
       ctx.setTransform(R, 0, 0, R, 0, 0);
@@ -721,7 +722,7 @@ export class Editor {
     if (!page) { if (e.pointerType !== 'touch') this.pointers.set(e.pointerId, { x: sx, y: sy, sx, sy }); this.startGesture(); return; }
     if (this.tool === 'eraser' || eraserBtn) { this.startErase(e, page, sx, sy); return; }
     if (this.tool === 'laser') { this.laserSeq = (this.laserSeq || 0) + 1; this.lasering = { id: e.pointerId, s: this.laserSeq }; this.laserAdd(sx, sy); return; }
-    if (this.tool === 'lasso') { this.startLasso(e, page, sx, sy); return; }
+    if (this.tool === 'lasso') { const hit = this.shapeAt(page, sx, sy); if (hit) { this.clearLasso(); this.sel = { pid: page.id, sid: hit.id }; this.need.ui = true; this.buildShapeBar(); return; } this.startLasso(e, page, sx, sy); return; }
     if (this.tool === 'text') { const r0 = this.rects.get(page.id); this.textTap = { id: e.pointerId, page, x: wx - r0.x, y: wy - r0.y, sx, sy }; this.armLongPress(e, sx, sy); return; }
     this.armLongPress(e, sx, sy);
     const c = this.cur(), r = this.rects.get(page.id);
@@ -1035,6 +1036,7 @@ export class Editor {
     if (!s.shape && s.pts.length === STRIDE) { const p = Array.from(s.pts); s.pts = Float32Array.from(p.concat([p[0] + 0.05, p[1] + 0.05, p[2], p[3]])); }
     // Goodnotes-style scribble to erase: a back-and-forth scratch over ink removes what it touches
     if (prefs.scribbleErase && L.kind !== 'hl' && !s.shape && this.scribbleErase(L.page, s)) return;
+    if (s.shape && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse') && prefs.shapeFill) s.fill = 0.14;
     const page = L.page, before = page.strokes.slice();
     page.strokes.push(s);
     this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
@@ -1075,7 +1077,47 @@ export class Editor {
     const s = page.strokes.find(x => x.id === this.sel.sid); if (!s || !s.shape) return null;
     return { page, s };
   }
-  deselect() { if (this.sel) { this.sel = null; this.need.ui = true; } }
+  deselect() { if (this.sel) { this.sel = null; this.need.ui = true; } if (this.imgBar?.dataset.kind === 'shape') this.imgBar.classList.add('hidden'); }
+  // shape under a screen point (on its outline, or inside a closed shape)
+  shapeAt(page, sx, sy) {
+    const r = this.rects.get(page.id), [wx, wy] = this.toWorld(sx, sy), x = wx - r.x, y = wy - r.y, tol = 14 / this.z;
+    for (let i = page.strokes.length - 1; i >= 0; i--) {
+      const st = page.strokes[i]; if (!st.shape) continue;
+      const xy = shapePolyline(st.shape, 48), closed = st.shape.closed || st.shape.k === 'ellipse';
+      let inside = false, near = false;
+      for (let a = 0, b = xy.length - 2; a < xy.length; b = a, a += 2) {
+        const x1 = xy[b], y1 = xy[b + 1], x2 = xy[a], y2 = xy[a + 1];
+        if (closed && ((y2 > y) !== (y1 > y)) && x < (x1 - x2) * (y - y2) / (y1 - y2) + x2) inside = !inside;
+        if (a === 0 && !closed) continue;
+        const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / L2));
+        if (Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)) < tol + st.w / 2) near = true;
+      }
+      if (near || (closed && inside)) return st;
+    }
+    return null;
+  }
+  // small bar under a selected shape: colour, fill, duplicate, delete, done
+  buildShapeBar() {
+    const sel = this.selStroke(); if (!sel) return;
+    const bar = this.imgBar; bar.innerHTML = ''; bar.classList.remove('hidden'); bar.dataset.kind = 'shape';
+    const edit = (fn) => { const cur = this.selStroke(); if (!cur) return; const before = cur.page.strokes.slice(); const ns = fn({ ...cur.s, id: uid(), bb: null }); cur.page.strokes = cur.page.strokes.map(x => x === cur.s ? ns : x); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.sel = { pid: cur.page.id, sid: ns.id }; this.need.main = this.need.ui = true; this.buildShapeBar(); };
+    const B = (ic, label, fn, danger) => { const b = h('button', { class: 'chip' + (danger ? ' danger' : '') }, icon(ic), h('span', {}, label)); b.onclick = fn; return b; };
+    for (const col of prefs.favorites.slice(0, 5)) { const b = h('button', { class: 'sw' + (String(sel.s.c).toUpperCase() === col.toUpperCase() ? ' on' : '') }, h('i', { style: { background: col } })); b.onclick = () => edit(ns => { ns.c = col; return ns; }); bar.append(b); }
+    bar.append(h('div', { class: 'vsep', style: { width: '1px', height: '26px', background: 'rgba(255,255,255,.2)', margin: '0 4px' } }));
+    const closed = sel.s.shape.closed || sel.s.shape.k === 'ellipse';
+    if (closed) bar.append(B('palette', sel.s.fill ? 'ไม่เติมสี' : 'เติมสี', () => edit(ns => { if (ns.fill) delete ns.fill; else ns.fill = 0.14; prefs.shapeFill = !!ns.fill; savePrefs(); return ns; })));
+    bar.append(B('dup', 'ทำสำเนา', () => { const cur = this.selStroke(); if (!cur) return; const before = cur.page.strokes.slice(); const ns = transformStroke(cur.s, [1, 0, 0, 1, 18, 18], 1, 0); ns.id = uid(); cur.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.sel = { pid: cur.page.id, sid: ns.id }; this.need.main = this.need.ui = true; this.buildShapeBar(); }),
+      B('trash', 'ลบ', () => { const cur = this.selStroke(); if (!cur) return; const before = cur.page.strokes.slice(); cur.page.strokes = cur.page.strokes.filter(x => x !== cur.s); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.deselect(); this.need.main = true; }, true),
+      B('check', 'เสร็จ', () => this.deselect()));
+    this.placeShapeBar();
+  }
+  placeShapeBar() {
+    const sel = this.selStroke(); if (!sel || this.imgBar.dataset.kind !== 'shape') return;
+    const r = this.rects.get(sel.page.id), b = strokeBB(sel.s), bar = this.imgBar, bw = bar.offsetWidth || 420, bh = bar.offsetHeight || 50;
+    const X0 = this.ox + (r.x + b[0]) * this.z, X1 = this.ox + (r.x + b[2]) * this.z, Y1 = this.oy + (r.y + b[3]) * this.z, Y0 = this.oy + (r.y + b[1]) * this.z;
+    let x = (X0 + X1) / 2 - bw / 2, y = Y1 + 22; if (y + bh > this.H - 8) y = Y0 - bh - 22;
+    bar.style.left = Math.max(8, Math.min(this.W - bw - 8, x)) + 'px'; bar.style.top = Math.max(60, y) + 'px';
+  }
 
 
   // ---------- notebook file on the device ----------
