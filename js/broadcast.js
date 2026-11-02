@@ -1,5 +1,6 @@
 // Teacher side of the student screen: sends pages, view, live ink, laser and timer over BroadcastChannel (no internet)
-import { h, icon, toast, popover, seg, dialog } from './ui.js';
+import { h, icon, toast, popover, seg, dialog, busy, downloadBlob } from './ui.js';
+import { buildBackup, fileNameFor } from './files.js';
 import { prefs, savePrefs } from './prefs.js';
 import { serializePage } from './editor.js';
 
@@ -59,6 +60,50 @@ export class Broadcast {
 }
 
 let studentWin = null;
+export const isHomeApp = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches;
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const APP_URL = () => new URL('./', location.href).href;
+
+// Home-screen app and Safari keep separate storage on iPad: move a notebook across with a file.
+export function transferDialog(ed, to) {
+  const toSafari = to === 'safari';
+  let file = null;
+  const step = (n, t, sub, btn) => h('div', { class: 'scr-step' }, h('span', { class: 'n' }, String(n)), h('div', { style: { flex: 1 } }, h('b', {}, t), sub ? h('div', { class: 'sub' }, sub) : '', btn || ''));
+  const saveBtn = h('button', { class: 'pill prim', style: { marginTop: '8px', height: '44px' } }, icon('save'), 'กำลังเตรียมไฟล์…'); saveBtn.disabled = true;
+  const openBtn = h('button', { class: 'pill sec', style: { marginTop: '8px', height: '44px' } }, icon(toSafari ? 'screen' : 'home'), toSafari ? 'เปิด Safari' : 'วิธีเปิดในแอป');
+  const copyBtn = h('button', { class: 'pill ghost', style: { marginTop: '8px', height: '44px' } }, 'คัดลอกลิงก์');
+  const body = h('div', {},
+    h('p', { class: 'sub', style: { margin: '0 0 8px' } }, toSafari ? 'แอปบนหน้าจอโฮมกับ Safari เก็บสมุดแยกกัน จึงต้องส่งสมุดเป็นไฟล์ (ครั้งต่อไปเลือก "ใช้ฉบับในไฟล์" เพื่ออัปเดต)' : 'ส่งสมุดที่เขียนใน Safari กลับไปเก็บในแอปบนหน้าจอโฮม ซึ่งปลอดภัยกว่า (Safari อาจลบข้อมูลถ้าไม่ได้ใช้ 7 วัน)'),
+    step(1, 'บันทึกสมุดเป็นไฟล์', 'กดแล้วเลือก "บันทึกไปยังไฟล์" (Save to Files) เก็บไว้ที่ไหนก็ได้ เช่น บน iPad ของฉัน', saveBtn),
+    toSafari ? step(2, 'เปิดเส้นคิดใน Safari', 'ถ้าปุ่มไม่พาไป Safari ให้คัดลอกลิงก์ไปวางใน Safari เอง', h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, openBtn, copyBtn))
+      : step(2, 'เปิดแอปเส้นคิดจากหน้าจอโฮม', 'ปัดกลับไปหน้าจอโฮม แล้วแตะไอคอนเส้นคิด'),
+    step(3, 'กด "เปิดไฟล์ / PDF" แล้วเลือกไฟล์ที่บันทึก', 'ถ้าเคยส่งสมุดเล่มนี้มาก่อน ให้เลือก "ใช้ฉบับในไฟล์" สมุดจะอัปเดตเป็นฉบับล่าสุด'));
+  dialog(toSafari ? 'ส่งสมุดไปฉายใน Safari' : 'ส่งสมุดกลับไปแอปบนหน้าจอโฮม', body, [{ label: 'ปิด' }], { width: 600 });
+  (async () => {
+    try {
+      await ed.flush();
+      const data = await buildBackup([ed.nb.id], { nb: ed.nb.id, pages: ed.pages });
+      file = new File([JSON.stringify(data)], fileNameFor(ed.nb), { type: 'application/json' });
+      saveBtn.disabled = false; saveBtn.lastChild.textContent = 'บันทึกไฟล์ (' + Math.max(0.1, Math.round(file.size / 1e5) / 10) + ' MB)';
+    } catch (e) { saveBtn.lastChild.textContent = 'เตรียมไฟล์ไม่สำเร็จ'; console.error(e); }
+  })();
+  // share must run straight from the tap (iPad needs a fresh user gesture)
+  saveBtn.onclick = async () => {
+    if (!file) return;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: ed.nb.name }); saveBtn.lastChild.textContent = '✓ บันทึกแล้ว'; return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    downloadBlob(file, 'senkid-notebook.senkid.json'); saveBtn.lastChild.textContent = '✓ ดาวน์โหลดแล้ว';
+  };
+  openBtn.onclick = () => {
+    if (!toSafari) return;
+    const url = APP_URL() + '#from-app';
+    if (isIOS()) location.href = 'x-safari-' + url; // iOS 17+: open the link in Safari itself
+    else window.open(url, '_blank');
+  };
+  copyBtn.onclick = async () => { try { await navigator.clipboard.writeText(APP_URL()); toast('คัดลอกลิงก์แล้ว · ไปวางใน Safari'); } catch { toast(APP_URL(), 5000); } };
+}
+
 export function openStudentWindow() {
   const url = new URL('student.html', location.href).href;
   const w = window.open(url, 'senkid-student', 'popup=yes,width=1280,height=800');
@@ -103,7 +148,15 @@ export function studentMenu(app, anchor, ed) {
   // B: second screen
   const open = h('button', { class: 'pill ' + (twoScreens() ? 'prim' : 'sec') }, icon('screen'), b.connected ? 'เปิดหน้าต่างนักเรียนอีกครั้ง' : 'เปิดหน้าจอนักเรียน');
   open.onclick = () => { close(); if (twoScreens() === true) openStudentWindow(); else confirmSecondScreen(ed); };
-  box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
+  if (isHomeApp() && isIOS()) {
+    // the student window only works inside Safari on iPad
+    const send = h('button', { class: 'pill prim' }, icon('screen'), 'ส่งสมุดนี้ไปฉายใน Safari');
+    send.onclick = () => { close(); transferDialog(ed, 'safari'); };
+    box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษเต็มทีวี · ใช้ได้ใน Safari เท่านั้น จึงต้องส่งสมุดไปเปิดใน Safari ก่อน', send));
+  } else {
+    box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
+    if (isIOS()) { const back = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, icon('home'), 'ส่งสมุดนี้กลับไปแอปบนหน้าจอโฮม'); back.onclick = () => { close(); transferDialog(ed, 'app'); }; box.append(back); }
+  }
   if (b.connected) {
     box.append(h('div', { class: 'lbl' }, 'สิ่งที่นักเรียนเห็นบนทีวี'), seg([['follow', 'ตามที่ครูดู (ซูม/เลื่อนตาม)'], ['page', 'ทั้งหน้าเสมอ']], b.mode, v => b.setMode(v)));
     if (studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; box.append(x); }

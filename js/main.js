@@ -12,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.4.3';
+export const VERSION = '1.4.4';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -45,6 +45,7 @@ class App {
     catch (e) { console.error(e); prefs.lastOpen = null; savePrefs(); try { await this.openLibrary(); } catch { } toast('เปิดสมุดล่าสุดไม่สำเร็จ จึงกลับมาหน้าแรก', 3500, 'warn'); }
     finally { document.getElementById('boot')?.remove(); }
     if (!prefs.onboarded) this.onboarding();
+    if (location.hash === '#from-app') this.receiveFromApp();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       const had = !!navigator.serviceWorker.controller;
       navigator.serviceWorker.register('sw.js').then((reg) => {
@@ -300,6 +301,14 @@ class App {
       await new Promise((res) => { if (w.state === 'activated') return res(); w.addEventListener('statechange', () => { if (w.state === 'activated' || w.state === 'redundant') res(); }); setTimeout(res, 20000); });
       location.reload();
     } catch (e) { bz.done(); toast('ตรวจหาอัปเดตไม่สำเร็จ: ' + (e.message || e), 3500, 'warn'); }
+  }
+
+  // Safari opened from the home-screen app's "send to Safari": pick the file that was just saved
+  receiveFromApp() {
+    history.replaceState(null, '', location.pathname + location.search);
+    prefs.onboarded = true; savePrefs(); document.querySelector('.onb')?.remove();
+    const body = h('div', {}, h('p', { style: { margin: '0 0 6px', fontSize: '22px' } }, 'เลือกไฟล์สมุดที่เพิ่งบันทึกจากแอปบนหน้าจอโฮม'), h('p', { class: 'sub', style: { margin: 0 } }, 'ถ้าเคยส่งเล่มนี้มาแล้ว ให้เลือก "ใช้ฉบับในไฟล์" เพื่ออัปเดตเป็นฉบับล่าสุด · สมุดใน Safari อาจถูกลบถ้าไม่ได้เปิดเกิน 7 วัน'));
+    dialog('รับสมุดจากแอป', body, [{ label: 'ไว้ทีหลัง' }, { label: 'เลือกไฟล์', cls: 'prim', icon: 'folder', flex: 2, action: () => { this.openFile(); } }], { width: 520 });
   }
 
   // ---------- onboarding ----------
