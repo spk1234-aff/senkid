@@ -1329,12 +1329,14 @@ export class Editor {
   // laser points in world coords with alpha; drops expired ones. Styles: trail (fades behind the tip), dot (tip only), ink (stays while drawing, fades after lifting)
   laserWorld() {
     const now = performance.now(), st = prefs.laser?.style || 'trail', ends = this.laserEnd || new Map();
+    // Goodnotes-style: every laser stroke stays while the pen keeps pointing (lifting between strokes is fine);
+    // they all fade together a moment after the last stroke ends
+    let lastEnd = 0; for (const v of ends.values()) lastEnd = Math.max(lastEnd, v);
+    const hold = st === 'ink' ? 1500 : 800, fade = st === 'ink' ? 500 : 600;
+    const group = this.lasering ? 1 : 1 - Math.max(0, now - lastEnd - hold) / fade;
     const alpha = (p) => {
-      if (st === 'ink') { const e = ends.get(p.s); if (e == null) return 1; return 1 - Math.max(0, now - e - 1200) / 500; }
       if (st === 'dot') { const e = ends.get(p.s); return e == null ? 1 : 1 - (now - e) / 250; }
-      if (this.lasering && p.s === this.lasering.s) return 1; // stays while the pen is held
-      const e = ends.get(p.s); if (e != null) return 1 - Math.max(0, now - e - 250) / 650;
-      return 1 - (now - p.t) / 900;
+      return group;
     };
     const out = [];
     for (const p of this.laser) { const a = alpha(p); if (a > 0) out.push({ x: p.x, y: p.y, a, s: p.s }); }
