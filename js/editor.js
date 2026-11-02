@@ -139,7 +139,7 @@ export class Editor {
       if (!this.peek && this.thumbs.classList.contains('open')) this.toggleThumbs(false);
     }
     this.buildDock();
-    $('.ctxbar', this.stage)?.classList.toggle('hidden', hide); $('.undocap', this.stage)?.classList.toggle('hidden', hide);
+    $('.ctxbar', this.stage)?.classList.toggle('hidden', hide); $('.undocap', this.stage)?.classList.toggle('hidden', hide && prefs.toolbarPos !== 'top');
     this.updateRecFloat();
   }
   exitPresent() { prefs.toolbarHidden = false; savePrefs(); this.peek = false; if (this.fitWide) { this.fitWide = false; this.fit(true); } this.applyPos(); }
@@ -158,17 +158,48 @@ export class Editor {
     this.dockPg.onclick = (e) => { e.stopPropagation(); this.toggleThumbs(); };
     dock.append(B('up', 'หน้าก่อนหน้า', () => this.gotoRel(-1)), this.dockPg, B('down', 'หน้าถัดไป', () => this.gotoRel(1)), h('i', { class: 'dsep' }));
     if (!prefs.dockMini) {
-      const cur = t === 'hl' ? prefs.hl.color : prefs.penColor;
+      const side = { place: 'side' };
+      // tap a tool: select it · tap it again: full options panel (like Goodnotes)
+      const tool = (id, ic, title) => B(ic, title, (b) => {
+        if (this.tool === id) { if (id === 'pen' || id === 'hl') openPenPanel(b, this, side); else if (id === 'eraser') openEraserPanel(b, this, side); return; }
+        this.setTool(id);
+      }, t === id);
+      dock.append(tool('pen', prefs.penType, 'ปากกา (แตะอีกครั้งเพื่อตั้งค่า)'), tool('hl', 'hl', 'ไฮไลต์ (แตะอีกครั้งเพื่อตั้งค่า)'), tool('eraser', 'eraser', 'ยางลบ (แตะอีกครั้งเพื่อตั้งค่า)'),
+        tool('lasso', 'lasso', 'บ่วงบาศ: เลือก ย้าย ย่อขยาย'), tool('laser', 'laser', 'เลเซอร์'));
+      // options for the current tool
+      const c = this.cur();
+      if (t === 'pen' || t === 'hl') {
+        dock.append(h('i', { class: 'dsep' }));
+        const cur = c.color, cols = t === 'hl' ? prefs.hlFavorites.slice(0, 5) : prefs.favorites.slice(0, 5);
+        for (const col of cols) { const b = h('button', { class: 'dsw' + (String(cur).toUpperCase() === col.toUpperCase() ? ' on' : ''), title: col }, h('i', { style: { background: col } })); b.onclick = (e) => { e.stopPropagation(); this.setColor(col); }; dock.append(b); }
+        if (t === 'pen') {
+          dock.append(h('i', { class: 'dsep' }));
+          const isLine = (id) => id === 'solid' ? !['dash', 'dot'].includes(prefs.penType) : prefs.penType === id;
+          for (const [id, lab] of [['solid', 'เส้นทึบ'], ['dash', 'เส้นประ'], ['dot', 'เส้นจุด']]) {
+            const b = h('button', { class: 'db lsty' + (isLine(id) ? ' on' : ''), title: lab }, h('i', { class: id }));
+            b.onclick = (e) => { e.stopPropagation(); if (id !== 'solid' && !['dash', 'dot'].includes(prefs.penType)) prefs.solidPen = prefs.penType; this.setPenType(id === 'solid' ? (prefs.solidPen || 'fount') : id); };
+            dock.append(b);
+          }
+        }
+      }
+      if (t === 'eraser') {
+        dock.append(h('i', { class: 'dsep' }));
+        for (const [m, lab] of [['stroke', 'ทั้งเส้น'], ['area', 'ถู']]) { const b = h('button', { class: 'db dtxt' + (prefs.eraser.mode === m ? ' on' : ''), title: m === 'stroke' ? 'ลบทั้งเส้น' : 'ลบส่วนที่ถู' }, lab); b.onclick = (e) => { e.stopPropagation(); prefs.eraser.mode = m; savePrefs(); this.buildToolbar(); }; dock.append(b); }
+      }
+      if (t === 'pen' || t === 'hl' || (t === 'eraser' && prefs.eraser.mode === 'area')) {
+        dock.append(h('i', { class: 'dsep' }));
+        const ps = c.presets, pick = [ps[0], ps[Math.floor(ps.length / 2)], ps[ps.length - 1]], mx = ps[ps.length - 1];
+        for (const v of pick) {
+          const d = Math.round(5 + 15 * Math.sqrt(v / mx));
+          const b = h('button', { class: 'db dsz' + (Math.abs(v - c.size) < 1e-6 ? ' on' : ''), title: 'ขนาด ' + v }, h('i', { style: { width: d + 'px', height: d + 'px' } }));
+          b.onclick = (e) => { e.stopPropagation(); this.setSize(v); this.buildDock(); }; dock.append(b);
+        }
+      }
+      if (t === 'lasso' && this.app.clip?.items.length) dock.append(h('i', { class: 'dsep' }), B('copy', 'วางสิ่งที่คัดลอก', () => this.paste()));
+      dock.append(h('i', { class: 'dsep' }));
+      // undo/redo live in the top-left corner (top toolbar layout)
+      if (prefs.toolbarPos !== 'top') dock.append(B('undo', 'ย้อนกลับ', () => this.undo()), B('redo', 'ทำซ้ำ', () => this.redo()));
       dock.append(
-        B(prefs.penType, 'ปากกา', () => this.setTool('pen'), t === 'pen'),
-        B('hl', 'ไฮไลต์', () => this.setTool('hl'), t === 'hl'),
-        B('eraser', 'ยางลบ', () => this.setTool('eraser'), t === 'eraser'),
-        B('laser', 'เลเซอร์', () => this.setTool('laser'), t === 'laser'),
-        h('i', { class: 'dsep' }));
-      const cols = t === 'hl' ? prefs.hlFavorites.slice(0, 5) : prefs.favorites.slice(0, 5);
-      for (const col of cols) { const b = h('button', { class: 'dsw' + (String(cur).toUpperCase() === col.toUpperCase() ? ' on' : ''), title: col }, h('i', { style: { background: col } })); b.onclick = (e) => { e.stopPropagation(); if (t !== 'pen' && t !== 'hl') this.tool = 'pen'; this.setColor(col); }; dock.append(b); }
-      dock.append(h('i', { class: 'dsep' }),
-        B('undo', 'ย้อนกลับ', () => this.undo()), B('redo', 'ทำซ้ำ', () => this.redo()),
         B(this.fitWide ? 'fit' : 'expand', this.fitWide ? 'ทั้งหน้า' : 'เต็มความกว้าง', () => this.toggleFitWide(), this.fitWide),
         B('more', 'เครื่องมือทั้งหมด', () => { this.peek = true; this.applyPos(); }),
         B('close', 'ออกจากโหมดนำเสนอ', () => this.exitPresent()));
@@ -299,7 +330,7 @@ export class Editor {
       if (t === 'laser') this.laserBar(bar);
       if (t === 'lasso' && this.app.clip?.items.length) { const pb = h('button', { class: 'chip on' }, icon('copy'), `วาง (${this.app.clip.items.length})`); pb.onclick = () => this.paste(); bar.append(h('div', { class: 'vsep' }), pb); }
       if (t === 'text') this.textBar(bar);
-      if (prefs.toolbarHidden && !this.peek) { cap.classList.add('hidden'); bar.classList.add('hidden'); }
+      if (prefs.toolbarHidden && !this.peek) bar.classList.add('hidden');
       this.stage.append(cap, bar); this.updateUndoBtns(); this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
       this.app.timer.attach(this);
       return;
@@ -354,7 +385,7 @@ export class Editor {
       const more = h('button', { class: 'sw wheel-sw', title: 'สีอื่น ๆ' }, h('i'));
       more.onclick = () => openPenPanel(more, this, {}); bar.append(more);
     }
-    if (prefs.toolbarHidden && !this.peek) { cap.classList.add('hidden'); bar.classList.add('hidden'); }
+    if (prefs.toolbarHidden && !this.peek) bar.classList.add('hidden');
     this.stage.append(cap, bar);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -1075,6 +1106,7 @@ export class Editor {
     if (!s.shape && s.pts.length === STRIDE) { const p = Array.from(s.pts); s.pts = Float32Array.from(p.concat([p[0] + 0.05, p[1] + 0.05, p[2], p[3]])); }
     // Goodnotes-style scribble to erase: a back-and-forth scratch over ink removes what it touches
     if (prefs.scribbleErase && L.kind !== 'hl' && !s.shape && this.scribbleErase(L.page, s)) return;
+    if (s.shape && L.rawPts && !s.shape.closed && s.shape.k !== 'ellipse') { const rp = L.rawPts, st = Math.max(1, Math.ceil(rp.length / STRIDE / 300)), out = []; for (let i = 0; i < rp.length; i += STRIDE * st) out.push(Math.round(rp[i] * 10) / 10, Math.round(rp[i + 1] * 10) / 10, Math.round(rp[i + 2] * 100) / 100, Math.round((rp[i + 3] || 0) * 100) / 100); s.raw = out; }
     if (s.shape && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse') && prefs.shapeFill) s.fill = prefs.shapeFillA || 0.14;
     const page = L.page, before = page.strokes.slice();
     page.strokes.push(s);
@@ -1084,7 +1116,7 @@ export class Editor {
     // keep the last frame visible until main is repainted
     this.need.live = true;
     if (s.c) pushRecent(s.c);
-    if (s.shape) { if (L.rawXY && !s.shape.closed && ['line', 'arc3', 'curve', 'quad', 'arrow'].includes(s.shape.k)) this.showShapeAlt(page, s, L.rawXY, L.rawPts); }
+
   }
   scribbleErase(page, s) {
     const rs = scribblePath(s.pts); if (!rs) return false;
@@ -1148,6 +1180,22 @@ export class Editor {
     bar.append(sec('เส้น'));
     for (const col of cols) { const b = h('button', { class: 'sw' + (String(sel.s.c).toUpperCase() === col.toUpperCase() ? ' on' : ''), title: col }, h('i', { style: { background: col } })); b.onclick = () => edit(ns => { ns.c = col; return ns; }); bar.append(b); }
     const closed = sel.s.shape.closed || sel.s.shape.k === 'ellipse';
+    if (!closed) {
+      bar.append(h('div', { class: 'brk' }), sec('รูปแบบ'));
+      const k0 = sel.s.shape.k === 'arrow' ? 'line' : sel.s.shape.k === 'curve' ? 'quad' : sel.s.shape.k;
+      for (const [k, l] of [['line', 'เส้นตรง'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
+        const b = h('button', { class: 'chip' + (k === k0 ? ' on' : '') }, l);
+        b.onclick = () => {
+          const cur = this.selStroke(); if (!cur) return; const st = cur.s;
+          const raw = st.raw && st.raw.length >= 8 ? st.raw : (() => { const pl = shapePolyline(st.shape, 40), o = []; for (let i = 0; i < pl.length; i += 2) o.push(pl[i], pl[i + 1], 0.5, 0); return o; })();
+          const xy = []; for (let i = 0; i < raw.length; i += 4) xy.push(raw[i], raw[i + 1]);
+          if (k === 'free') { const before = cur.page.strokes.slice(); const ns = { ...st, id: uid(), pts: Float32Array.from(raw), bb: null }; delete ns.shape; delete ns.raw; delete ns.fill; delete ns.fc; cur.page.strokes = cur.page.strokes.map(x => x === st ? ns : x); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.deselect(); this.need.main = true; return; }
+          const sh = shapeAs(xy, k); if (!sh) return;
+          edit(ns => { ns.shape = sh; ns.raw = raw; return ns; });
+        };
+        bar.append(b);
+      }
+    }
     if (closed) {
       // Goodnotes-style fill: none, or a colour + how solid it is
       bar.append(h('div', { class: 'brk' }), sec('พื้นที่'));
@@ -2070,7 +2118,7 @@ function splitStroke(s, x, y, r) {
 }
 
 export function serializePage(p) {
-  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.hs) o.hs = s.hs; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
+  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.hs) o.hs = s.hs; if (s.fill) o.fill = s.fill; if (s.fc) o.fc = s.fc; if (s.raw) o.raw = s.raw; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
 }
 
 // affine transform of any page object (M = [a,b,c,d,e,f]; sc = uniform scale; ang = rotation)
@@ -2086,7 +2134,9 @@ export function transformStroke(s, M, sc, ang) {
     const sh = JSON.parse(JSON.stringify(s.shape));
     if (sh.k === 'ellipse') { const nx = X(sh.cx, sh.cy), ny = Y(sh.cx, sh.cy); sh.cx = nx; sh.cy = ny; sh.rx *= sc; sh.ry *= sc; sh.rot = (sh.rot || 0) + ang; }
     else for (let i = 0; i < sh.pts.length; i += 2) { const x = sh.pts[i], y = sh.pts[i + 1]; sh.pts[i] = X(x, y); sh.pts[i + 1] = Y(x, y); }
-    return { ...s, shape: sh, w: s.w * sc, bb: null };
+    const o = { ...s, shape: sh, w: s.w * sc, bb: null };
+    if (s.raw) { const r = s.raw.slice(); for (let i = 0; i < r.length; i += 4) { const x = r[i], y = r[i + 1]; r[i] = X(x, y); r[i + 1] = Y(x, y); } o.raw = r; }
+    return o;
   }
   const p = new Float32Array(s.pts);
   for (let i = 0; i < p.length; i += STRIDE) { const x = p[i], y = p[i + 1]; p[i] = X(x, y); p[i + 1] = Y(x, y); }
