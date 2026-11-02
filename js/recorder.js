@@ -286,7 +286,12 @@ export class AudioRecorder {
 
 export async function recBlob(meta) {
   const chunks = (await db.chunksOf(meta.id)).sort((a, b) => a.seq - b.seq).map(c => c.blob);
-  return new Blob(chunks, { type: (meta.mime || (meta.kind === 'audio' ? 'audio/mp4' : 'video/mp4')).split(';')[0] });
+  const type = (meta.mime || (meta.kind === 'audio' ? 'audio/mp4' : 'video/mp4')).split(';')[0];
+  const raw = new Blob(chunks, { type });
+  if (!type.includes('mp4')) return raw;
+  // MediaRecorder writes a fragmented MP4 (wrong length, no seeking/replay) — rebuild a normal MP4
+  try { const { defragMp4 } = await import('./mp4fix.js'); const fixed = await defragMp4(raw); if (fixed) return new Blob([fixed], { type }); } catch (e) { console.warn('mp4 fix', e); }
+  return raw;
 }
 function fileName(meta) {
   const d = new Date(meta.created), p = (n) => String(n).padStart(2, '0');
