@@ -24,7 +24,13 @@
 </head>
 <body>
 <div id="boot" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#F4F2ED;z-index:99;font-family:'TH Sarabun New',sans-serif"><img src="icons/icon-192.png" width="88" height="88" style="border-radius:20px" alt=""><p style="font-size:26px;color:#6B6F7A;margin:0">กำลังโหลดเส้นคิด…</p><small id="bootslow" style="font-size:20px;color:#9A9DA6;display:none;text-align:center;padding:0 24px">ครั้งแรกหลังอัปเดต แอปต้องดาวน์โหลดไฟล์ใหม่ ถ้าเน็ตช้าอาจใช้เวลาสักครู่<br>ครั้งต่อไปจะเปิดเร็วและใช้ออฟไลน์ได้</small></div>
-<script>setTimeout(function(){var e=document.getElementById("bootslow");if(e)e.style.display="block"},2500)</script>
+<script>
+setTimeout(function(){var e=document.getElementById("bootslow");if(e)e.style.display="block"},2500);
+window.__bootErr=function(m){var b=document.getElementById("boot");if(!b)return;var d=document.getElementById("booterr");if(!d){d=document.createElement("div");d.id="booterr";d.style.cssText="font-size:18px;color:#B33;max-width:80vw;text-align:center";b.appendChild(d)}d.textContent="เกิดข้อผิดพลาด: "+m};
+window.addEventListener("error",function(e){window.__bootErr((e.message||"")+" "+(e.filename||"").split("/").pop()+":"+(e.lineno||""))});
+window.addEventListener("unhandledrejection",function(e){window.__bootErr(String(e.reason&&e.reason.message||e.reason))});
+setTimeout(function(){var b=document.getElementById("boot");if(!b||document.getElementById("bootbtn"))return;var x=document.createElement("button");x.id="bootbtn";x.textContent="โหลดใหม่";x.style.cssText="font:inherit;font-size:24px;padding:8px 26px;border-radius:999px;border:0;background:#2F5BEA;color:#fff;margin-top:6px";x.onclick=function(){location.reload()};b.appendChild(x)},12000);
+</script>
 <div id="app"></div>
 <div id="layer"></div>
 <div id="toasts"></div>

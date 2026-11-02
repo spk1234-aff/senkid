@@ -1,5 +1,5 @@
 // Offline cache for เส้นคิด. Bump VERSION on every release.
-const VERSION = 'senkid-1.4.1-1';
+const VERSION = 'senkid-1.4.2-1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/ui.js', 'js/db.js', 'js/prefs.js', 'js/render.js', 'js/shapes.js', 'js/editor.js', 'js/penpanel.js', 'js/recorder.js', 'js/library.js', 'js/images.js', 'js/files.js', 'js/pdfdoc.js', 'js/exportpdf.js', 'js/timer.js', 'js/broadcast.js', 'js/student.js', 'student.html', 'vendor/pdfjs/pdf.min.mjs', 'vendor/pdfjs/pdf.worker.min.mjs', 'vendor/pdf-lib.esm.min.js',
@@ -8,18 +8,26 @@ const SHELL = [
 ];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('senkid-') && k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
+// copy of a response without the "redirected" flag
+async function plain(r) {
+  if (!r.redirected) return r;
+  const body = await r.blob();
+  return new Response(body, { status: r.status, statusText: r.statusText, headers: r.headers });
+}
 self.addEventListener('fetch', (e) => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url); if (url.origin !== location.origin) return;
-  // pages: answer from the offline copy at once (fast even on a slow hotspot), refresh it in the background.
-  // App updates still arrive: sw.js itself is re-checked by the browser and the app offers "อัปเดตเลย".
+  // pages: answer from the offline copy at once (fast on a slow hotspot) and refresh it in the background.
   if (req.mode === 'navigate') {
-    e.respondWith((async () => {
-      const cached = await caches.match('index.html');
-      const net = fetch(req).then(r => { if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put('index.html', cp)); } return r; });
-      if (cached) { e.waitUntil(net.catch(() => { })); return cached; }
-      return net.catch(() => caches.match('index.html'));
-    })());
+    const net = fetch(req).then(async (r) => {
+      if (r.ok) { const clean = await plain(r.clone()); const c = await caches.open(VERSION); await c.put('index.html', clean); }
+      return r;
+    });
+    e.waitUntil(net.then(() => { }, () => { })); // must be called synchronously (Safari)
+    e.respondWith(caches.match('index.html').then(async (hit) => {
+      if (hit) return plain(hit); // Safari refuses "redirected" responses for pages
+      try { return await net; } catch { return caches.match('index.html'); }
+    }));
     return;
   }
   e.respondWith(caches.match(req, { ignoreSearch: true }).then(hit => hit || fetch(req).then(r => { if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put(req, cp)); } return r; })));

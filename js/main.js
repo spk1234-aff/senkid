@@ -12,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.4.1';
+export const VERSION = '1.4.2';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -41,7 +41,9 @@ class App {
     try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch { }
     // continue where the user left off
     const last = prefs.lastOpen && await db.get('notebooks', prefs.lastOpen).catch(() => null);
-    try { if (last) await this.openNotebook(last.id); else await this.openLibrary(); } finally { document.getElementById('boot')?.remove(); }
+    try { if (last) await this.openNotebook(last.id); else await this.openLibrary(); }
+    catch (e) { console.error(e); prefs.lastOpen = null; savePrefs(); try { await this.openLibrary(); } catch { } toast('เปิดสมุดล่าสุดไม่สำเร็จ จึงกลับมาหน้าแรก', 3500, 'warn'); }
+    finally { document.getElementById('boot')?.remove(); }
     if (!prefs.onboarded) this.onboarding();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       const had = !!navigator.serviceWorker.controller;
