@@ -290,7 +290,7 @@ export function drawStroke(ctx, s, k, darkPaper, final = true) {
     if (s.pen === 'dash') ctx.setLineDash([Math.max(s.w * 3, 3), Math.max(s.w * 2.6, 3)]);
     else if (s.pen === 'dot') ctx.setLineDash([0.001, Math.max(s.w * 2.3, 2)]);
     const sp = shapePath(s.shape, s.w);
-    if (s.fill && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse')) { const a0 = ctx.globalAlpha; ctx.globalAlpha = a0 * s.fill; ctx.fill(sp); ctx.globalAlpha = a0; }
+    if (s.fill && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse')) { const a0 = ctx.globalAlpha; ctx.globalAlpha = a0 * s.fill; if (s.fc) ctx.fillStyle = inkFor(s.fc, darkPaper); ctx.fill(sp); ctx.fillStyle = color; ctx.globalAlpha = a0; }
     ctx.stroke(sp);
     ctx.restore(); return;
   }

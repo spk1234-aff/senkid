@@ -1055,7 +1055,7 @@ export class Editor {
     if (!s.shape && s.pts.length === STRIDE) { const p = Array.from(s.pts); s.pts = Float32Array.from(p.concat([p[0] + 0.05, p[1] + 0.05, p[2], p[3]])); }
     // Goodnotes-style scribble to erase: a back-and-forth scratch over ink removes what it touches
     if (prefs.scribbleErase && L.kind !== 'hl' && !s.shape && this.scribbleErase(L.page, s)) return;
-    if (s.shape && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse') && prefs.shapeFill) s.fill = 0.14;
+    if (s.shape && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse') && prefs.shapeFill) s.fill = prefs.shapeFillA || 0.14;
     const page = L.page, before = page.strokes.slice();
     page.strokes.push(s);
     this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
@@ -1122,10 +1122,34 @@ export class Editor {
     const bar = this.imgBar; bar.innerHTML = ''; bar.classList.remove('hidden'); bar.dataset.kind = 'shape';
     const edit = (fn) => { const cur = this.selStroke(); if (!cur) return; const before = cur.page.strokes.slice(); const ns = fn({ ...cur.s, id: uid(), bb: null }); cur.page.strokes = cur.page.strokes.map(x => x === cur.s ? ns : x); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.sel = { pid: cur.page.id, sid: ns.id }; this.need.main = this.need.ui = true; this.buildShapeBar(); };
     const B = (ic, label, fn, danger) => { const b = h('button', { class: 'chip' + (danger ? ' danger' : '') }, icon(ic), h('span', {}, label)); b.onclick = fn; return b; };
-    for (const col of prefs.favorites.slice(0, 5)) { const b = h('button', { class: 'sw' + (String(sel.s.c).toUpperCase() === col.toUpperCase() ? ' on' : '') }, h('i', { style: { background: col } })); b.onclick = () => edit(ns => { ns.c = col; return ns; }); bar.append(b); }
-    bar.append(h('div', { class: 'vsep', style: { width: '1px', height: '26px', background: 'rgba(255,255,255,.2)', margin: '0 4px' } }));
+    const sec = (t) => h('span', { class: 'sblab' }, t);
+    const vs = () => h('div', { class: 'vsep' });
+    const cols = prefs.favorites.slice(0, 6);
+    bar.append(sec('เส้น'));
+    for (const col of cols) { const b = h('button', { class: 'sw' + (String(sel.s.c).toUpperCase() === col.toUpperCase() ? ' on' : ''), title: col }, h('i', { style: { background: col } })); b.onclick = () => edit(ns => { ns.c = col; return ns; }); bar.append(b); }
     const closed = sel.s.shape.closed || sel.s.shape.k === 'ellipse';
-    if (closed) bar.append(B('palette', sel.s.fill ? 'ไม่เติมสี' : 'เติมสี', () => edit(ns => { if (ns.fill) delete ns.fill; else ns.fill = 0.14; prefs.shapeFill = !!ns.fill; savePrefs(); return ns; })));
+    if (closed) {
+      // Goodnotes-style fill: none, or a colour + how solid it is
+      bar.append(h('div', { class: 'brk' }), sec('พื้นที่'));
+      const fc = sel.s.fill ? String(sel.s.fc || sel.s.c).toUpperCase() : null;
+      const none = h('button', { class: 'sw nofill' + (!sel.s.fill ? ' on' : ''), title: 'ไม่มีพื้นที่ (เหลือแค่เส้น)', 'aria-label': 'ไม่มีพื้นที่' }, h('i'));
+      none.onclick = () => edit(ns => { delete ns.fill; delete ns.fc; prefs.shapeFill = false; savePrefs(); return ns; });
+      bar.append(none);
+      for (const col of cols) {
+        const b = h('button', { class: 'sw' + (fc === col.toUpperCase() ? ' on' : ''), title: 'พื้นที่สี ' + col }, h('i', { style: { background: col, opacity: .45 } }));
+        b.onclick = () => edit(ns => { ns.fill = ns.fill || prefs.shapeFillA || 0.14; if (col.toUpperCase() === String(ns.c).toUpperCase()) delete ns.fc; else ns.fc = col; prefs.shapeFill = true; savePrefs(); return ns; });
+        bar.append(b);
+      }
+      if (sel.s.fill) {
+        bar.append(vs());
+        for (const [a, lab] of [[0.14, 'อ่อน'], [0.35, 'กลาง'], [0.7, 'เข้ม']]) {
+          const b = h('button', { class: 'chip' + (Math.abs(sel.s.fill - a) < 0.01 ? ' on' : '') }, lab);
+          b.onclick = () => edit(ns => { ns.fill = a; prefs.shapeFillA = a; savePrefs(); return ns; });
+          bar.append(b);
+        }
+      }
+    }
+    bar.append(h('div', { class: 'brk' }));
     bar.append(B('dup', 'ทำสำเนา', () => { const cur = this.selStroke(); if (!cur) return; const before = cur.page.strokes.slice(); const ns = transformStroke(cur.s, [1, 0, 0, 1, 18, 18], 1, 0); ns.id = uid(); cur.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.sel = { pid: cur.page.id, sid: ns.id }; this.need.main = this.need.ui = true; this.buildShapeBar(); }),
       B('trash', 'ลบ', () => { const cur = this.selStroke(); if (!cur) return; const before = cur.page.strokes.slice(); cur.page.strokes = cur.page.strokes.filter(x => x !== cur.s); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.deselect(); this.need.main = true; }, true),
       B('check', 'เสร็จ', () => this.deselect()));
