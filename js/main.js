@@ -12,7 +12,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 
-export const VERSION = '1.4.8';
+export const VERSION = '1.4.9';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -47,15 +47,22 @@ class App {
     if (!prefs.onboarded) this.onboarding();
     if (location.hash === '#from-app') this.receiveFromApp();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      const had = !!navigator.serviceWorker.controller;
+      const had = !!navigator.serviceWorker.controller, t0 = performance.now();
       navigator.serviceWorker.register('sw.js').then((reg) => {
         const check = () => reg.update().catch(() => { });
+        check(); // look for a new version right at launch
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
         setInterval(check, 30 * 60 * 1000);
       }).catch(() => { });
       let shown = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
+      navigator.serviceWorker.addEventListener('controllerchange', async () => {
         if (!had || shown || this.updating) return; shown = true;
+        // just opened the app and haven't written yet → update by itself, no button needed
+        const untouched = !(this.editor && this.editor.undoStack?.length) && !this.editor?.live && !this.recorder?.active && !this.audio?.active;
+        if (performance.now() - t0 < 20000 && untouched && !document.querySelector('.dialog')) {
+          busy('กำลังอัปเดตเส้นคิดเป็นรุ่นใหม่…', 'สมุดทั้งหมดยังอยู่ครบ');
+          await this.editor?.flush?.(); location.reload(); return;
+        }
         const b = h('button', { class: 'pill prim', style: { height: '40px', marginLeft: '10px', pointerEvents: 'auto' } }, 'อัปเดตเลย');
         b.onclick = async () => { await this.editor?.flush?.(); location.reload(); };
         const t = h('div', { class: 'toast keep updbar' }, 'มีเส้นคิดรุ่นใหม่แล้ว', b);

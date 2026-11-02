@@ -155,7 +155,13 @@ export function studentMenu(app, anchor, ed) {
     send.onclick = () => { close(); transferDialog(ed, 'safari'); };
     box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษเต็มทีวี · ใช้ได้ใน Safari เท่านั้น จึงต้องส่งสมุดไปเปิดใน Safari ก่อน', send));
   } else {
-    box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
+    if (isIOS()) {
+      // a real link: press-and-hold gives iPad's own "Open in New Window", which skips the "move tab to new window" step
+      const a = h('a', { class: 'pill prim', href: new URL('student.html', location.href).href, target: 'senkid-student', style: { textDecoration: 'none', justifyContent: 'center' } }, icon('screen'), 'เปิดหน้าจอนักเรียน');
+      a.addEventListener('click', () => setTimeout(close, 50));
+      box.append(card('ทีวีเป็นจอที่สอง', 'ต่อสาย + เปิด Stage Manager · นักเรียนเห็นแค่กระดาษเต็มทีวี', h('div', {}, a,
+        h('div', { class: 'tvtip' }, h('b', {}, 'ทางลัด: '), 'กดค้างปุ่มนี้ → เลือก "เปิดในหน้าต่างใหม่" → แล้วกดค้างจุดสีเขียวของหน้าต่างนั้น → "ย้ายไปยัง…" ทีวี'))));
+    } else box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
     if (isIOS()) { const back = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, icon('home'), 'ส่งสมุดนี้กลับไปแอปบนหน้าจอโฮม'); back.onclick = () => { close(); transferDialog(ed, 'app'); }; box.append(back); }
   }
   if (b.connected) {
