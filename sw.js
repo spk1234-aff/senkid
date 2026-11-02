@@ -1,5 +1,5 @@
 // Offline cache for เส้นคิด. Bump VERSION on every release.
-const VERSION = 'senkid-1.4.0-1';
+const VERSION = 'senkid-1.4.1-1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/ui.js', 'js/db.js', 'js/prefs.js', 'js/render.js', 'js/shapes.js', 'js/editor.js', 'js/penpanel.js', 'js/recorder.js', 'js/library.js', 'js/images.js', 'js/files.js', 'js/pdfdoc.js', 'js/exportpdf.js', 'js/timer.js', 'js/broadcast.js', 'js/student.js', 'student.html', 'vendor/pdfjs/pdf.min.mjs', 'vendor/pdfjs/pdf.worker.min.mjs', 'vendor/pdf-lib.esm.min.js',
@@ -11,9 +11,15 @@ self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then(ks => 
 self.addEventListener('fetch', (e) => {
   const req = e.request; if (req.method !== 'GET') return;
   const url = new URL(req.url); if (url.origin !== location.origin) return;
-  // network-first for navigations so updates arrive, cache-first for assets
+  // pages: answer from the offline copy at once (fast even on a slow hotspot), refresh it in the background.
+  // App updates still arrive: sw.js itself is re-checked by the browser and the app offers "อัปเดตเลย".
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(r => { const cp = r.clone(); caches.open(VERSION).then(c => c.put('index.html', cp)); return r; }).catch(() => caches.match('index.html')));
+    e.respondWith((async () => {
+      const cached = await caches.match('index.html');
+      const net = fetch(req).then(r => { if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put('index.html', cp)); } return r; });
+      if (cached) { e.waitUntil(net.catch(() => { })); return cached; }
+      return net.catch(() => caches.match('index.html'));
+    })());
     return;
   }
   e.respondWith(caches.match(req, { ignoreSearch: true }).then(hit => hit || fetch(req).then(r => { if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put(req, cp)); } return r; })));
