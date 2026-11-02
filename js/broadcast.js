@@ -71,7 +71,7 @@ const twoScreens = () => (typeof screen.isExtended === 'boolean' ? screen.isExte
 
 function presentMode(ed) {
   prefs.toolbarHidden = true; savePrefs(); ed.applyPos();
-  toast('โหมดนำเสนอ · แตะปุ่มจาง ๆ มุมขวาบน: รูปปากกา = เรียกเครื่องมือชั่วคราว (เริ่มเขียนแล้วจะซ่อนเอง), × = ออก', 5000, 'keep');
+  toast('โหมดนำเสนอ · เปลี่ยนปากกา สี ยางลบ ได้จากแถบเล็กด้านขวา · ↔ = ขยายเต็มความกว้าง · × = ออก', 5000, 'keep');
 }
 
 // step-by-step check before opening a 2nd window (iPad can't detect a TV)

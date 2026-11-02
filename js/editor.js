@@ -131,21 +131,63 @@ export class Editor {
     document.body.classList.toggle('present', pres);
     $('.showtb', this.stage)?.remove();
     if (pres) {
-      // presentation: only a faint pill remains (pen = show tools for a moment, × = leave presentation)
-      const peekBtn = h('button', { class: 'b', title: this.peek ? 'ซ่อนเครื่องมือ' : 'แสดงเครื่องมือชั่วคราว' }, icon(this.peek ? 'hide' : prefs.penType));
-      peekBtn.onclick = () => { this.peek = !this.peek; this.applyPos(); };
-      const exitBtn = h('button', { class: 'b', title: 'ออกจากโหมดนำเสนอ' }, icon('close'));
-      exitBtn.onclick = () => { prefs.toolbarHidden = false; savePrefs(); this.peek = false; this.applyPos(); };
-      this.stage.append(h('div', { class: 'showtb' + (this.peek ? ' peek' : '') }, peekBtn, exitBtn));
+      if (this.peek) { // full toolbar shown for a moment: a small pill to hide it again / leave
+        const back = h('button', { class: 'b', title: 'ซ่อนเครื่องมือ' }, icon('hide')); back.onclick = () => { this.peek = false; this.applyPos(); };
+        const exitBtn = h('button', { class: 'b', title: 'ออกจากโหมดนำเสนอ' }, icon('close')); exitBtn.onclick = () => this.exitPresent();
+        this.stage.append(h('div', { class: 'showtb peek' }, back, exitBtn));
+      }
       if (!this.peek && this.thumbs.classList.contains('open')) this.toggleThumbs(false);
     }
+    this.buildDock();
     $('.ctxbar', this.stage)?.classList.toggle('hidden', hide); $('.undocap', this.stage)?.classList.toggle('hidden', hide);
     this.updateRecFloat();
+  }
+  exitPresent() { prefs.toolbarHidden = false; savePrefs(); this.peek = false; if (this.fitWide) { this.fitWide = false; this.fit(true); } this.applyPos(); }
+  // presentation dock: a slim tool strip so the teacher can switch pen/colour/eraser without the big toolbar
+  buildDock() {
+    $('.pdock', this.stage)?.remove();
+    if (!prefs.toolbarHidden || this.peek) return;
+    const t = this.tool;
+    const B = (ic, title, fn, on, cls = '') => { const b = h('button', { class: 'db' + (on ? ' on' : '') + cls, title }, icon(ic)); b.onclick = (e) => { e.stopPropagation(); fn(b); }; return b; };
+    const dock = h('div', { class: 'pdock' + (prefs.dockMini ? ' mini' : '') + (prefs.dockSide === 'left' ? ' left' : '') });
+    const tog = h('button', { class: 'db dtog', title: prefs.dockMini ? 'แสดงเครื่องมือ (กดค้างเพื่อย้ายข้าง)' : 'ย่อ (กดค้างเพื่อย้ายข้าง)' }, icon((!!prefs.dockMini !== (prefs.dockSide === 'left')) ? 'back' : 'chev'));
+    tog.onclick = (e) => { e.stopPropagation(); prefs.dockMini = !prefs.dockMini; savePrefs(); this.buildDock(); };
+    dock.append(tog);
+    if (!prefs.dockMini) {
+      const cur = t === 'hl' ? prefs.hl.color : prefs.penColor;
+      dock.append(
+        B(prefs.penType, 'ปากกา', () => this.setTool('pen'), t === 'pen'),
+        B('hl', 'ไฮไลต์', () => this.setTool('hl'), t === 'hl'),
+        B('eraser', 'ยางลบ', () => this.setTool('eraser'), t === 'eraser'),
+        B('laser', 'เลเซอร์', () => this.setTool('laser'), t === 'laser'),
+        h('i', { class: 'dsep' }));
+      const cols = t === 'hl' ? prefs.hlFavorites.slice(0, 5) : prefs.favorites.slice(0, 5);
+      for (const col of cols) { const b = h('button', { class: 'dsw' + (String(cur).toUpperCase() === col.toUpperCase() ? ' on' : ''), title: col }, h('i', { style: { background: col } })); b.onclick = (e) => { e.stopPropagation(); if (t !== 'pen' && t !== 'hl') this.tool = 'pen'; this.setColor(col); }; dock.append(b); }
+      dock.append(h('i', { class: 'dsep' }),
+        B('undo', 'ย้อนกลับ', () => this.undo()), B('redo', 'ทำซ้ำ', () => this.redo()),
+        B(this.fitWide ? 'fit' : 'expand', this.fitWide ? 'ทั้งหน้า' : 'เต็มความกว้าง', () => this.toggleFitWide(), this.fitWide),
+        B('more', 'เครื่องมือทั้งหมด', () => { this.peek = true; this.applyPos(); }),
+        B('close', 'ออกจากโหมดนำเสนอ', () => this.exitPresent()));
+    }
+    // long-press the arrow to move the dock to the other side
+    onLongPress(tog, () => { prefs.dockSide = prefs.dockSide === 'left' ? 'right' : 'left'; savePrefs(); this.buildDock(); toast('ย้ายแถบเครื่องมือไปอีกข้างแล้ว', 1500, 'keep'); });
+    this.stage.append(dock);
+  }
+  // fill the screen width with the page (bigger for students on a TV) ↔ whole page
+  toggleFitWide() {
+    this.fitWide = !this.fitWide;
+    if (this.fitWide) {
+      const cur = this.currentPage(), r = this.rects.get(cur.id);
+      this.z = this.W / (this.cols > 1 ? this.contentW : r.w); this.fitMode = false;
+      this.ox = -r.x * this.z; this.oy = -r.y * this.z; this.clampView(); this.viewChanged();
+    } else this.fit(true);
+    this.buildDock();
   }
   get vertical() { return prefs.toolbarPos === 'left' || prefs.toolbarPos === 'right'; }
   popOpts() { return { place: this.vertical ? 'side' : 'auto' }; }
 
   buildToolbar() {
+    if (prefs.toolbarHidden) queueMicrotask(() => this.buildDock());
     this.tb.classList.toggle('tb2', prefs.toolbarPos === 'top');
     $('.ctxbar', this.stage)?.remove(); $('.undocap', this.stage)?.remove();
     if (prefs.toolbarPos === 'top') return this.buildTopBar();
@@ -188,7 +230,7 @@ export class Editor {
     const g4 = h('div', { class: 'grp' }, this.micBtn, this.recBtn,
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
-      B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · แตะปุ่มจาง ๆ มุมขวาบน: รูปปากกา = เรียกเครื่องมือชั่วคราว, × = ออก', 4500, 'keep'); }));
+      B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · เปลี่ยนปากกา สี ยางลบ ได้จากแถบเล็กด้านขวา · ↔ = ขยายเต็มความกว้าง · × = ออก', 4500, 'keep'); }));
     tb.append(g1, sep(), g2, sep(), g3, sep(), this.gSizes, h('div', { class: 'grow' }), g4);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -237,7 +279,7 @@ export class Editor {
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('share', 'ส่งออก / สำรอง', (b) => this.exportMenu(b)),
       B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
-      B('hide', 'ซ่อนแถบเครื่องมือ (โหมดนำเสนอ)', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · แตะปุ่มจาง ๆ มุมขวาบน: รูปปากกา = เรียกเครื่องมือชั่วคราว, × = ออก', 4500, 'keep'); }));
+      B('hide', 'ซ่อนแถบเครื่องมือ (โหมดนำเสนอ)', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · เปลี่ยนปากกา สี ยางลบ ได้จากแถบเล็กด้านขวา · ↔ = ขยายเต็มความกว้าง · × = ออก', 4500, 'keep'); }));
     tb.append(tabs, h('div', { class: 'trow' }, left, center, right));
     // undo capsule
     this.btnUndo = B('undo', 'ย้อนกลับ', () => this.undo());
@@ -435,7 +477,7 @@ export class Editor {
   }
   clampView() {
     const cw = this.contentW * this.z, ch = this.contentH * this.z;
-    if (cw <= this.W) this.ox = (this.W - cw) / 2; else this.ox = Math.min(60, Math.max(this.W - cw - 60, this.ox));
+    if (cw <= this.W + 1) this.ox = (this.W - cw) / 2; else { const m = this.fitWide ? 0 : 60; this.ox = Math.min(m, Math.max(this.W - cw - m, this.ox)); }
     if (ch <= this.H) this.oy = Math.max(8, Math.min(this.oy, this.H - ch - 8));
     else this.oy = Math.min(this.H * 0.35, Math.max(this.H * 0.65 - ch, this.oy));
   }
