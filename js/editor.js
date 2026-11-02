@@ -1590,10 +1590,10 @@ export class Editor {
 
   // ---------- images ----------
   async pickImage() {
-    const f = await pickFile('image/*'); if (!f) return;
-    this.insertImage(f, { crop: true });
+    const f = await pickFile('image/*', { hint: 'รูปจากคลังรูปภาพ/iCloud เครื่องต้องแปลงและดาวน์โหลดก่อน อาจใช้เวลาสักครู่' }); if (!f) return;
+    this.insertImage(f, { crop: false, select: true }); // insert right away; crop later from the image bar
   }
-  async insertImage(file, { crop = true } = {}) {
+  async insertImage(file, { crop = true, select = false } = {}) {
     let n; const bz = busy('กำลังเปิดรูป…');
     try { n = await normalizeImage(file); } catch (e) { toast('เปิดรูปนี้ไม่ได้', 2500, 'warn'); return; } finally { bz.done(); }
     let obj = { id: uid(), t: 'img', blob: n.blob, iw: n.iw, ih: n.ih, crop: { x: 0, y: 0, w: 1, h: 1 }, mask: null, x: 0, y: 0, w: 1, h: 1, ts: Date.now() };
@@ -1616,7 +1616,8 @@ export class Editor {
     this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
     this.markDirty(page); this.need.main = true;
     this.selectImage(page.id, obj.id);
-    if (!crop) toast('วางรูปแล้ว · กดค้างบนรูปเพื่อเลือกอีกครั้ง', 2200);
+    if (select) toast('แทรกรูปแล้ว · กด “ครอป/ตัด” เพื่อตัดรูป', 2600);
+    else if (!crop) toast('วางรูปแล้ว · กดค้างบนรูปเพื่อเลือกอีกครั้ง', 2200);
   }
   tapShape(e) { const r = this.stage.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return false; const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return true; } if (this.sel) this.deselect(); return false; }
   textAtFinger(e) { // finger tap with the text tool: new text box, or edit the text under the finger

@@ -26,8 +26,16 @@ export async function bitmapAsync(blob) { const b = bitmapOf(blob); return b || 
 
 // Read a picked/pasted file: fix size, keep transparency for PNG/WebP/GIF
 export async function normalizeImage(file) {
-  const bm = await decode(file);
-  const iw = bm.width, ih = bm.height, sc = Math.min(1, MAX_SIDE / Math.max(iw, ih));
+  // big phone photos: decode straight to the target size (much faster and lighter than full 12 MP)
+  let bm = null;
+  try {
+    const im = await loadEl(file); const nw = im.naturalWidth, nh = im.naturalHeight, k = Math.min(1, MAX_SIDE / Math.max(nw, nh));
+    if (k < 1 && window.createImageBitmap) { bm = await createImageBitmap(im, { resizeWidth: Math.round(nw * k), resizeHeight: Math.round(nh * k), resizeQuality: 'high' }); if (bm.width !== Math.round(nw * k)) { bm.close?.(); bm = null; } }
+    if (!bm) { await im.decode?.().catch(() => { }); bm = im; } else URL.revokeObjectURL(im.src);
+  } catch { bm = await decode(file); }
+  const iw0 = bm.naturalWidth || bm.width, ih0 = bm.naturalHeight || bm.height;
+  const big = Math.max(iw0, ih0) > MAX_SIDE;
+  const iw = iw0, ih = ih0, sc = big ? MAX_SIDE / Math.max(iw, ih) : 1;
   const w = Math.max(1, Math.round(iw * sc)), hh = Math.max(1, Math.round(ih * sc));
   const keepAlpha = /png|webp|gif/.test(file.type || '');
   if (sc === 1 && (file.type === 'image/jpeg' || keepAlpha) && file.size < 6e6) {
