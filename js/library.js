@@ -1,6 +1,7 @@
 // Notebook library: folders, search, create, rename, move, duplicate, delete
 import { h, icon, menu, dialog, ask, confirmBox, toast, seg, fmtDate, uid, brandWord, logoMark, pickFile, busy } from './ui.js';
 import { prefs, savePrefs } from './prefs.js';
+import { transferDialog, isHomeApp, isIOS } from './broadcast.js';
 import { PAPERS } from './render.js';
 import * as db from './db.js';
 
@@ -68,6 +69,7 @@ export class Library {
       '-',
       { icon: 'gear', label: 'ตั้งค่า', action: () => this.app.openSettings() },
       { icon: 'user', label: prefs.studentUI ? 'เปลี่ยนเป็นโหมดครู' : 'เปลี่ยนเป็นโหมดนักเรียน', action: () => { prefs.studentUI = !prefs.studentUI; savePrefs(); this.render(); toast(prefs.studentUI ? 'โหมดนักเรียน' : 'โหมดครู', 1500); } },
+      ...(isIOS() ? [isHomeApp() ? { icon: 'screen', label: 'ย้ายสมุดทั้งหมดไปสอนใน Safari', action: () => transferDialog(null, 'safari', { all: true }) } : { icon: 'home', label: 'ส่งสมุดทั้งหมดกลับแอปบนหน้าจอโฮม', action: () => transferDialog(null, 'app', { all: true }) }] : []),
       { icon: 'help', label: 'วิธีใช้', action: () => this.app.openHelp() },
     ]);
     const titleEl = h('div', { class: 'title' });
@@ -87,6 +89,17 @@ export class Library {
 
   // reminder: everything lives only on this device, so nudge a backup once a week
   backupBanner() {
+    // taught in Safari after moving the notebooks over: remind to send them back to the home-screen app
+    if (prefs.fromApp && isIOS() && !isHomeApp()) {
+      const newest = Math.max(0, ...this.nbs.map(n => n.updated || 0));
+      if (newest > Math.max(prefs.lastSyncBack || 0, prefs.fromApp || 0) && Date.now() > (prefs.syncSnooze || 0)) {
+        const go = h('button', { class: 'pill prim' }, icon('home'), 'ส่งกลับแอป'), later = h('button', { class: 'pill ghost' }, 'ไว้ทีหลัง');
+        const box = h('div', { class: 'bk-banner' }, icon('home'), h('div', {}, h('b', {}, 'มีสมุดที่เขียนใน Safari ยังไม่ได้ส่งกลับแอปบนหน้าจอโฮม'), h('div', { class: 'sub' }, 'ส่งกลับหลังสอนเสร็จ สมุดในแอปจะเป็นฉบับล่าสุด · Safari อาจลบข้อมูลถ้าไม่ได้เปิดเกิน 7 วัน')), go, later);
+        go.onclick = () => { transferDialog(null, 'app', { all: true }); };
+        later.onclick = () => { prefs.syncSnooze = Date.now() + 3 * 3600e3; savePrefs(); box.remove(); };
+        return box;
+      }
+    }
     const now = Date.now(), last = prefs.lastBackup || 0, newest = Math.max(0, ...this.nbs.map(n => n.updated || 0));
     if (!this.nbs.length || newest <= last || now - last < 7 * 864e5 || now < (prefs.backupSnooze || 0)) return '';
     const days = last ? Math.floor((now - last) / 864e5) : null;

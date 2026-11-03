@@ -5,6 +5,7 @@ import { h, icon, toast, dialog, downloadBlob, pickFile, fmtDate, uid } from './
 import { STRIDE } from './render.js';
 import { blobToDataURL, dataURLToBlob } from './images.js';
 import * as db from './db.js';
+import { prefs, savePrefs } from './prefs.js';
 
 export const canLinkFiles = () => typeof window.showSaveFilePicker === 'function' && typeof window.showOpenFilePicker === 'function';
 const FILE_TYPES = [{ description: 'สมุดเส้นคิด', accept: { 'application/json': ['.json'] } }];
@@ -152,6 +153,14 @@ export async function openNotebookFile(prog) {
   }
   prog && prog('กำลังอ่านไฟล์…', `${Math.round(text.length / 1e6 * 10) / 10} MB`);
   let data; try { data = parseBackup(text); } catch { toast('ไฟล์นี้ไม่ใช่สมุดของเส้นคิด', 3000, 'warn'); return null; }
+  if (data.sync) { // whole-library move between the home-screen app and Safari: keep the newer copy of each notebook, no questions
+    let added = 0, updated = 0, same = 0;
+    const ids = await storeFromBackup(data, async (nb, cur) => { if ((nb.updated || 0) > (cur.updated || 0)) { updated++; return 'replace'; } same++; return null; }, (i, n) => prog && prog('กำลังรับสมุดทั้งหมด…', `เล่มที่ ${i} จาก ${n}`, i / n));
+    added = ids.length - updated;
+    if (data.from === 'app' && !(navigator.standalone === true || matchMedia('(display-mode: standalone)').matches)) { prefs.fromApp = Date.now(); savePrefs(); }
+    toast(`รับสมุดแล้ว · ใหม่ ${added} เล่ม · อัปเดต ${updated} เล่ม · เหมือนเดิม ${same} เล่ม`, 4000);
+    return ids.length ? { many: ids } : { many: [] };
+  }
   const ids = await storeFromBackup(data, async (nb, cur) => { const b = document.querySelector('.busy'); if (b) b.style.display = 'none'; const r = await askReplace(nb, cur); if (b) b.style.display = ''; return r; }, (i, n) => prog && prog('กำลังนำสมุดเข้าแอป…', `เล่มที่ ${i} จาก ${n}`, i / n));
   if (!ids.length) return null;
   if (handle && ids.length === 1) await setHandle(ids[0], handle);

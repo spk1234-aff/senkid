@@ -65,11 +65,11 @@ export class Broadcast {
 
 let studentWin = null;
 export const isHomeApp = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches;
-const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+export const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const APP_URL = () => new URL('./', location.href).href;
 
 // Home-screen app and Safari keep separate storage on iPad: move a notebook across with a file.
-export function transferDialog(ed, to) {
+export function transferDialog(ed, to, { all = false } = {}) {
   const toSafari = to === 'safari';
   let file = null;
   const step = (n, t, sub, btn) => h('div', { class: 'scr-step' }, h('span', { class: 'n' }, String(n)), h('div', { style: { flex: 1 } }, h('b', {}, t), sub ? h('div', { class: 'sub' }, sub) : '', btn || ''));
@@ -77,17 +77,26 @@ export function transferDialog(ed, to) {
   const openBtn = h('button', { class: 'pill sec', style: { marginTop: '8px', height: '44px' } }, icon(toSafari ? 'screen' : 'home'), toSafari ? 'เปิด Safari' : 'วิธีเปิดในแอป');
   const copyBtn = h('button', { class: 'pill ghost', style: { marginTop: '8px', height: '44px' } }, 'คัดลอกลิงก์');
   const body = h('div', {},
-    h('p', { class: 'sub', style: { margin: '0 0 8px' } }, toSafari ? 'แอปบนหน้าจอโฮมกับ Safari เก็บสมุดแยกกัน จึงต้องส่งสมุดเป็นไฟล์ (ครั้งต่อไปเลือก "ใช้ฉบับในไฟล์" เพื่ออัปเดต)' : 'ส่งสมุดที่เขียนใน Safari กลับไปเก็บในแอปบนหน้าจอโฮม ซึ่งปลอดภัยกว่า (Safari อาจลบข้อมูลถ้าไม่ได้ใช้ 7 วัน)'),
-    step(1, 'บันทึกสมุดเป็นไฟล์', 'กดแล้วเลือก "บันทึกไปยังไฟล์" (Save to Files) เก็บไว้ที่ไหนก็ได้ เช่น บน iPad ของฉัน', saveBtn),
+    h('p', { class: 'sub', style: { margin: '0 0 8px' } }, all ? (toSafari ? 'แอปบนหน้าจอโฮมกับ Safari เก็บข้อมูลแยกกัน (เป็นข้อจำกัดของ iPad) จึงย้ายสมุดทุกเล่มผ่านไฟล์เดียว · เล่มที่มีอยู่แล้วจะอัปเดตเป็นฉบับใหม่กว่าให้เอง' : 'ส่งสมุดทุกเล่มที่เขียนใน Safari กลับไปเก็บในแอปบนหน้าจอโฮม · เล่มที่มีอยู่แล้วจะอัปเดตเป็นฉบับใหม่กว่าให้เอง (Safari อาจลบข้อมูลถ้าไม่ได้เปิด 7 วัน)')
+      : toSafari ? 'แอปบนหน้าจอโฮมกับ Safari เก็บสมุดแยกกัน จึงต้องส่งสมุดเป็นไฟล์ (ครั้งต่อไปเลือก "ใช้ฉบับในไฟล์" เพื่ออัปเดต)' : 'ส่งสมุดที่เขียนใน Safari กลับไปเก็บในแอปบนหน้าจอโฮม ซึ่งปลอดภัยกว่า (Safari อาจลบข้อมูลถ้าไม่ได้ใช้ 7 วัน)'),
+    step(1, all ? 'บันทึกสมุดทั้งหมดเป็นไฟล์' : 'บันทึกสมุดเป็นไฟล์', 'กดแล้วเลือก "บันทึกไปยังไฟล์" (Save to Files) เก็บไว้ที่ไหนก็ได้ เช่น บน iPad ของฉัน', saveBtn),
     toSafari ? step(2, 'เปิดเส้นคิดใน Safari', 'ถ้าปุ่มไม่พาไป Safari ให้คัดลอกลิงก์ไปวางใน Safari เอง', h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, openBtn, copyBtn))
       : step(2, 'เปิดแอปเส้นคิดจากหน้าจอโฮม', 'ปัดกลับไปหน้าจอโฮม แล้วแตะไอคอนเส้นคิด'),
-    step(3, 'กด "เปิดไฟล์ / PDF" แล้วเลือกไฟล์ที่บันทึก', 'ถ้าเคยส่งสมุดเล่มนี้มาก่อน ให้เลือก "ใช้ฉบับในไฟล์" สมุดจะอัปเดตเป็นฉบับล่าสุด'));
-  dialog(toSafari ? 'ส่งสมุดไปฉายใน Safari' : 'ส่งสมุดกลับไปแอปบนหน้าจอโฮม', body, [{ label: 'ปิด' }], { width: 600 });
+    step(3, 'กด "เปิดไฟล์ / PDF" แล้วเลือกไฟล์ที่บันทึก', all ? 'สมุดทุกเล่มจะเข้ามาเอง เล่มที่ซ้ำจะเก็บฉบับที่ใหม่กว่า ไม่ต้องตอบคำถามทีละเล่ม' : 'ถ้าเคยส่งสมุดเล่มนี้มาก่อน ให้เลือก "ใช้ฉบับในไฟล์" สมุดจะอัปเดตเป็นฉบับล่าสุด'));
+  dialog(all ? (toSafari ? 'ย้ายสมุดทั้งหมดไปสอนใน Safari' : 'ส่งสมุดทั้งหมดกลับแอปบนหน้าจอโฮม') : toSafari ? 'ส่งสมุดไปฉายใน Safari' : 'ส่งสมุดกลับไปแอปบนหน้าจอโฮม', body, [{ label: 'ปิด' }], { width: 600 });
   (async () => {
     try {
-      await ed.flush();
-      const data = await buildBackup([ed.nb.id], { nb: ed.nb.id, pages: ed.pages });
-      file = new File([JSON.stringify(data)], fileNameFor(ed.nb), { type: 'application/json' });
+      await ed?.flush();
+      let data;
+      if (all) {
+        const { getAll } = await import('./db.js'), ids = (await getAll('notebooks')).map(n => n.id);
+        data = await buildBackup(ids, ed ? { nb: ed.nb.id, pages: ed.pages } : null); data.sync = true; data.from = isHomeApp() ? 'app' : 'safari';
+        const d = new Date(), q = (n) => String(n).padStart(2, '0');
+        file = new File([JSON.stringify(data)], `เส้นคิด-ย้ายทั้งหมด-${d.getFullYear()}${q(d.getMonth() + 1)}${q(d.getDate())}-${q(d.getHours())}${q(d.getMinutes())}.senkid.json`, { type: 'application/json' });
+      } else {
+        data = await buildBackup([ed.nb.id], { nb: ed.nb.id, pages: ed.pages });
+        file = new File([JSON.stringify(data)], fileNameFor(ed.nb), { type: 'application/json' });
+      }
       saveBtn.disabled = false; saveBtn.lastChild.textContent = 'บันทึกไฟล์ (' + Math.max(0.1, Math.round(file.size / 1e5) / 10) + ' MB)';
     } catch (e) { saveBtn.lastChild.textContent = 'เตรียมไฟล์ไม่สำเร็จ'; console.error(e); }
   })();
@@ -95,7 +104,7 @@ export function transferDialog(ed, to) {
   saveBtn.onclick = async () => {
     if (!file) return;
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: ed.nb.name }); saveBtn.lastChild.textContent = '✓ บันทึกแล้ว'; return; } catch (e) { if (e.name === 'AbortError') return; }
+      try { await navigator.share({ files: [file], title: all ? 'สมุดเส้นคิดทั้งหมด' : ed.nb.name }); saveBtn.lastChild.textContent = '✓ บันทึกแล้ว'; if (all) { if (!toSafari) prefs.lastSyncBack = Date.now(); prefs.lastBackup = Date.now(); savePrefs(); } return; } catch (e) { if (e.name === 'AbortError') return; }
     }
     downloadBlob(file, 'senkid-notebook.senkid.json'); saveBtn.lastChild.textContent = '✓ ดาวน์โหลดแล้ว';
   };
@@ -176,9 +185,11 @@ export function studentMenu(app, anchor, ed) {
   open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
   if (isHomeApp() && isIOS()) {
     // the student window only works inside Safari on iPad
-    const send = h('button', { class: 'pill prim' }, icon('screen'), 'ส่งสมุดนี้ไปฉายใน Safari');
-    send.onclick = () => { close(); transferDialog(ed, 'safari'); };
-    box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษเต็มทีวี · ใช้ได้ใน Safari เท่านั้น จึงต้องส่งสมุดไปเปิดใน Safari ก่อน', send));
+    const send = h('button', { class: 'pill prim' }, icon('screen'), 'ย้ายสมุดทั้งหมดไป Safari');
+    send.onclick = () => { close(); transferDialog(ed, 'safari', { all: true }); };
+    const one = h('button', { class: 'pill ghost', style: { marginTop: '4px' } }, 'ส่งเฉพาะเล่มนี้');
+    one.onclick = () => { close(); transferDialog(ed, 'safari'); };
+    box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษเต็มทีวี · ใช้ได้ใน Safari เท่านั้น จึงต้องย้ายสมุดไป Safari ก่อน', h('div', { style: { display: 'flex', flexDirection: 'column' } }, send, one)));
   } else {
     if (isIOS()) {
       // a real link: press-and-hold gives iPad's own "Open in New Window", which skips the "move tab to new window" step
@@ -187,7 +198,7 @@ export function studentMenu(app, anchor, ed) {
       box.append(card('ทีวีเป็นจอที่สอง', 'ต่อสาย + เปิด Stage Manager · นักเรียนเห็นแค่กระดาษเต็มทีวี', h('div', {}, a,
         h('div', { class: 'tvtip' }, h('b', {}, 'ทางลัด: '), 'กดค้างปุ่มนี้ → เลือก "เปิดในหน้าต่างใหม่" → แล้วกดค้างจุดสีเขียวของหน้าต่างนั้น → "ย้ายไปยัง…" ทีวี'))));
     } else box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
-    if (isIOS()) { const back = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, icon('home'), 'ส่งสมุดนี้กลับไปแอปบนหน้าจอโฮม'); back.onclick = () => { close(); transferDialog(ed, 'app'); }; box.append(back); }
+    if (isIOS()) { const back = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, icon('home'), 'ส่งสมุดนี้กลับไปแอปบนหน้าจอโฮม'); back.onclick = () => { close(); transferDialog(ed, 'app', { all: true }); }; back.lastChild.textContent = 'ส่งสมุดทั้งหมดกลับไปแอปบนหน้าจอโฮม'; box.append(back); }
   }
   if (b.connected) {
     if (studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; box.append(x); }
