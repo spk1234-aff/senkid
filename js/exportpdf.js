@@ -221,6 +221,30 @@ async function seCall(fn, args) {
   let r; try { r = await fetch(SE_API, { method: 'POST', body: JSON.stringify({ fn, args }) }); } catch { throw new Error('ต่ออินเทอร์เน็ตไม่ได้ ลองใหม่อีกครั้ง'); }
   const j = await r.json(); if (!j.ok) throw new Error(String(j.e || 'ผิดพลาด').replace(/^Error:\s*/, '')); return j.r;
 }
+/* ลายนิ้วมือเนื้อหา PDF: แฮชของเส้นลายมือ (content stream ที่มีเส้นมาก ไม่มีตัวอักษร) + รูปภาพขนาดใหญ่ — ไม่ขึ้นกับลำดับ/เลขอ็อบเจกต์ในไฟล์ */
+function pdfPrint(u8) {
+  try {
+    if (!window.DecompressionStream || !(window.crypto && crypto.subtle) || !u8 || !u8.length) return Promise.resolve('');
+    var s = new TextDecoder('latin1').decode(u8), jobs = [], re = /stream\r?\n/g, m, hex = function (b) { return Array.prototype.map.call(new Uint8Array(b).slice(0, 8), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); };
+    var sha = function (b) { return crypto.subtle.digest('SHA-256', b).then(hex); };
+    var inflate = function (b) { return new Response(new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer(); };
+    while ((m = re.exec(s)) && jobs.length < 400) {
+      var st = m.index + m[0].length, ob = s.lastIndexOf(' obj', m.index); if (ob < 0 || m.index - ob > 3000) continue;
+      var hd = s.slice(ob, m.index); if (/endstream/.test(hd)) continue;
+      var L = hd.match(/\/Length\s+(\d+)(\s+\d+\s+R)?/), en = L && !L[2] ? st + +L[1] : s.indexOf('endstream', st);
+      if (en < st) continue; re.lastIndex = en;
+      var img = /\/Subtype\s*\/Image/.test(hd), w = +(hd.match(/\/Width\s+(\d+)/) || [0, 0])[1], h = +(hd.match(/\/Height\s+(\d+)/) || [0, 0])[1];
+      var body = u8.subarray(st, en);
+      if (img) { if (w >= 400 && h >= 400 && body.length >= 30000) jobs.push(sha(body).then(function (x) { return 'j' + x; })); continue; }
+      if (!/\/FlateDecode/.test(hd) || /\/Type\s*\/(XRef|ObjStm|Metadata)|\/Length[123]\b|\/Subtype\s*\/(Type1C|CIDFontType0C|OpenType)/.test(hd) || body.length < 1500) continue;
+      jobs.push(inflate(body).then(function (d) {
+        var t = new TextDecoder('latin1').decode(d), ops = (t.match(/\s[mlc]\s/g) || []).length, bt = (t.match(/\bBT\b/g) || []).length;
+        return ops >= 150 && bt <= 3 ? sha(d).then(function (x) { return 's' + x; }) : '';
+      }, function () { return ''; }));
+    }
+    return Promise.all(jobs).then(function (a) { var u = {}; a.forEach(function (x) { if (x) u[x] = 1; }); return Object.keys(u).sort().slice(0, 60).join(' '); }, function () { return ''; });
+  } catch (e) { return Promise.resolve(''); }
+}
 async function seB64(blob) { const u = new Uint8Array(await blob.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }
 const seDate = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); if (!m) return ''; const M = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']; return `${+m[3]} ${M[+m[2] - 1]} ${m[4]}:${m[5]} น.`; };
 const seDue = d => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 7, +m[5]) : 0; };
@@ -286,7 +310,7 @@ export function openSubmitDialog(blob, pages, name) {
       if (pick.group && !mates.size && !confirm('ยังไม่ได้เลือกเพื่อนในกลุ่ม — ส่งในนามคุณคนเดียวใช่ไหม?')) return false;
       btn.disabled = true; const bz = busy('กำลังส่งงาน…', pick.name);
       try {
-        const r = await seCall('submitWork', [S.tok, pick.id, { data: await seB64(blob), pages }, [...mates]]);
+        const r = await seCall('submitWork', [S.tok, pick.id, { data: await seB64(blob), pages, fp: await pdfPrint(new Uint8Array(await blob.arrayBuffer())).catch(() => '') }, [...mates]]);
         bz.done(); pick.sent = r; seLS.set('se_sess', JSON.stringify(S));
         toast(`✅ ส่ง “${pick.name}” แล้ว (${r.n} หน้า)` + (r.members && r.members.length ? ` · กลุ่ม ${r.members.length} คน` : ''), 4200);
       } catch (e) {
