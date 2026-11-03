@@ -3,6 +3,7 @@
 import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy } from './ui.js';
 import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo } from './render.js';
 import { pdfBytes } from './pdfdoc.js';
+import { prefs } from './prefs.js';
 const CREDIT = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
 
 let libP = null;
@@ -115,7 +116,7 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
 }
 
 // Dialog per design: all / current / from-to / multiple ranges, progress bar
-export function openExportDialog(ed) {
+export function openExportDialog(ed, { submit = false } = {}) {
   const n = ed.nb.pages.length, curIdx = Math.max(0, ed.nb.pages.indexOf(ed.currentPage()?.id));
   let withBg = true;
   const sel = new Set([...Array(n).keys()]);
@@ -187,13 +188,14 @@ export function openExportDialog(ed) {
       prog.textContent = 'เสร็จแล้ว'; bz.done(); io.disconnect(); return { blob, n: idx.length };
     } catch (e) { console.error(e); bz.done(); toast('ส่งออกไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); busyFlag = false; btn.disabled = false; return null; }
   };
-  const dg = dialog('ส่งออกเป็น PDF', body, [
+  const student = submit || prefs.studentUI;
+  const dg = dialog(submit ? 'ส่งงานให้ครู' : 'ส่งออกเป็น PDF', body, [
     { label: 'ยกเลิก' },
-    { label: 'ส่งงานให้ครู', icon: 'upload', flex: 2, action: async (btn) => {
+    { label: 'ส่งงานให้ครู', icon: 'upload', flex: 2, cls: student ? 'prim' : 'sec', action: async (btn) => {
       const r = await make(btn); if (!r) return false;
       openSubmitDialog(r.blob, r.n, ed.nb.name);
     } },
-    { label: 'ส่งออก', cls: 'prim', flex: 2, icon: 'pdf', action: async (btn) => {
+    { label: 'ส่งออก', cls: student ? 'sec' : 'prim', flex: 2, icon: 'pdf', action: async (btn) => {
       if (busyFlag) return false;
       const idx = [...sel].sort((a, b) => a - b); if (!idx.length) return false;
       busyFlag = true; btn.disabled = true; bar.style.display = '';
@@ -207,7 +209,7 @@ export function openExportDialog(ed) {
       } catch (e) { console.error(e); bz.done(); toast('ส่งออกไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); busyFlag = false; btn.disabled = false; return false; }
     } },
   ], { width: 780 });
-  okBtn = dg.el.querySelector('.foot .pill.prim');
+  okBtn = dg.el.querySelectorAll('.foot .pill')[2];
   paint();
   requestAnimationFrame(() => cells[curIdx]?.scrollIntoView({ block: 'nearest' }));
 }

@@ -252,7 +252,7 @@ export class Editor {
     // student mode: hide the teacher-only tools (projector, recording, timer, curtain)
     if (prefs.studentUI) for (const el of this.tb.querySelectorAll('button')) {
       const t = el.title || el.getAttribute('aria-label') || '';
-      if (/^(หน้าจอนักเรียน|นาฬิกาจับเวลา|อัดคลิป|อัดเสียง|ม่านบังคำตอบ)/.test(t) || el.classList.contains('recbtn')) el.remove();
+      if (/^(หน้าจอนักเรียน|นาฬิกาจับเวลา|อัดคลิป|ม่านบังคำตอบ)/.test(t) || el.classList.contains('recbtn')) el.remove(); // students may still record audio
     }
   }
   buildToolbar0() {
@@ -443,6 +443,11 @@ export class Editor {
     this.app.timer.attach(this);
   }
   exportMenu(anchor) {
+    if (prefs.studentUI) return menu(anchor, [
+      { icon: 'upload', label: 'ส่งงานให้ครู', action: () => openExportDialog(this, { submit: true }) },
+      { icon: 'pdf', label: 'ส่งออกเป็น PDF', action: () => openExportDialog(this) },
+      { icon: 'mic', label: 'เสียงที่อัดในสมุดเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
+    ], this.popOpts());
     menu(anchor, [
       { icon: 'download', label: 'สำรองสมุดเล่มนี้ (.senkid.json)', action: async () => { await this.flush(); this.app.exportNotebooks([this.nb.id]); } },
       { icon: 'film', label: 'คลิปและเสียงที่อัดไว้', action: () => this.app.openRecordings() },
@@ -539,9 +544,10 @@ export class Editor {
     mi('fit', 'พอดีหน้าจอ', () => this.fit());
     mi('pdf', 'ส่งออกเป็น PDF', () => openExportDialog(this));
     mi('pageplus', 'เพิ่มหน้า / แทรก PDF', () => this.addPageMenu(anchor));
-    mi('screen', 'หน้าจอนักเรียน', () => this.app.studentMenu(anchor));
-    mi('film', 'คลิปที่อัดไว้', () => this.app.openRecordings());
-    mi('download', 'สำรองสมุดเล่มนี้', async () => { await this.flush(); this.app.exportNotebooks([this.nb.id]); });
+    if (prefs.studentUI) mi('upload', 'ส่งงานให้ครู', () => openExportDialog(this, { submit: true }));
+    if (!prefs.studentUI) mi('screen', 'หน้าจอนักเรียน', () => this.app.studentMenu(anchor));
+    if (!prefs.studentUI) mi('film', 'คลิปที่อัดไว้', () => this.app.openRecordings());
+    if (!prefs.studentUI) mi('download', 'สำรองสมุดเล่มนี้', async () => { await this.flush(); this.app.exportNotebooks([this.nb.id]); });
     mi('gear', 'ตั้งค่าทั้งหมด', () => this.app.openSettings());
     mi('help', 'วิธีใช้', () => this.app.openHelp());
     box.append(m);
