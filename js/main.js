@@ -13,7 +13,7 @@ import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 
-export const VERSION = '1.8.0';
+export const VERSION = '1.8.1';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {

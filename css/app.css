@@ -567,3 +567,5 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .gr-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gr-row .field{width:84px;height:40px}
 .gr-fns{display:flex;flex-direction:column;gap:6px}.gr-fns .field,.gr-dlg>.field{height:40px}
 .gr-prev{display:flex;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:8px}
+
+.modesw{margin:auto 0 6px;padding:0 8px}.modesw .lbl{font-size:17px;color:var(--muted);margin:0 0 4px 2px}.modesw .seg{width:100%}

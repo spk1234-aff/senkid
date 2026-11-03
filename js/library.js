@@ -48,7 +48,9 @@ export class Library {
     }
     const st = h('button', { class: 'fold' }, icon('gear'), 'ตั้งค่า'); st.onclick = () => this.app.openSettings();
     const hp = h('button', { class: 'fold' }, icon('help'), 'วิธีใช้'); hp.onclick = () => this.app.openHelp();
-    side.append(hp, st);
+    const mode = h('div', { class: 'modesw' }, h('div', { class: 'lbl' }, 'ใช้งานแบบ'),
+      seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', v => { prefs.studentUI = v === 's'; savePrefs(); toast(prefs.studentUI ? 'โหมดนักเรียน: ซ่อนเครื่องมือฉายจอ อัดคลิป จับเวลา และม่าน' : 'โหมดครู: แสดงเครื่องมือครบ', 2200); }));
+    side.append(mode, hp, st);
 
     const search = h('input', { class: 'field', type: 'search', placeholder: 'ค้นหาชื่อสมุด', value: this.q });
     search.oninput = () => { this.q = search.value; this.renderGrid(); };
@@ -65,6 +67,7 @@ export class Library {
       { icon: 'film', label: 'คลิปที่อัดไว้', action: () => this.app.openRecordings() },
       '-',
       { icon: 'gear', label: 'ตั้งค่า', action: () => this.app.openSettings() },
+      { icon: 'user', label: prefs.studentUI ? 'เปลี่ยนเป็นโหมดครู' : 'เปลี่ยนเป็นโหมดนักเรียน', action: () => { prefs.studentUI = !prefs.studentUI; savePrefs(); this.render(); toast(prefs.studentUI ? 'โหมดนักเรียน' : 'โหมดครู', 1500); } },
       { icon: 'help', label: 'วิธีใช้', action: () => this.app.openHelp() },
     ]);
     const titleEl = h('div', { class: 'title' });

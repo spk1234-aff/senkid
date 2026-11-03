@@ -45,6 +45,7 @@ const P = {
   hl: '<path d="M7 15 L14 5 L19 9 L12 19 Z"/><path d="M7 15 L5 19 H12"/>',
   eraser: '<path d="M8 19 L4 15 L14 5 L20 11 L12 19 Z"/><path d="M9 10 l6 6"/><path d="M12 19 H20"/>',
   ruler: '<rect x="1.8" y="8.2" width="20.4" height="7.6" rx="1.4" transform="rotate(-35 12 12)"/><path d="M7.2 15.6l1.5 2.1M9.9 13.7l.9 1.3M12.6 11.8l1.5 2.1M15.3 9.9l.9 1.3M18 8l1.5 2.1" transform="rotate(-35 12 12) rotate(35 12 12)"/>',
+  user: '<circle cx="12" cy="8" r="3.6"/><path d="M5 20 c0-4 3.2-6.5 7-6.5 s7 2.5 7 6.5"/>',
   curtain: '<rect x="4" y="3.5" width="16" height="17" rx="2"/><path d="M4 12 H20" /><path d="M4.5 12.5 H19.5 V19 a1.5 1.5 0 0 1 -1.5 1.5 H6 a1.5 1.5 0 0 1 -1.5 -1.5 Z" fill="currentColor" stroke="none" opacity=".55"/><path d="M10 9 L12 7 L14 9"/>',
   equation: '<path d="M4 6 H11 L7.5 12 L11 18 H4"/><path d="M14 10 l5 5 M19 10 l-5 5"/>',
   graph: '<path d="M4 20 V4 M4 20 H20"/><path d="M6 17 C 9 6, 12 6, 14 11 S 18 16, 19 7"/>',
