@@ -1,0 +1,7 @@
+The fonts in this folder are licensed under the SIL Open Font License, Version 1.1
+(https://openfontlicense.org). They are subsets (Thai + Latin) of the originals from
+Google Fonts (github.com/google/fonts): Anuphan, IBM Plex Sans Thai, IBM Plex Sans Thai Looped,
+Noto Sans Thai, Noto Sans Thai Looped, K2D, Prompt, Kanit, Mitr, Bai Jamjuree, Chakra Petch,
+Athiti, Playpen Sans Thai, Kodchasan, Mali, Itim. Copyright belongs to their respective authors
+(Cadson Demak, IBM Corp., Google LLC, TypeSETit and others). Modified (subset) versions are
+distributed under the same license; the Reserved Font Names are not used for them.

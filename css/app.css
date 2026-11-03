@@ -71,9 +71,9 @@ input[type=range]::-moz-range-thumb{width:28px;height:28px;border-radius:50%;bac
 /* ---------- popovers / dialogs ---------- */
 #layer{position:fixed;inset:0;pointer-events:none;z-index:50}
 #layer>*{pointer-events:auto}
-.scrim{position:fixed;inset:0;background:var(--scrim);animation:fade .18s ease}
+.scrim{position:fixed;inset:0;z-index:65;background:var(--scrim);animation:fade .18s ease}
 .scrim.clear{background:transparent}
-.dialog{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--bar);border:1px solid var(--line);border-radius:22px;
+.dialog{position:fixed;z-index:66;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--bar);border:1px solid var(--line);border-radius:22px;
   box-shadow:var(--shadow);padding:22px 26px;width:min(640px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;animation:pop .2s var(--ease)}
 .dialog .head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .dialog .head .h{flex:1}
@@ -537,3 +537,12 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .stktabs{display:flex;gap:2px;overflow-x:auto;border-top:1px solid var(--line);padding-top:6px;scrollbar-width:none}
 .stktab{flex:none;width:42px;height:40px;border:0;border-radius:10px;background:transparent;font-size:24px;cursor:pointer;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}
 .stktab.on{background:var(--acc);}
+
+/* app font picker */
+.fontlist{display:flex;flex-direction:column;gap:2px;max-height:min(60vh,560px);overflow-y:auto;margin:0 -6px;padding:0 6px}
+.fl-g{font-size:17px;color:var(--muted);margin:10px 4px 2px}
+.fl-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;background:transparent;color:inherit;border-radius:12px;padding:8px 12px;cursor:pointer}
+.fl-row:hover{background:var(--acc-soft)}
+.fl-row.on{border-color:var(--acc);background:var(--acc-soft)}
+.fl-row>div{flex:1}.fl-n{font-size:22px;font-weight:700}.fl-s{font-size:18px;color:var(--muted)}
+.fl-row .ck{color:var(--acc);font-weight:700;font-size:22px}

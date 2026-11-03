@@ -11,8 +11,9 @@ import { buildBackup, openNotebookFile, saveNotebookFile } from './files.js';
 import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
+import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 
-export const VERSION = '1.7.0';
+export const VERSION = '1.7.1';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -35,7 +36,7 @@ class App {
     if (e.twist) c.twist = true;
   }
   async start() {
-    applyTheme();
+    applyTheme(); applyUiFont();
     const boot = document.getElementById('boot'); if (boot) { boot.querySelector('p').textContent = 'กำลังโหลดสมุด…'; }
     try { await db.openDB(); } catch (e) { this.root.append(h('div', { style: { padding: '40px', textAlign: 'center' } }, 'เปิดที่เก็บข้อมูลไม่ได้ (' + e.message + ') ถ้าเปิดในโหมดส่วนตัว ให้ปิดโหมดนั้นก่อน')); return; }
     try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch { }
@@ -192,6 +193,7 @@ class App {
       h('div', { class: 'sec-t' }, 'หน้าตา'),
       card(
         row('ธีม', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
+        row('ฟอนต์ของแอป', (() => { const cur = UI_FONTS.find(f => f[0] === (prefs.uiFont || 'sarabun')) || UI_FONTS[0]; const b = h('button', { class: 'pill sec', style: { height: '42px', fontFamily: familyOf(cur[0]) } }, cur[1], icon('down')); b.onclick = () => this.fontPicker(b); return b; })(), 'ปุ่มและเมนู · ข้อความบนกระดาษไม่เปลี่ยน'),
         row('ตำแหน่งแถบเครื่องมือ', seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, v => { prefs.toolbarPos = v; savePrefs(); refreshEd(); })),
         row('แสดง 2 หน้าคู่เมื่อจอแนวนอน', toggle(prefs.twoPage, v => { prefs.twoPage = v; savePrefs(); this.editor?.relayout(true); })),
         row('ซ่อนแถบเครื่องมือ', toggle(prefs.toolbarHidden, v => { prefs.toolbarHidden = v; savePrefs(); refreshEd(); }))),
@@ -292,6 +294,21 @@ class App {
   }
 
   // manual update: ask the server for a new version; if there is one, install it and reload
+  fontPicker(btn) {
+    // previews: load the regular weight of every font just for this list
+    let st = document.getElementById('uifont-prev'); if (!st) { st = document.createElement('style'); st.id = 'uifont-prev'; document.head.append(st); }
+    st.textContent = UI_FONTS.map(f => faceCss(f[0], true)).join('');
+    const cur = prefs.uiFont || 'sarabun', list = h('div', { class: 'fontlist' });
+    let group = '', close;
+    for (const [id, name, g] of UI_FONTS) {
+      if (g !== group) { group = g; list.append(h('div', { class: 'fl-g' }, g)); }
+      const r = h('button', { class: 'fl-row' + (id === cur ? ' on' : ''), style: { fontFamily: familyOf(id) } },
+        h('div', {}, h('div', { class: 'fl-n' }, name), h('div', { class: 'fl-s' }, 'สมุดทั้งหมด · ปากกา ไฮไลต์ ยางลบ · ฉายขึ้นทีวี 123')), h('span', { class: 'ck' }, id === cur ? '✓' : ''));
+      r.onclick = () => { setUiFont(id); btn.textContent = name; btn.style.fontFamily = familyOf(id); close?.(); toast('เปลี่ยนฟอนต์เป็น ' + name, 1500); };
+      list.append(r);
+    }
+    close = dialog('ฟอนต์ของแอป', list, [{ label: 'ปิด', action: () => { } }], { width: 520 }).close;
+  }
   async checkUpdate(btn) {
     if (!('serviceWorker' in navigator)) { location.reload(); return; }
     if (!navigator.onLine) { toast('ต้องต่ออินเทอร์เน็ตก่อนจึงจะตรวจหาอัปเดตได้', 3000, 'warn'); return; }
