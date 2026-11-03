@@ -13,7 +13,7 @@ import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 
-export const VERSION = '1.7.3';
+export const VERSION = '1.8.0';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -131,7 +131,15 @@ class App {
     let out; try { out = await buildBackup(ids, null, (i, n) => b.set(null, `สมุดเล่มที่ ${i} จาก ${n}`, i / n)); } finally { b.done(); }
     const d = new Date(), p = (n) => String(n).padStart(2, '0');
     const kind = ids.length === 1 ? 'notebook' : 'all';
-    downloadBlob(new Blob([JSON.stringify(out)], { type: 'application/json' }), `senkid-${kind}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.senkid.json`);
+    const name = `senkid-${kind}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.senkid.json`;
+    const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+    if (kind === 'all') { prefs.lastBackup = Date.now(); savePrefs(); }
+    // iPad: the share sheet offers "Save to Files" → iCloud Drive, which survives losing the device
+    const f = new File([blob], name, { type: 'application/json' });
+    if (/iPad|iPhone|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document && navigator.canShare?.({ files: [f] })) {
+      try { await navigator.share({ files: [f], title: 'สำรองสมุดเส้นคิด' }); toast('เลือก "บันทึกไปยังไฟล์" แล้วเก็บใน iCloud Drive จะปลอดภัยที่สุด', 3500); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    downloadBlob(blob, name);
     toast(ids.length === 1 ? `สำรอง "${out.notebooks[0]?.name}" แล้ว` : `สำรองสมุด ${out.notebooks.length} เล่มแล้ว`);
   }
   // open a notebook file from the device and continue writing in it
@@ -194,7 +202,8 @@ class App {
       card(
         row('ธีม', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
         row('ฟอนต์ของแอป', (() => { const cur = UI_FONTS.find(f => f[0] === (prefs.uiFont || 'sarabun')) || UI_FONTS[0]; const b = h('button', { class: 'pill sec', style: { height: '42px', fontFamily: familyOf(cur[0]) } }, cur[1], icon('down')); b.onclick = () => this.fontPicker(b); return b; })(), 'ปุ่มและเมนู · ข้อความบนกระดาษไม่เปลี่ยน'),
-        row('ตำแหน่งแถบเครื่องมือ', seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, v => { prefs.toolbarPos = v; savePrefs(); refreshEd(); })),
+        row('โหมดนักเรียน', toggle(!!prefs.studentUI, v => { prefs.studentUI = v; savePrefs(); refreshEd(); }), 'ซ่อนเครื่องมือของครู (ฉายจอ อัดคลิป จับเวลา ม่าน) ให้แถบเรียบง่าย'),
+                row('ตำแหน่งแถบเครื่องมือ', seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, v => { prefs.toolbarPos = v; savePrefs(); refreshEd(); })),
         row('แสดง 2 หน้าคู่เมื่อจอแนวนอน', toggle(prefs.twoPage, v => { prefs.twoPage = v; savePrefs(); this.editor?.relayout(true); })),
         row('ซ่อนแถบเครื่องมือ', toggle(prefs.toolbarHidden, v => { prefs.toolbarHidden = v; savePrefs(); refreshEd(); }))),
       h('div', { class: 'sec-t' }, 'การเขียน'),

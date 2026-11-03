@@ -78,10 +78,22 @@ export class Library {
     const top = h('div', { class: 'lib-top' }, titleEl, h('div', { class: 'search' }, icon('search'), search), imp, add, more);
     const mob = h('div', { class: 'mobile-folders' }, fbtn('*', 'ทั้งหมด', 'lib'), ...folders.map(f => fbtn(f, f)));
     this.grid = h('div', { class: 'lib-grid' });
-    el.append(side, h('div', { class: 'lib-main' }, top, mob, this.grid));
+    el.append(side, h('div', { class: 'lib-main' }, top, this.backupBanner(), mob, this.grid));
     this.renderGrid();
   }
 
+  // reminder: everything lives only on this device, so nudge a backup once a week
+  backupBanner() {
+    const now = Date.now(), last = prefs.lastBackup || 0, newest = Math.max(0, ...this.nbs.map(n => n.updated || 0));
+    if (!this.nbs.length || newest <= last || now - last < 7 * 864e5 || now < (prefs.backupSnooze || 0)) return '';
+    const days = last ? Math.floor((now - last) / 864e5) : null;
+    const go = h('button', { class: 'pill prim' }, icon('download'), 'สำรองตอนนี้');
+    const later = h('button', { class: 'pill ghost' }, 'พรุ่งนี้');
+    const box = h('div', { class: 'bk-banner' }, icon('save'), h('div', {}, h('b', {}, days == null ? 'ยังไม่เคยสำรองสมุด' : `ไม่ได้สำรองสมุดมา ${days} วันแล้ว`), h('div', { class: 'sub' }, 'สมุดเก็บอยู่ในเครื่องนี้เท่านั้น ถ้าเครื่องเสียหรือล้างข้อมูลจะหายหมด · กดสำรองแล้วเลือก "บันทึกไปยังไฟล์" → iCloud Drive')), go, later);
+    go.onclick = async () => { await this.app.exportNotebooks(this.nbs.map(n => n.id)); box.remove(); };
+    later.onclick = () => { prefs.backupSnooze = now + 864e5; savePrefs(); box.remove(); };
+    return box;
+  }
   list() {
     let l = this.nbs.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0));
     const q = this.q.trim().toLowerCase();

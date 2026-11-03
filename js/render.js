@@ -521,3 +521,20 @@ export function drawLaserTrail(ctx, pts, headOn, opt = {}) {
   }
   ctx.restore();
 }
+
+// answer curtain: an opaque sheet over the lower part of a page (page coordinates)
+export function drawCurtain(ctx, page, y, k) {
+  const P = dims(page); if (y >= P.h) return;
+  ctx.save();
+  ctx.fillStyle = '#2B3040'; ctx.fillRect(0, y, P.w, P.h - y);
+  ctx.globalAlpha = .07; ctx.fillStyle = '#fff';
+  for (let yy = y + 14; yy < P.h; yy += 14) ctx.fillRect(0, yy, P.w, 1 / k);
+  ctx.globalAlpha = 1;
+  // grip
+  ctx.fillStyle = '#F5B83D'; ctx.fillRect(0, y, P.w, Math.max(2.5, 3 / k));
+  const gw = 46, gh = 9, gx = P.w / 2 - gw / 2, gy = y - gh / 2;
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(gx, gy, gw, gh, gh / 2) : ctx.rect(gx, gy, gw, gh); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `14px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  if (P.h - y > 40) ctx.fillText('ลากขอบสีเหลืองลงเพื่อเปิดทีละส่วน', P.w / 2, y + 12);
+  ctx.restore();
+}

@@ -1,5 +1,5 @@
 // Student screen: shows only the paper, synced live from the teacher window (BroadcastChannel)
-import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, PAPERS, STRIDE } from './render.js';
+import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, drawCurtain, PAPERS, STRIDE } from './render.js';
 import { setPdfReadyHook } from './pdfdoc.js';
 import { setImageReadyHook } from './images.js';
 
@@ -50,7 +50,7 @@ function frame() {
     const k = T.z * d;
     ctx.setTransform(k, 0, 0, k, (T.ox + r.x * T.z) * d, (T.oy + r.y * T.z) * d);
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, r.w, r.h); ctx.clip();
-    if (p) { drawPaper(ctx, p, paper, k); drawStrokes(ctx, p, k, dark); if (live && live.pid === id) drawStroke(ctx, live.s, k, dark, false); }
+    if (p) { drawPaper(ctx, p, paper, k); drawStrokes(ctx, p, k, dark); if (live && live.pid === id) drawStroke(ctx, live.s, k, dark, false); if (view.curtain && view.curtain.pid === id) drawCurtain(ctx, p, view.curtain.y, k); }
     else { ctx.fillStyle = PAPERS[paper]?.fill || '#fff'; ctx.fillRect(0, 0, r.w, r.h); }
     ctx.restore();
   }

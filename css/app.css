@@ -546,3 +546,24 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .fl-row.on{border-color:var(--acc);background:var(--acc-soft)}
 .fl-row>div{flex:1}.fl-n{font-size:22px;font-weight:700}.fl-s{font-size:18px;color:var(--muted)}
 .fl-row .ck{color:var(--acc);font-weight:700;font-size:22px}
+
+/* backup reminder */
+.bk-banner{display:flex;align-items:center;gap:14px;margin:0 0 14px;padding:12px 16px;border-radius:16px;background:#FFF4DB;border:1px solid #F1D48A;color:#5A4300}
+.bk-banner>svg.i{width:30px;height:30px;flex:none}
+.bk-banner>div{flex:1}.bk-banner .sub{font-size:18px;opacity:.8}
+.bk-banner .pill{height:42px;flex:none}
+[data-theme=dark] .bk-banner{background:#3A3220;border-color:#6B5A2A;color:#F5DFA0}
+
+/* equation & graph dialogs */
+.eq-dlg,.gr-dlg{display:flex;flex-direction:column;gap:8px}
+.eq-src{font-family:ui-monospace,Menlo,monospace!important;font-size:17px;height:auto;min-height:72px;padding:8px 12px;line-height:1.4}
+.eq-snips{display:flex;flex-wrap:wrap;gap:4px;max-height:96px;overflow-y:auto}
+.eq-snips .chip{height:34px;padding:0 10px;border:1px solid var(--line);border-radius:10px;background:var(--bar);color:inherit;font-size:18px}
+.eq-prev{min-height:90px;display:flex;align-items:center;justify-content:center;background:#FFFDF8;border:1px solid var(--line);border-radius:14px;padding:12px;overflow-x:auto}
+.eq-err{color:#D64545;font-size:17px;min-height:0}
+.eq-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.eq-cols{display:flex;gap:4px}
+.eq-cols .sw{width:34px;height:34px;border:0;background:transparent;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.eq-cols .sw i{width:24px;height:24px;border-radius:50%}.eq-cols .sw.on i{box-shadow:0 0 0 3px var(--bar),0 0 0 5px var(--acc)}
+.gr-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.gr-row .field{width:84px;height:40px}
+.gr-fns{display:flex;flex-direction:column;gap:6px}.gr-fns .field,.gr-dlg>.field{height:40px}
+.gr-prev{display:flex;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:8px}
