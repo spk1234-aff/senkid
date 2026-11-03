@@ -1,13 +1,14 @@
 // Student screen: shows only the paper, synced live from the teacher window (BroadcastChannel)
 import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, drawCurtain, PAPERS, STRIDE } from './render.js';
 import { setPdfReadyHook } from './pdfdoc.js';
+import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { setImageReadyHook } from './images.js';
 
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d', { alpha: false });
 const wait = document.getElementById('wait'), tm = document.getElementById('tm'), tmf = document.getElementById('tmf'), ov = document.getElementById('ov');
 const ch = new BroadcastChannel('senkid-live');
 const pages = new Map();
-let nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
+let tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
 
 function size() { const d = Math.min(3, devicePixelRatio || 1); cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d); dirty = true; }
 addEventListener('resize', size); size();
@@ -25,6 +26,7 @@ ch.onmessage = (e) => {
   else if (m.type === 'live') { live = m.s ? { pid: m.pid, s: m.s } : null; dirty = true; }
   else if (m.type === 'laser') { laser = m.pts || []; laserHead = !!m.head; laserOpt = m.opt || laserOpt; dirty = true; }
   else if (m.type === 'timer') timer(m.st);
+  else if (m.type === 'tools') { tools = m; dirty = true; calcShow(m.calc); }
 };
 ch.postMessage({ type: 'hello' });
 setInterval(() => ch.postMessage({ type: 'alive' }), 1500);
@@ -54,6 +56,9 @@ function frame() {
     else { ctx.fillStyle = PAPERS[paper]?.fill || '#fff'; ctx.fillRect(0, 0, r.w, r.h); }
     ctx.restore();
   }
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  if (tools.ruler) { const r = tools.ruler; drawRulerAt(ctx, T.ox + r.x * T.z, T.oy + r.y * T.z, r.ang, r.L * T.z, r.H * T.z, 72 / 25.4 * T.z); }
+  if (tools.prot) { const r = tools.prot; drawProtractorAt(ctx, T.ox + r.x * T.z, T.oy + r.y * T.z, r.ang, r.r * T.z); }
   if (laser.length) {
     ctx.setTransform(d, 0, 0, d, 0, 0);
     drawLaserTrail(ctx, laser.map(p => ({ x: T.ox + p.x * T.z, y: T.oy + p.y * T.z, a: p.a, s: p.s })), laserHead, laserOpt);
@@ -81,3 +86,10 @@ let ovT;
 addEventListener('pointerdown', () => { ov.style.display = 'flex'; clearTimeout(ovT); ovT = setTimeout(() => ov.style.display = 'none', 3500); });
 document.getElementById('fs').onclick = (e) => { e.stopPropagation(); const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el); ov.style.display = 'none'; };
 setTimeout(() => { if (!view) document.getElementById('hint2').style.display = 'block'; }, 7000);
+
+// calculator: the class sees the display (expression + answer), not the keys
+const calcEl = document.createElement('div'); calcEl.id = 'calc'; calcEl.innerHTML = '<div class="t"></div><div class="r"></div><div class="p"></div>'; document.body.append(calcEl);
+function calcShow(c) {
+  calcEl.style.display = c ? 'block' : 'none'; if (!c) return;
+  calcEl.querySelector('.t').textContent = c.top || ''; calcEl.querySelector('.r').textContent = c.res || '0'; calcEl.querySelector('.p').textContent = c.prev || '';
+}

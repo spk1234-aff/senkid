@@ -48,7 +48,7 @@ export function fmtNum(v) {
 
 // ---------- UI ----------
 let panel = null;
-export function toggleCalculator(ed) { if (panel) { panel.remove(); panel = null; return; } openCalculator(ed); }
+export function toggleCalculator(ed) { if (panel) { panel.remove(); panel = null; window.__senkidCalc = null; return; } openCalculator(ed); }
 export function openCalculator(ed) {
   if (panel) return;
   let expr = '', last = null, mem = 0, second = false, deg = prefs.calcDeg !== false, sci = prefs.calcSci !== false;
@@ -125,7 +125,7 @@ export function openCalculator(ed) {
     refresh();
   };
   sciBtn.onclick = () => { sci = !sci; prefs.calcSci = sci; savePrefs(); build(); place(); };
-  x.onclick = () => { panel.remove(); panel = null; document.removeEventListener('keydown', onKey, true); };
+  x.onclick = () => { panel.remove(); panel = null; window.__senkidCalc = null; document.removeEventListener('keydown', onKey, true); };
   putBtn.onclick = () => {
     const v = expr ? (() => { try { return evaluate(expr, deg); } catch { return null; } })() : last;
     const e0 = expr || (panel.dataset.lastExpr || '').replace(/ =$/, '');
@@ -149,5 +149,7 @@ export function openCalculator(ed) {
     head.addEventListener('pointermove', mv); head.addEventListener('pointerup', up);
   });
   panel.addEventListener('pointerdown', (e) => e.stopPropagation());
+  // what the student screen shows (display only)
+  window.__senkidCalc = () => panel && { top: exprEl.textContent, res: resEl.textContent, prev: prevEl.textContent };
   document.body.append(panel); build(); place();
 }

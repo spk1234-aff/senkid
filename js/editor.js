@@ -3,6 +3,7 @@
 import { h, icon, toast, popover, menu, dialog, confirmBox, toggle, seg, onLongPress, uid, ask, pickFile, busy, $, $$ } from './ui.js';
 import { prefs, savePrefs, pushRecent, applyTheme, PEN_LABEL } from './prefs.js';
 import { drawCurtain } from './render.js';
+import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
@@ -1468,24 +1469,13 @@ export class Editor {
     return b <= 14 && Math.hypot(a, b) <= this.protR + 10;
   }
   get protR() { return Math.min(260, Math.min(this.W, this.H) * 0.32); }
-  drawProtractor(ctx) {
-    const P = this.prot, Rr = this.protR;
-    ctx.setTransform(this.R, 0, 0, this.R, 0, 0); ctx.save(); ctx.translate(P.cx, P.cy); ctx.rotate(P.ang);
-    ctx.beginPath(); ctx.moveTo(-Rr, 0); ctx.arc(0, 0, Rr, Math.PI, 0); ctx.lineTo(Rr, 12); ctx.lineTo(-Rr, 12); ctx.closePath();
-    ctx.fillStyle = 'rgba(46,50,58,.66)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (let d = 0; d <= 180; d++) {
-      const t = Math.PI + d * Math.PI / 180, len = d % 10 === 0 ? 16 : d % 5 === 0 ? 10 : 6, c = Math.cos(t), s = Math.sin(t);
-      ctx.beginPath(); ctx.moveTo(c * Rr, s * Rr); ctx.lineTo(c * (Rr - len), s * (Rr - len)); ctx.lineWidth = d % 10 ? .8 : 1.2; ctx.stroke();
-      if (d % 10 === 0) {
-        ctx.font = '13px "TH Sarabun New", sans-serif'; ctx.fillText(String(d), c * (Rr - 27), s * (Rr - 27));
-        ctx.font = '11px "TH Sarabun New", sans-serif'; ctx.globalAlpha = .65; ctx.fillText(String(180 - d), c * (Rr - 44), s * (Rr - 44)); ctx.globalAlpha = 1;
-      }
-    }
-    ctx.beginPath(); ctx.moveTo(-Rr, 0); ctx.lineTo(Rr, 0); ctx.lineWidth = 1; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -Rr * 0.55); ctx.globalAlpha = .4; ctx.stroke(); ctx.globalAlpha = 1;
-    ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fillStyle = '#F5B83D'; ctx.fill();
-    ctx.restore();
+  drawProtractor(ctx) { const P = this.prot; ctx.setTransform(this.R, 0, 0, this.R, 0, 0); drawProtractorAt(ctx, P.cx, P.cy, P.ang, this.protR); }
+  // what the student screen should show of the floating tools (page/world coordinates)
+  toolsState() {
+    const o = {};
+    if (this.ruler) { const [x, y] = this.toWorld(this.ruler.cx, this.ruler.cy), d = this.rulerDims; o.ruler = { x, y, ang: this.ruler.ang, L: d.L / this.z, H: d.H / this.z }; }
+    if (this.prot) { const [x, y] = this.toWorld(this.prot.cx, this.prot.cy); o.prot = { x, y, ang: this.prot.ang, r: this.protR / this.z }; }
+    return o;
   }
 
   // ---------- answer curtain ----------
@@ -1572,29 +1562,7 @@ export class Editor {
     this.need.ui = true;
   }
   rulerUp(e) { const g = this.rgrab; g.pts.delete(e.pointerId); if (!g.pts.size) this.rgrab = null; else this.rulerBase(); this.need.ui = true; }
-  drawRuler(ctx) {
-    const Rr = this.ruler, { L, H } = this.rulerDims;
-    ctx.setTransform(this.R, 0, 0, this.R, 0, 0); ctx.save(); ctx.translate(Rr.cx, Rr.cy); ctx.rotate(Rr.ang);
-    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-L / 2, -H / 2, L, H, 8) : ctx.rect(-L / 2, -H / 2, L, H);
-    ctx.fillStyle = 'rgba(46,50,58,.72)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.stroke();
-    const mm = 72 / 25.4 * this.z; // page points per mm, on screen
-    const step = mm < 2.2 ? 10 : 1, n = Math.min(4000, Math.floor(L / 2 / mm));
-    ctx.beginPath();
-    for (let i = -n - (-n % step); i <= n; i += step) {
-      const x = i * mm, len = i % 10 === 0 ? 20 : i % 5 === 0 ? 13 : 7;
-      ctx.moveTo(x, -H / 2); ctx.lineTo(x, -H / 2 + len); ctx.moveTo(x, H / 2); ctx.lineTo(x, H / 2 - len);
-    }
-    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '15px "TH Sarabun New", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    const cmStep = mm * 10 < 26 ? 5 : 1;
-    for (let i = -Math.floor(n / 10); i <= n / 10; i++) if (i % cmStep === 0) ctx.fillText(String(Math.abs(i)), i * mm * 10, -H / 2 + 21);
-    // angle readout
-    let deg = Math.round(((-Rr.ang * 180 / Math.PI) % 180 + 180) % 180);
-    const tx = deg + '°'; ctx.font = 'bold 20px "TH Sarabun New", sans-serif'; ctx.textBaseline = 'middle';
-    const tw = ctx.measureText(tx).width + 22; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(-tw / 2, 6, tw, 26, 13) : ctx.rect(-tw / 2, 6, tw, 26); ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fill();
-    ctx.fillStyle = '#1E2A55'; ctx.fillText(tx, 0, 20);
-    ctx.restore();
-  }
+  drawRuler(ctx) { const Rr = this.ruler, { L, H } = this.rulerDims; ctx.setTransform(this.R, 0, 0, this.R, 0, 0); drawRulerAt(ctx, Rr.cx, Rr.cy, Rr.ang, L, H, 72 / 25.4 * this.z); }
 
   // ---------- lasso ----------
   startLasso(e, page, sx, sy) {

@@ -19,7 +19,7 @@ export class Broadcast {
     if (m.type === 'alive' || m.type === 'hello') {
       const was = this.connected; this.lastAlive = performance.now();
       try { this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
-      if (m.type === 'hello' || !was) { this.lastView = null; this.sendMeta(); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
+      if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
     } else if (m.type === 'need') {
       const ed = this.app.editor; if (!ed) return;
       for (const pid of m.pids || []) { const p = ed.pageMap.get(pid); if (p) this.post({ type: 'page', nb: ed.nb.id, page: serializePage(p) }); }
@@ -49,6 +49,9 @@ export class Broadcast {
       if (cur && !rects[cur.id]) { rects[cur.id] = ed.rects.get(cur.id); vis.push(cur.id); }
       this.post({ type: 'view', nb: ed.nb.id, world: [x0, y0, x1, y1], vis, rects, cur: cur?.id, mode: this.mode, paper: ed.paper, curtain: ed.curtain ? { ...ed.curtain } : null });
     }
+    // floating tools the class should see: ruler, protractor, calculator display
+    const tools = { ...ed.toolsState(), calc: window.__senkidCalc?.() || null }, tk = JSON.stringify(tools);
+    if (tk !== this.lastTools) { this.lastTools = tk; this.post({ type: 'tools', ...tools }); }
     // live stroke
     const L = ed.live;
     if (L) { const s = ed.liveStroke(true); this.post({ type: 'live', pid: L.page.id, s: s.shape ? { ...s } : { ...s, pts: s.pts } }); this.hadLive = true; }
@@ -57,7 +60,7 @@ export class Broadcast {
     if (ed.laser.length) { this.post({ type: 'laser', pts: ed.laserWorld(), head: !!ed.lasering, opt: prefs.laser }); this.hadLaser = true; }
     else if (this.hadLaser) { this.hadLaser = false; this.post({ type: 'laser', pts: [] }); }
   }
-  setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; }
+  setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; this.lastTools = null; }
 }
 
 let studentWin = null;
