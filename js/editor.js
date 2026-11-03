@@ -335,6 +335,7 @@ export class Editor {
       B('sticker', 'สติกเกอร์', (b) => this.stickerPanel(b)),
       B('curtain', 'ม่านบังคำตอบ', () => this.toggleCurtain(), !!this.curtain),
       B('equation', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์', (b) => this.mathMenu(b)),
+      B('calc', 'เครื่องคิดเลขวิทยาศาสตร์', async () => (await import('./calculator.js')).toggleCalculator(this)),
       B('ruler', 'ไม้บรรทัด (ใช้นิ้วลากย้าย สองนิ้วหมุน ลากปากกาชิดขอบได้เส้นตรง)', () => this.toggleRuler(), !!this.ruler),
       B('lasso', 'บ่วงบาศ (เลือก ย้าย ย่อขยาย หมุน)', () => this.setTool('lasso'), t === 'lasso'),
       B('image', 'แทรกรูปภาพ', () => this.pickImage()),
@@ -1422,12 +1423,24 @@ export class Editor {
   // ---------- math: equations, graphs, protractor, compass ----------
   mathMenu(anchor) {
     menu(anchor, [
+      { icon: 'calc', label: 'เครื่องคิดเลขวิทยาศาสตร์', action: async () => (await import('./calculator.js')).toggleCalculator(this) },
       { icon: 'equation', label: 'แทรกสมการ (LaTeX)', action: () => this.insertMath('tex') },
       { icon: 'graph', label: 'แทรกกราฟ / ระบบพิกัด / เส้นจำนวน', action: () => this.insertMath('graph') },
       { icon: 'protractor', label: this.prot ? 'ซ่อนไม้โปรแทรกเตอร์' : 'ไม้โปรแทรกเตอร์', action: () => this.toggleProtractor() },
       { icon: 'ruler', label: this.ruler ? 'ซ่อนไม้บรรทัด' : 'ไม้บรรทัด', action: () => this.toggleRuler() },
       { icon: 'compass', label: 'วงเวียน (ลากจากจุดศูนย์กลาง)', action: () => { prefs.shapeKind = 'circle'; savePrefs(); this.setTool('shapes'); toast('วางปากกาที่จุดศูนย์กลาง แล้วลากออกไปเท่ารัศมี', 2500); } },
     ], this.popOpts());
+  }
+  // put a line of text (e.g. a calculator result) in the middle of the visible page
+  insertTextLine(text) {
+    const page = this.currentPage(), r = this.rects.get(page.id), P = dims(page);
+    const [cx, cy] = this.toWorld(this.W / 2, this.H / 2), size = 22;
+    const o = { id: uid(), t: 'text', text, size, bold: false, c: prefs.penColor, a: 1, x: 0, y: 0, ts: Date.now() };
+    const m = measureText(o); o.w = m.w; o.h = m.h;
+    o.x = Math.max(4, Math.min(P.w - o.w - 4, cx - r.x - o.w / 2)); o.y = Math.max(4, Math.min(P.h - o.h - 4, cy - r.y - o.h / 2));
+    const before = page.strokes.slice(); page.strokes.push(o);
+    this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
+    this.markDirty(page); this.need.main = true; this.selectImage(page.id, o.id);
   }
   async insertMath(kind) {
     const m = await import('./mathtools.js');
