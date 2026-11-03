@@ -38,7 +38,7 @@ export function applyUiFont(id = prefs.uiFont || 'sarabun') {
   if (id === 'sarabun') { st?.remove(); return; }
   if (!st) { st = document.createElement('style'); st.id = 'uifont'; document.head.append(st); }
   st.textContent = faceCss(id) +
-    `body,button,input,select,textarea{font-family:${familyOf(id)}!important}` +
+    `body,button:not(.fl-row),input,select,textarea{font-family:${familyOf(id)}!important}` +
     // text typed on the page and the praise badges must match what is drawn/exported
     `.txed,.stk.badge{font-family:"TH Sarabun New",sans-serif!important}`;
   keepOffline(id);
