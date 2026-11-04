@@ -27,7 +27,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--ui);color:var(--
 input,button,select,textarea{font:inherit;color:inherit}
 input[type=text],input[type=search],input[type=number],textarea{-webkit-user-select:text;user-select:text}
 button{cursor:pointer}
-svg.i{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
+svg.i{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
 #app{position:fixed;inset:0}
 .hidden{display:none!important}
 
@@ -632,3 +632,10 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .pdock:not(.horiz) .dsep{width:110px;height:1px;margin:3px 0}
 .pdock:not(.horiz) .dpg{width:100%}
 .pdock:not(.horiz) .dtog{width:100%}
+
+/* filled icons: details are cut in the colour of the surface behind the icon */
+:root{--ico-in:var(--bar)}
+.ctxbar,.pdock,.imgbar,.lassobar,.shapebar,.calc,.tmfloat{--ico-in:#2a2c33}
+.pill.prim{--ico-in:#fff}
+.tb2 .btn.on{--ico-in:#4f5a7e}
+.pdock .db.on,.ctxbar .btn.on,.ctxbar .sw.on{--ico-in:#5a5d64}
