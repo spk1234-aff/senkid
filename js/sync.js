@@ -170,7 +170,8 @@ async function doSync(reason) {
         let nb, pageList;
         if (r && (!l || r.updated > (l.updated || 0))) { // pull record
           nb = await download(r.f.id); nb.fileSavedAt = l?.fileSavedAt; nb.fileName = l?.fileName;
-          await db.put('notebooks', nb); pulled++; if (id === openId) touchedOpen = true;
+          await db.put('notebooks', nb); pulled++;
+          if (id === openId) { const same = JSON.stringify(nb.pages) === JSON.stringify(ed.nb.pages); if (same) { ed.nb.name = nb.name; ed.nb.folder = nb.folder; ed.nb.updated = Math.max(ed.nb.updated || 0, nb.updated || 0); } else touchedOpen = true; }
         } else nb = l;
         pageList = nb.pages || [];
         if (l && (!r || (l.updated || 0) > r.updated)) { await upload(r?.f.id, `nb-${id}.json`, { kind: 'nb', id, updated: String(l.updated || 0) }, nbOut(l)); pushed++; }
@@ -183,7 +184,8 @@ async function doSync(reason) {
             const p = await pageIn(await download(rpg.f.id)); p.updated = rpg.updated;
             if (id === openId) await ed.flush?.();
             const cur = await db.get('pages', pid); if (cur && (cur.updated || 0) > (lpg?.updated || 0) && (cur.updated || 0) >= rpg.updated) return; // edited here meanwhile: keep ours
-            await db.savePagesAndNotebook([p], null); pulled++; if (id === openId) touchedOpen = true;
+            await db.savePagesAndNotebook([p], null); pulled++;
+            if (id === openId && !ed.applyRemotePage(p)) touchedOpen = true;
           });
           else if (lpg && (!rpg || (lpg.updated || 0) > rpg.updated)) jobs.push(async () => {
             await upload(rpg?.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(lpg.updated || 0) }, await pageOut(lpg)); pushed++;
@@ -191,7 +193,8 @@ async function doSync(reason) {
         }
         // a few pages at a time (first upload of a big notebook)
         let done = 0; const total = jobs.length;
-        await Promise.all(Array.from({ length: Math.min(4, total) }, async () => { while (jobs.length) { const j = jobs.shift(); await j(); done++; if (total > 3) setState('syncing', { progress: `${nb.name || 'สมุด'} · หน้า ${done}/${total}` }); } }));
+        const idle = async () => { while (ed?.live || ed?.lassoDraw || ed?.drag) await new Promise(r => setTimeout(r, 300)); await new Promise(r => setTimeout(r, 0)); };
+        await Promise.all(Array.from({ length: Math.min(2, total) }, async () => { while (jobs.length) { await idle(); const j = jobs.shift(); await j(); done++; if (total > 3) setState('syncing', { progress: `${nb.name || 'สมุด'} · หน้า ${done}/${total}` }); } }));
         // remote pages no longer in the notebook
         for (const [pid, rpg] of rPg) if (rpg.nb === id && !pageList.includes(pid)) { await remove(rpg.f.id); rPg.delete(pid); }
         // local pages no longer in the notebook (removed on another device)

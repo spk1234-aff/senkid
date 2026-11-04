@@ -2085,6 +2085,16 @@ export class Editor {
     this.btnPages?.classList.toggle('on', open);
     if (open) this.renderThumbs();
   }
+  // a page arrived from another device (cloud sync): swap its content in place, no reload
+  applyRemotePage(np) {
+    const p = this.pageMap.get(np.id); if (!p) return false;
+    if (this.dirty.has(p.id) || (this.live && this.live.page === p)) return false; // being written here right now
+    p.strokes = np.strokes; p.bg = np.bg; p.size = np.size; p.pw = np.pw; p.ph = np.ph; p.pdf = np.pdf; p.updated = np.updated; p._ver = (p._ver || 0) + 1;
+    this.app.broadcast?.pageChanged(p);
+    this.thumbCache?.delete(p.id); this.need.main = true;
+    if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 300); }
+    return true;
+  }
   thumbsDirtyAll() { this.thumbCache = new Map(); if (this.thumbs.classList.contains('open')) this.renderThumbs(); }
   renderThumbs() {
     if (!this.thumbs.classList.contains('open')) return;
