@@ -1,0 +1,254 @@
+// Cloud sync through the teacher's own Google Drive (hidden app folder).
+// Each notebook record, each page and each PDF is one file in Drive; newer `updated` wins.
+import * as db from './db.js';
+import { prefs, savePrefs } from './prefs.js';
+import { blobToDataURL, dataURLToBlob } from './images.js';
+import { toast } from './ui.js';
+
+// OAuth client (Google Cloud project of the teacher). Can be overridden in settings.
+export const DEFAULT_CLIENT_ID = '';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata openid email';
+const API = 'https://www.googleapis.com/drive/v3', UP = 'https://www.googleapis.com/upload/drive/v3';
+const TOKEN_KEY = 'senkid.gtoken';
+const appUrl = () => new URL('./', location.href).href;
+
+export const sync = {
+  state: 'off', // off | idle | syncing | error | auth
+  email: '', lastSync: 0, error: '', progress: '', listeners: new Set(), app: null,
+  on(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
+  emit() { for (const fn of this.listeners) try { fn(this); } catch { } },
+};
+function setState(st, extra = {}) { Object.assign(sync, { state: st }, extra); sync.emit(); }
+
+// ---------- token ----------
+function readToken() { try { const t = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null'); return t && t.exp > Date.now() + 30e3 ? t : null; } catch { return null; } }
+function clientId() { return prefs.sync?.clientId || DEFAULT_CLIENT_ID; }
+export function connected() { return !!prefs.sync?.on; }
+export function tokenOk() { return !!readToken(); }
+
+// top-level redirect to Google (works in Safari and in the home-screen app; no popups)
+export function signIn({ silent = false } = {}) {
+  const id = clientId(); if (!id) { toast('ยังไม่ได้ตั้งค่า Client ID ของ Google (ตั้งค่า > ซิงก์)', 4000, 'warn'); return; }
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem('senkid.oauth', JSON.stringify({ state, silent, back: location.pathname + location.search }));
+  const q = new URLSearchParams({ client_id: id, redirect_uri: appUrl(), response_type: 'token', scope: SCOPES, include_granted_scopes: 'true', state });
+  if (silent) { q.set('prompt', 'none'); if (prefs.sync?.email) q.set('login_hint', prefs.sync.email); }
+  else q.set('prompt', 'select_account');
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + q;
+}
+// call once at startup: picks up the token from the URL hash after Google sends us back
+export async function handleRedirect() {
+  if (!/[#&]access_token=|[#&]error=/.test(location.hash)) return false;
+  const h = new URLSearchParams(location.hash.slice(1));
+  let pending = null; try { pending = JSON.parse(sessionStorage.getItem('senkid.oauth') || 'null'); } catch { }
+  sessionStorage.removeItem('senkid.oauth');
+  history.replaceState(null, '', location.pathname + location.search);
+  if (!pending || h.get('state') !== pending.state) return false;
+  if (h.get('error')) { if (!pending.silent) toast('เชื่อมต่อ Google ไม่สำเร็จ: ' + h.get('error'), 4000, 'warn'); setState('auth', { error: h.get('error') }); return true; }
+  const tok = { t: h.get('access_token'), exp: Date.now() + (+h.get('expires_in') || 3600) * 1000 };
+  localStorage.setItem(TOKEN_KEY, JSON.stringify(tok));
+  prefs.sync = { ...(prefs.sync || {}), on: true }; savePrefs();
+  try { const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tok.t } }); if (r.ok) { const u = await r.json(); prefs.sync.email = u.email || ''; savePrefs(); } } catch { }
+  setState('idle', { email: prefs.sync.email });
+  if (!pending.silent) toast('เชื่อม Google Drive แล้ว · สมุดจะซิงก์อัตโนมัติ', 3000);
+  return true;
+}
+export function disconnect() { localStorage.removeItem(TOKEN_KEY); prefs.sync = { ...(prefs.sync || {}), on: false }; savePrefs(); setState('off'); }
+
+// ---------- Drive helpers ----------
+async function gfetch(url, opt = {}, retry = true) {
+  const tok = readToken(); if (!tok) throw Object.assign(new Error('auth'), { auth: true });
+  const r = await fetch(url, { ...opt, headers: { ...(opt.headers || {}), Authorization: 'Bearer ' + tok.t } });
+  if (r.status === 401) { localStorage.removeItem(TOKEN_KEY); throw Object.assign(new Error('auth'), { auth: true }); }
+  if ((r.status === 429 || r.status >= 500) && retry) { await new Promise(res => setTimeout(res, 1500)); return gfetch(url, opt, false); }
+  if (!r.ok) throw new Error('Drive ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
+  return r;
+}
+async function listAll() {
+  const out = []; let pageToken = '';
+  do {
+    const q = new URLSearchParams({ spaces: 'appDataFolder', pageSize: '1000', fields: 'nextPageToken,files(id,name,appProperties,size)' });
+    if (pageToken) q.set('pageToken', pageToken);
+    const j = await (await gfetch(`${API}/files?${q}`)).json();
+    out.push(...(j.files || [])); pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return out;
+}
+async function download(fileId, asBlob) { const r = await gfetch(`${API}/files/${fileId}?alt=media`); return asBlob ? r.blob() : r.json(); }
+async function upload(existingId, name, appProperties, body, mime) {
+  const meta = { name, appProperties }; if (!existingId) meta.parents = ['appDataFolder'];
+  const blob = body instanceof Blob ? body : new Blob([JSON.stringify(body)], { type: mime || 'application/json' });
+  if (blob.size < 4.5e6) {
+    const fd = new FormData(); fd.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' })); fd.append('file', blob);
+    const r = await gfetch(`${UP}/files${existingId ? '/' + existingId : ''}?uploadType=multipart&fields=id`, { method: existingId ? 'PATCH' : 'POST', body: fd });
+    return (await r.json()).id;
+  }
+  // big file: resumable upload in one go
+  const r0 = await gfetch(`${UP}/files${existingId ? '/' + existingId : ''}?uploadType=resumable&fields=id`, { method: existingId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': blob.type || 'application/octet-stream', 'X-Upload-Content-Length': String(blob.size) }, body: JSON.stringify(meta) });
+  const loc = r0.headers.get('Location'); if (!loc) throw new Error('resumable: no location');
+  const r = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
+  if (!r.ok) throw new Error('upload ' + r.status);
+  return (await r.json()).id;
+}
+async function remove(fileId) { try { await gfetch(`${API}/files/${fileId}`, { method: 'DELETE' }); } catch (e) { if (!/404/.test(e.message)) throw e; } }
+
+// ---------- (de)serialising ----------
+async function pageOut(p) {
+  const strokes = [];
+  for (const s of (p.strokes || [])) {
+    if (s.t === 'img') { const { blob, ...rest } = s; strokes.push({ ...rest, data: await blobToDataURL(blob) }); }
+    else if (s.pts) strokes.push({ ...s, pts: Array.from(s.pts) });
+    else strokes.push(s);
+  }
+  return { ...p, strokes };
+}
+async function pageIn(p) {
+  const strokes = [];
+  for (const s of (p.strokes || [])) {
+    if (s.t === 'img' && s.data) { const { data, ...rest } = s; strokes.push({ ...rest, blob: await dataURLToBlob(data) }); }
+    else if (s.pts) strokes.push({ ...s, pts: Float32Array.from(s.pts) });
+    else strokes.push(s);
+  }
+  return { ...p, strokes };
+}
+const nbOut = (nb) => { const { thumb, fileName, fileSavedAt, ...rest } = nb; return { ...rest, thumb }; };
+
+// ---------- the sync itself ----------
+let running = null, again = false, timer = null;
+export function scheduleSync(ms = 6000) { if (!connected()) return; clearTimeout(timer); timer = setTimeout(() => syncNow('auto'), ms); }
+export function syncNow(reason = 'manual') {
+  if (!connected()) return Promise.resolve(false);
+  if (running) { again = true; return running; }
+  running = (async () => {
+    try { return await doSync(reason); }
+    finally { running = null; if (again) { again = false; scheduleSync(3000); } }
+  })();
+  return running;
+}
+async function doSync(reason) {
+  if (!navigator.onLine) { setState('idle', { error: 'ออฟไลน์' }); return false; }
+  if (!readToken()) { setState('auth'); return false; }
+  setState('syncing', { error: '', progress: 'กำลังตรวจสอบ…' });
+  const app = sync.app, ed = app?.editor;
+  try {
+    await ed?.flush?.();
+    const remote = await listAll();
+    const rNb = new Map(), rPg = new Map(), rPdf = new Map(), rDel = new Map();
+    for (const f of remote) {
+      const a = f.appProperties || {};
+      if (a.kind === 'nb') rNb.set(a.id, { f, updated: +a.updated || 0 });
+      else if (a.kind === 'page') rPg.set(a.id, { f, nb: a.nb, updated: +a.updated || 0 });
+      else if (a.kind === 'pdf') rPdf.set(a.id, { f });
+      else if (a.kind === 'del') rDel.set(a.id, { f, t: +a.t || 0 });
+    }
+    const local = new Map((await db.getAll('notebooks')).map(n => [n.id, n]));
+    const tomb = (await db.get('kv', 'sync:deleted'))?.v || {};
+    let pulled = 0, pushed = 0, touchedOpen = false;
+    const openId = ed?.nb?.id;
+    db.setQuiet(true);
+    try {
+      // 1) deletions
+      for (const [id, t] of Object.entries(tomb)) {
+        for (const [pid, r] of rPg) if (r.nb === id) { await remove(r.f.id); rPg.delete(pid); }
+        if (rNb.has(id)) { await remove(rNb.get(id).f.id); rNb.delete(id); }
+        if (!rDel.has(id)) await upload(null, `del-${id}`, { kind: 'del', id, t: String(t) }, { id, t });
+        rDel.set(id, { t });
+      }
+      if (Object.keys(tomb).length) await db.put('kv', { k: 'sync:deleted', v: {} });
+      for (const [id, d] of rDel) {
+        const l = local.get(id);
+        if (l && (l.updated || 0) <= d.t) { await db.deleteNotebook(id); local.delete(id); pulled++; if (id === openId) touchedOpen = true; }
+        if (rNb.has(id) && rNb.get(id).updated <= d.t) { await remove(rNb.get(id).f.id); rNb.delete(id); }
+      }
+      // 2) notebooks + pages
+      const ids = new Set([...local.keys(), ...rNb.keys()]);
+      let n = 0;
+      for (const id of ids) {
+        n++; setState('syncing', { progress: `สมุดเล่มที่ ${n} จาก ${ids.size}` });
+        const l = local.get(id), r = rNb.get(id);
+        const rd = rDel.get(id); if (!l && rd && r && r.updated <= rd.t) continue;
+        let nb, pageList;
+        if (r && (!l || r.updated > (l.updated || 0))) { // pull record
+          nb = await download(r.f.id); nb.fileSavedAt = l?.fileSavedAt; nb.fileName = l?.fileName;
+          await db.put('notebooks', nb); pulled++; if (id === openId) touchedOpen = true;
+        } else nb = l;
+        pageList = nb.pages || [];
+        if (l && (!r || (l.updated || 0) > r.updated)) { await upload(r?.f.id, `nb-${id}.json`, { kind: 'nb', id, updated: String(l.updated || 0) }, nbOut(l)); pushed++; }
+        // pages of this notebook
+        const lp = new Map((await db.pagesOf(id)).map(p => [p.id, p]));
+        for (const pid of pageList) {
+          const lpg = lp.get(pid), rpg = rPg.get(pid);
+          if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) {
+            const p = await pageIn(await download(rpg.f.id)); p.updated = rpg.updated;
+            if (id === openId) await ed.flush?.();
+            const cur = await db.get('pages', pid); if (cur && (cur.updated || 0) > (lpg?.updated || 0) && (cur.updated || 0) >= rpg.updated) continue; // edited here meanwhile: keep ours
+            await db.savePagesAndNotebook([p], null); pulled++; if (id === openId) touchedOpen = true;
+          } else if (lpg && (!rpg || (lpg.updated || 0) > rpg.updated)) {
+            await upload(rpg?.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(lpg.updated || 0) }, await pageOut(lpg)); pushed++;
+          }
+        }
+        // remote pages no longer in the notebook
+        for (const [pid, rpg] of rPg) if (rpg.nb === id && !pageList.includes(pid)) { await remove(rpg.f.id); rPg.delete(pid); }
+        // local pages no longer in the notebook (removed on another device)
+        for (const pid of lp.keys()) if (!pageList.includes(pid)) await db.del('pages', pid);
+      }
+      // 3) PDFs referenced by pages
+      const need = new Set();
+      for (const p of await db.getAll('pages')) if (p.pdf?.id) need.add(p.pdf.id);
+      for (const pdfId of need) {
+        const l = await db.get('pdfs', pdfId), r = rPdf.get(pdfId);
+        if (l && !r) { setState('syncing', { progress: 'อัปโหลด PDF ' + l.name }); await upload(null, `pdf-${pdfId}.pdf`, { kind: 'pdf', id: pdfId, name: String(l.name || '').slice(0, 100), pages: String(l.pages || 0) }, l.blob, 'application/pdf'); pushed++; }
+        else if (!l && r) { setState('syncing', { progress: 'ดาวน์โหลด PDF ' + (r.f.appProperties.name || '') }); const blob = await download(r.f.id, true); await db.put('pdfs', { id: pdfId, name: r.f.appProperties.name || 'เอกสาร.pdf', pages: +r.f.appProperties.pages || 0, blob, created: Date.now() }); pulled++; touchedOpen = touchedOpen || !!openId; }
+      }
+    } finally { db.setQuiet(false); }
+    sync.lastSync = Date.now(); prefs.sync.last = sync.lastSync; savePrefs();
+    setState('idle', { error: '', progress: '' });
+    if (pulled) {
+      if (app?.library && !ed) app.library.load();
+      if (touchedOpen && ed) {
+        const reload = async () => { const id = ed.nb.id; await ed.flush?.(); await app.openNotebook(id); toast('อัปเดตสมุดจากเครื่องอื่นแล้ว', 2000); };
+        if (!ed.live && !document.querySelector('.dialog') && !app.recorder?.active) await reload();
+        else { const b = document.createElement('button'); b.className = 'pill prim'; b.style.cssText = 'height:40px;margin-left:10px;pointer-events:auto'; b.textContent = 'โหลดใหม่'; b.onclick = () => { t.remove(); reload(); }; const t = document.createElement('div'); t.className = 'toast keep updbar'; t.append('มีการแก้ไขสมุดเล่มนี้จากเครื่องอื่น', b); document.getElementById('toasts').append(t); setTimeout(() => t.remove(), 15000); }
+      }
+    }
+    if (reason === 'manual') toast(pushed || pulled ? `ซิงก์แล้ว · ส่งขึ้น ${pushed} · รับมา ${pulled}` : 'ข้อมูลตรงกันทุกเครื่องแล้ว', 2200);
+    return true;
+  } catch (e) {
+    console.warn('sync', e);
+    if (e.auth) setState('auth', { error: 'ต้องเชื่อมต่อ Google ใหม่' });
+    else setState('error', { error: e.message || String(e) });
+    if (reason === 'manual') toast('ซิงก์ไม่สำเร็จ: ' + (e.auth ? 'ต้องเชื่อมต่อ Google ใหม่' : e.message), 4000, 'warn');
+    return false;
+  }
+}
+
+// ---------- wiring ----------
+export async function initSync(app) {
+  sync.app = app;
+  const got = await handleRedirect();
+  if (!connected()) { setState('off'); return; }
+  sync.email = prefs.sync.email || ''; sync.lastSync = prefs.sync.last || 0;
+  if (!readToken()) {
+    // token lasts an hour: refresh silently once per launch (Google answers at once when still signed in)
+    const tried = sessionStorage.getItem('senkid.silent') === '1';
+    if (!tried && !got && navigator.onLine) { sessionStorage.setItem('senkid.silent', '1'); await app.editor?.flush?.(); signIn({ silent: true }); return; }
+    setState('auth'); return;
+  }
+  sessionStorage.removeItem('senkid.silent');
+  setState('idle');
+  db.onChange(() => scheduleSync(6000));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(timer); syncNow('auto'); } else scheduleSync(1500); });
+  addEventListener('online', () => scheduleSync(2000));
+  setInterval(() => scheduleSync(0), 3 * 60 * 1000);
+  scheduleSync(1200);
+}
+export function statusText() {
+  const t = sync.lastSync ? new Date(sync.lastSync) : null, hm = t ? `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}` : '';
+  switch (sync.state) {
+    case 'off': return 'ยังไม่ได้เชื่อม Google Drive';
+    case 'syncing': return sync.progress || 'กำลังซิงก์…';
+    case 'auth': return 'ต้องเชื่อมต่อ Google ใหม่';
+    case 'error': return 'ซิงก์ไม่สำเร็จ · แตะเพื่อลองใหม่';
+    default: return sync.error ? sync.error : hm ? `ซิงก์แล้ว ${hm}` : 'พร้อมซิงก์';
+  }
+}

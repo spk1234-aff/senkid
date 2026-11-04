@@ -1,6 +1,10 @@
 // IndexedDB storage: notebooks, pages, recordings (meta + chunks)
 const NAME = 'senkid', VER = 3;
 let dbp = null;
+// change tracking for cloud sync: every normal write stamps `updated`; writes coming *from* sync are quiet
+let quiet = false; export function setQuiet(v) { quiet = v; }
+const listeners = new Set(); export function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+function changed(kind) { if (quiet) return; for (const fn of listeners) try { fn(kind); } catch { } }
 
 export function openDB() {
   if (dbp) return dbp;
@@ -28,7 +32,8 @@ function done(t) { return new Promise((res, rej) => { t.oncomplete = () => res()
 
 export async function getAll(store) { const t = await tx([store]); return req(t.objectStore(store).getAll()); }
 export async function get(store, key) { const t = await tx([store]); return req(t.objectStore(store).get(key)); }
-export async function put(store, obj) { const t = await tx([store], 'readwrite'); t.objectStore(store).put(obj); return done(t); }
+export async function put(store, obj) { if (!quiet && store === 'notebooks') obj.updated = Date.now(); const t = await tx([store], 'readwrite'); t.objectStore(store).put(obj); await done(t); if (store === 'notebooks' || store === 'pdfs') changed(store); }
+export async function putQuiet(store, obj) { const t = await tx([store], 'readwrite'); t.objectStore(store).put(obj); return done(t); }
 export async function putMany(store, arr) { const t = await tx([store], 'readwrite'); const s = t.objectStore(store); for (const o of arr) s.put(o); return done(t); }
 export async function del(store, key) { const t = await tx([store], 'readwrite'); t.objectStore(store).delete(key); return done(t); }
 export async function delMany(store, keys) { const t = await tx([store], 'readwrite'); const s = t.objectStore(store); for (const k of keys) s.delete(k); return done(t); }
@@ -37,10 +42,10 @@ export async function pagesOf(nbId) { const t = await tx(['pages']); return req(
 
 export async function savePagesAndNotebook(pages, nb) {
   const t = await tx(['pages', 'notebooks'], 'readwrite');
-  const ps = t.objectStore('pages');
-  for (const p of pages) ps.put(p);
-  if (nb) t.objectStore('notebooks').put(nb);
-  return done(t);
+  const ps = t.objectStore('pages'), now = Date.now();
+  for (const p of pages) { if (!quiet) p.updated = now; ps.put(p); }
+  if (nb) { if (!quiet) nb.updated = Math.max(nb.updated || 0, now); t.objectStore('notebooks').put(nb); }
+  await done(t); changed('pages');
 }
 
 export async function deleteNotebook(id) {
@@ -48,7 +53,12 @@ export async function deleteNotebook(id) {
   const t = await tx(['pages', 'notebooks'], 'readwrite');
   for (const p of pages) t.objectStore('pages').delete(p.id);
   t.objectStore('notebooks').delete(id);
-  return done(t);
+  await done(t);
+  if (!quiet) { // tombstone so the other devices delete it too
+    const rec = (await get('kv', 'sync:deleted'))?.v || {}; rec[id] = Date.now();
+    const t2 = await tx(['kv'], 'readwrite'); t2.objectStore('kv').put({ k: 'sync:deleted', v: rec }); await done(t2);
+    changed('notebooks');
+  }
 }
 
 // recording chunks

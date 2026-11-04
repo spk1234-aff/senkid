@@ -2,6 +2,7 @@
 import { h, icon, menu, dialog, ask, confirmBox, toast, seg, fmtDate, uid, brandWord, logoMark, pickFile, busy } from './ui.js';
 import { prefs, savePrefs } from './prefs.js';
 import { transferDialog, isHomeApp, isIOS } from './broadcast.js';
+import { sync, syncNow, signIn, statusText, connected } from './sync.js';
 import { PAPERS } from './render.js';
 import * as db from './db.js';
 
@@ -51,7 +52,11 @@ export class Library {
     const hp = h('button', { class: 'fold' }, icon('help'), 'วิธีใช้'); hp.onclick = () => this.app.openHelp();
     const mode = h('div', { class: 'modesw' }, h('div', { class: 'lbl' }, 'ใช้งานแบบ'),
       seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', v => { prefs.studentUI = v === 's'; savePrefs(); toast(prefs.studentUI ? 'โหมดนักเรียน: ซ่อนเครื่องมือฉายจอ อัดคลิป จับเวลา และม่าน' : 'โหมดครู: แสดงเครื่องมือครบ', 2200); }));
-    side.append(mode, hp, st);
+    const sp = h('button', { class: 'fold syncpill' }, icon('cloud'), h('span', {}, ''));
+    const paint = () => { sp.lastChild.textContent = statusText(); sp.classList.toggle('busy', sync.state === 'syncing'); sp.classList.toggle('warn', sync.state === 'auth' || sync.state === 'error'); };
+    sp.onclick = () => { if (!connected()) this.app.openSettings(); else if (sync.state === 'auth') signIn(); else syncNow('manual'); };
+    paint(); this._unsync?.(); this._unsync = sync.on(paint);
+    side.append(mode, sp, hp, st);
 
     const search = h('input', { class: 'field', type: 'search', placeholder: 'ค้นหาชื่อสมุด', value: this.q });
     search.oninput = () => { this.q = search.value; this.renderGrid(); };

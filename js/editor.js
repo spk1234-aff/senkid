@@ -2199,7 +2199,7 @@ export class Editor {
     try {
       const c = renderPageTo(document.createElement('canvas'), p, this.paper, 300);
       this.nb.thumb = c.toDataURL('image/jpeg', 0.82);
-      await db.put('notebooks', { ...this.nb });
+      await db.putQuiet('notebooks', { ...this.nb }); // cover only: not a content change
     } catch (e) { console.warn(e); }
   }
 

@@ -12,8 +12,9 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
+import { sync, initSync, syncNow, signIn, disconnect, statusText, connected } from './sync.js';
 
-export const VERSION = '1.8.5';
+export const VERSION = '1.9.0';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -46,6 +47,7 @@ class App {
     catch (e) { console.error(e); prefs.lastOpen = null; savePrefs(); try { await this.openLibrary(); } catch { } toast('เปิดสมุดล่าสุดไม่สำเร็จ จึงกลับมาหน้าแรก', 3500, 'warn'); }
     finally { document.getElementById('boot')?.remove(); }
     if (!prefs.onboarded) this.onboarding();
+    initSync(this).catch(e => console.warn('sync init', e));
     if (location.hash === '#from-app') this.receiveFromApp();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       const had = !!navigator.serviceWorker.controller, t0 = performance.now();
@@ -227,6 +229,8 @@ class App {
       card(
         row('โหมดประหยัด', toggle(prefs.economy, v => { prefs.economy = v; savePrefs(); applyTheme(); this.editor?.resize(); }), 'ลดความละเอียดจอและเอฟเฟกต์ สำหรับเครื่องสเปกต่ำ'),
         row('ความละเอียดคลิปเริ่มต้น', seg([['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K']], prefs.rec.res, v => { prefs.rec.res = v; savePrefs(); }))),
+      h('div', { class: 'sec-t' }, 'ซิงก์ผ่าน Google Drive'),
+      this.syncCard(),
       h('div', { class: 'sec-t' }, 'ข้อมูล (เก็บในเครื่องนี้เท่านั้น)'),
       card(
         row('พื้นที่ที่ใช้', usage),
@@ -303,6 +307,29 @@ class App {
   }
 
   // manual update: ask the server for a new version; if there is one, install it and reload
+  syncCard() {
+    const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
+    const card = h('div', { class: 'card' });
+    const build = () => {
+      card.innerHTML = '';
+      const st = h('span', { style: { color: sync.state === 'error' || sync.state === 'auth' ? '#D64545' : 'var(--muted)' } }, statusText());
+      if (!connected()) {
+        const b = h('button', { class: 'pill prim', style: { height: '42px' } }, icon('cloud'), 'เชื่อม Google Drive');
+        b.onclick = () => signIn();
+        card.append(row('สถานะ', st, 'สมุดทุกเล่มจะเก็บสำเนาไว้ในโฟลเดอร์ลับของแอปใน Google Drive ของครู · เปิดเส้นคิดเครื่องไหน (แอปโฮม/Safari/Mac) ก็เห็นสมุดชุดเดียวกัน'), row('เริ่มใช้', b));
+      } else {
+        const now = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('sync'), 'ซิงก์ตอนนี้'); now.onclick = () => syncNow('manual');
+        const re = h('button', { class: 'pill sec', style: { height: '42px' } }, 'เชื่อมต่อใหม่'); re.onclick = () => signIn();
+        const off = h('button', { class: 'pill ghost', style: { height: '42px', color: '#D64545' } }, 'เลิกซิงก์'); off.onclick = () => { disconnect(); build(); toast('เลิกซิงก์แล้ว · สมุดในเครื่องนี้และใน Drive ยังอยู่', 3000); };
+        card.append(row('บัญชี', h('span', { style: { color: 'var(--muted)' } }, sync.email || prefs.sync?.email || '–')), row('สถานะ', st), row('ซิงก์ด้วยตัวเอง', now, 'ปกติซิงก์เองหลังเขียน 6 วินาที และตอนสลับแอป'), row(sync.state === 'auth' ? 'หมดอายุการเชื่อมต่อ' : 'เชื่อมต่อใหม่', re), row('เลิกซิงก์เครื่องนี้', off));
+      }
+      const cid = h('input', { class: 'field', type: 'text', placeholder: 'xxxx.apps.googleusercontent.com', value: prefs.sync?.clientId || '' , style: { width: '100%', height: '40px', fontSize: '16px' } });
+      cid.onchange = () => { prefs.sync = { ...(prefs.sync || {}), clientId: cid.value.trim() }; savePrefs(); };
+      card.append(h('details', { style: { padding: '6px 0' } }, h('summary', { class: 'sub' }, 'ขั้นสูง: Client ID ของ Google'), cid));
+    };
+    build(); sync.on(build);
+    return card;
+  }
   fontPicker(btn) {
     // previews: load the regular weight of every font just for this list
     let st = document.getElementById('uifont-prev'); if (!st) { st = document.createElement('style'); st.id = 'uifont-prev'; document.head.append(st); }
