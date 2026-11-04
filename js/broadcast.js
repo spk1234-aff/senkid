@@ -186,18 +186,9 @@ export function studentMenu(app, anchor, ed) {
   open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
   if (isHomeApp() && isIOS()) {
     // the student window only works inside Safari on iPad
-    if (syncOn()) {
-      // notebooks are the same everywhere through Drive: just open Safari
-      const open = h('button', { class: 'pill prim' }, icon('screen'), 'เปิดเส้นคิดใน Safari');
-      open.onclick = () => { close(); ed?.flush?.(); location.href = 'x-safari-' + APP_URL(); };
-      box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'ใช้ได้ใน Safari เท่านั้น · สมุดซิงก์ผ่าน Drive อยู่แล้ว เปิด Safari แล้วสอนต่อได้เลย (รอซิงก์ตามทันสัก 10 วินาที)', open));
-    } else {
-    const send = h('button', { class: 'pill prim' }, icon('screen'), 'ย้ายสมุดทั้งหมดไป Safari');
-    send.onclick = () => { close(); transferDialog(ed, 'safari', { all: true }); };
-    const one = h('button', { class: 'pill ghost', style: { marginTop: '4px' } }, 'ส่งเฉพาะเล่มนี้');
-    one.onclick = () => { close(); transferDialog(ed, 'safari'); };
-    box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษเต็มทีวี · ใช้ได้ใน Safari เท่านั้น จึงต้องย้ายสมุดไป Safari ก่อน', h('div', { style: { display: 'flex', flexDirection: 'column' } }, send, one)));
-    }
+    const open = h('button', { class: 'pill prim' }, icon('screen'), 'เปิดเส้นคิดใน Safari');
+    open.onclick = () => { close(); ed?.flush?.(); location.href = 'x-safari-' + APP_URL(); };
+    box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', syncOn() ? 'ใช้ได้ใน Safari เท่านั้น · สมุดซิงก์ผ่าน Drive อยู่แล้ว เปิด Safari แล้วสอนต่อได้เลย (รอซิงก์ตามทันสัก 10 วินาที)' : 'ใช้ได้ใน Safari เท่านั้น · เปิด "ซิงก์ผ่าน Google Drive" ในตั้งค่าก่อน สมุดจะตามไป Safari เอง', open));
   } else {
     if (isIOS()) {
       // a real link: press-and-hold gives iPad's own "Open in New Window", which skips the "move tab to new window" step
@@ -206,7 +197,6 @@ export function studentMenu(app, anchor, ed) {
       box.append(card('ทีวีเป็นจอที่สอง', 'ต่อสาย + เปิด Stage Manager · นักเรียนเห็นแค่กระดาษเต็มทีวี', h('div', {}, a,
         h('div', { class: 'tvtip' }, h('b', {}, 'ทางลัด: '), 'กดค้างปุ่มนี้ → เลือก "เปิดในหน้าต่างใหม่" → แล้วกดค้างจุดสีเขียวของหน้าต่างนั้น → "ย้ายไปยัง…" ทีวี'))));
     } else box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
-    if (isIOS() && !syncOn()) { const back = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, icon('home'), 'ส่งสมุดนี้กลับไปแอปบนหน้าจอโฮม'); back.onclick = () => { close(); transferDialog(ed, 'app', { all: true }); }; back.lastChild.textContent = 'ส่งสมุดทั้งหมดกลับไปแอปบนหน้าจอโฮม'; box.append(back); }
   }
   if (b.connected) {
     if (studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; box.append(x); }
