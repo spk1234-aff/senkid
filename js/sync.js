@@ -60,9 +60,26 @@ async function gfetch(url, opt = {}, retry = true) {
   const tok = readToken(); if (!tok) throw Object.assign(new Error('auth'), { auth: true });
   const r = await fetch(url, { ...opt, headers: { ...(opt.headers || {}), Authorization: 'Bearer ' + tok.t } });
   if (r.status === 401) { localStorage.removeItem(TOKEN_KEY); throw Object.assign(new Error('auth'), { auth: true }); }
-  if ((r.status === 429 || r.status >= 500) && retry) { await new Promise(res => setTimeout(res, 1500)); return gfetch(url, opt, false); }
-  if (!r.ok) throw new Error('Drive ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
-  return r;
+  if (r.ok) return r;
+  const err = await driveError(r, 'Drive');
+  if ((r.status === 429 || r.status >= 500 || RATE.has(err.reason)) && retry) { await new Promise(res => setTimeout(res, 2000)); return gfetch(url, opt, false); }
+  throw err;
+}
+// Google's error body says *why* (e.g. 403 = Drive full / rate limit / school policy) — show that in Thai
+const RATE = new Set(['userRateLimitExceeded', 'rateLimitExceeded', 'sharingRateLimitExceeded']);
+const REASON_TH = {
+  storageQuotaExceeded: 'พื้นที่ Google Drive เต็ม — ลบไฟล์ใน Drive หรือขอพื้นที่เพิ่มจากผู้ดูแลระบบโรงเรียน',
+  quotaExceeded: 'พื้นที่ Google Drive เต็ม — ลบไฟล์ใน Drive หรือขอพื้นที่เพิ่มจากผู้ดูแลระบบโรงเรียน',
+  userRateLimitExceeded: 'ส่งข้อมูลถี่เกินไป รอสักครู่แล้วลองใหม่', rateLimitExceeded: 'ส่งข้อมูลถี่เกินไป รอสักครู่แล้วลองใหม่',
+  dailyLimitExceeded: 'ใช้ Drive ครบโควตาวันนี้แล้ว ลองใหม่พรุ่งนี้',
+  domainPolicy: 'ผู้ดูแลระบบโรงเรียนไม่อนุญาตให้แอปนี้ใช้ Google Drive',
+  insufficientPermissions: 'สิทธิ์ Google ไม่พอ — ตัดการเชื่อมต่อแล้วเชื่อมใหม่',
+};
+async function driveError(r, prefix) {
+  let reason = '', msg = '';
+  try { const j = JSON.parse(await r.text()); reason = j.error?.errors?.[0]?.reason || j.error?.status || ''; msg = j.error?.message || ''; } catch {}
+  const th = REASON_TH[reason];
+  return Object.assign(new Error(th || `${prefix} ${r.status}${reason ? ' ' + reason : ''}${msg ? ': ' + msg.slice(0, 160) : ''}`), { status: r.status, reason });
 }
 async function listAll() {
   const out = []; let pageToken = '';
@@ -83,12 +100,18 @@ async function upload(existingId, name, appProperties, body, mime) {
     const r = await gfetch(`${UP}/files${existingId ? '/' + existingId : ''}?uploadType=multipart&fields=id`, { method: existingId ? 'PATCH' : 'POST', body: fd });
     return (await r.json()).id;
   }
-  // big file: resumable upload in one go
-  const r0 = await gfetch(`${UP}/files${existingId ? '/' + existingId : ''}?uploadType=resumable&fields=id`, { method: existingId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': blob.type || 'application/octet-stream', 'X-Upload-Content-Length': String(blob.size) }, body: JSON.stringify(meta) });
-  const loc = r0.headers.get('Location'); if (!loc) throw new Error('resumable: no location');
-  const r = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
-  if (!r.ok) throw new Error('upload ' + r.status);
-  return (await r.json()).id;
+  // big file: resumable upload in one go (a fresh session once more if Google refuses the first)
+  const type = blob.type || mime || 'application/octet-stream';
+  for (let attempt = 0; ; attempt++) {
+    const r0 = await gfetch(`${UP}/files${existingId ? '/' + existingId : ''}?uploadType=resumable&fields=id`, { method: existingId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': type, 'X-Upload-Content-Length': String(blob.size) }, body: JSON.stringify(meta) });
+    const loc = r0.headers.get('Location'); if (!loc) throw new Error('resumable: no location');
+    const tok = readToken();
+    const r = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': type, ...(tok ? { Authorization: 'Bearer ' + tok.t } : {}) }, body: blob });
+    if (r.ok) return (await r.json()).id;
+    const err = await driveError(r, 'upload');
+    if (attempt === 0 && (r.status === 403 || r.status === 429 || r.status >= 500) && !REASON_TH[err.reason]?.includes('เต็ม')) { await new Promise(res => setTimeout(res, 2500)); continue; }
+    throw err;
+  }
 }
 async function remove(fileId) { try { await gfetch(`${API}/files/${fileId}`, { method: 'DELETE' }); } catch (e) { if (!/404/.test(e.message)) throw e; } }
 
@@ -143,7 +166,8 @@ async function doSync(reason) {
     }
     const local = new Map((await db.getAll('notebooks')).map(n => [n.id, n]));
     const tomb = (await db.get('kv', 'sync:deleted'))?.v || {};
-    let pulled = 0, pushed = 0, touchedOpen = false;
+    let pulled = 0, pushed = 0, touchedOpen = false, pdfFailMsg = '';
+    const pdfFails = [];
     const openId = ed?.nb?.id;
     db.setQuiet(true);
     try {
@@ -205,12 +229,18 @@ async function doSync(reason) {
       for (const p of await db.getAll('pages')) if (p.pdf?.id) need.add(p.pdf.id);
       for (const pdfId of need) {
         const l = await db.get('pdfs', pdfId), r = rPdf.get(pdfId);
-        if (l && !r) { setState('syncing', { progress: 'อัปโหลด PDF ' + l.name }); await upload(null, `pdf-${pdfId}.pdf`, { kind: 'pdf', id: pdfId, name: String(l.name || '').slice(0, 100), pages: String(l.pages || 0) }, l.blob, 'application/pdf'); pushed++; }
+        if (l && !r) {
+          setState('syncing', { progress: 'อัปโหลด PDF ' + l.name });
+          // one PDF that Drive refuses must not stop the rest of the sync
+          try { await upload(null, `pdf-${pdfId}.pdf`, { kind: 'pdf', id: pdfId, name: String(l.name || '').slice(0, 100), pages: String(l.pages || 0) }, l.blob, 'application/pdf'); pushed++; }
+          catch (e) { if (e.auth) throw e; pdfFailMsg = 'ส่ง PDF ไม่สำเร็จ: ' + e.message; console.warn('sync pdf', l.name, e); pdfFails.push(`${l.name || 'PDF'} (${((l.blob?.size || 0) / 1048576).toFixed(1)} MB): ${e.message}`); }
+        }
         else if (!l && r) { setState('syncing', { progress: 'ดาวน์โหลด PDF ' + (r.f.appProperties.name || '') }); const blob = await download(r.f.id, true); await db.put('pdfs', { id: pdfId, name: r.f.appProperties.name || 'เอกสาร.pdf', pages: +r.f.appProperties.pages || 0, blob, created: Date.now() }); pulled++; touchedOpen = touchedOpen || !!openId; }
       }
     } finally { db.setQuiet(false); }
     sync.lastSync = Date.now(); prefs.sync.last = sync.lastSync; savePrefs();
-    setState('idle', { error: '', progress: '' });
+    setState('idle', { error: pdfFailMsg, progress: '' });
+    if (pdfFails.length && reason === 'manual') toast('สมุดซิงก์แล้ว แต่ส่ง PDF ไม่ได้ — ' + pdfFails.join(' · '), 7000, 'warn');
     if (pulled) {
       if (app?.library && !ed) app.library.load();
       if (touchedOpen && ed) {
