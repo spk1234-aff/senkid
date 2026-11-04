@@ -14,7 +14,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope } from './sync.js';
 
-export const VERSION = '1.9.17';
+export const VERSION = '1.9.18';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -253,7 +253,8 @@ class App {
 
   openHelp() {
     const sec = (t, ...items) => h('div', {}, h('h3', {}, t), h('ol', {}, ...items.map(i => h('li', { html: i }))));
-    const body = h('div', { class: 'help' },
+    const guide = h('a', { class: 'pill prim', href: new URL('help/student.html', location.href).href, target: '_blank', rel: 'noopener', style: { textDecoration: 'none', justifyContent: 'center', width: '100%', marginBottom: '14px' } }, icon('help'), 'เปิดคู่มือฉบับเต็มสำหรับนักเรียน (มีรูปประกอบ)');
+    const body = h('div', { class: 'help' }, guide,
       sec('ติดตั้งบน iPad (Safari)',
         'เปิดลิงก์ของแอปใน <b>Safari</b>',
         'แตะปุ่ม <b>แชร์</b> (สี่เหลี่ยมมีลูกศรชี้ขึ้น) แล้วเลือก <b>เพิ่มไปยังหน้าจอโฮม</b>',

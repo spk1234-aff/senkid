@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือการใช้งานเส้นคิด สำหรับนักเรียน</title>
+<style>
+@font-face{font-family:"TH Sarabun New";src:url(../fonts/THSarabunNew.woff) format("woff");font-weight:400}
+@font-face{font-family:"TH Sarabun New";src:url(../fonts/THSarabunNew-Bold.woff) format("woff");font-weight:700}
+:root{--acc:#2F5BEA;--ink:#1E2A55;--muted:#5b6275;--line:#E3E0D7;--bg:#FBFAF6;--card:#fff}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:"TH Sarabun New",system-ui,sans-serif;font-size:22px;line-height:1.5;color:#1b1d22;background:var(--bg)}
+header{background:var(--ink);color:#fff;padding:36px 20px 30px}
+header .in{max-width:980px;margin:0 auto}
+header h1{margin:0 0 6px;font-size:46px;line-height:1.1}
+header p{margin:0;font-size:22px;opacity:.85}
+header .ver{font-size:18px;opacity:.6;margin-top:8px}
+nav.toc{max-width:980px;margin:-22px auto 0;padding:0 20px}
+nav.toc .box{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 22px;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+nav.toc b{display:block;margin-bottom:6px;font-size:22px}
+nav.toc ol{margin:0;padding-left:26px;columns:2;column-gap:30px}
+nav.toc li{break-inside:avoid;margin:2px 0}
+nav.toc a{color:var(--acc);text-decoration:none}
+main{max-width:980px;margin:0 auto;padding:20px}
+section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 26px;margin:22px 0}
+h2{font-size:34px;margin:0 0 10px;color:var(--ink);display:flex;align-items:center;gap:12px}
+h2 .n{display:inline-flex;width:40px;height:40px;border-radius:50%;background:var(--acc);color:#fff;align-items:center;justify-content:center;font-size:24px;flex:none}
+h3{font-size:26px;margin:22px 0 6px;color:var(--ink)}
+p{margin:6px 0}
+ol,ul{margin:6px 0 10px;padding-left:28px}
+li{margin:3px 0}
+figure{margin:14px 0 6px}
+figure img{width:100%;height:auto;border:1px solid var(--line);border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);display:block}
+figcaption{font-size:19px;color:var(--muted);margin-top:6px;text-align:center}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:720px){.two{grid-template-columns:1fr}nav.toc ol{columns:1}}
+.tip{background:#FFF4DB;border:1px solid #F1D48A;border-radius:14px;padding:10px 16px;margin:12px 0;color:#5A4300}
+.tip b{color:#5A4300}
+.warn{background:#FDE8E8;border:1px solid #F3B4B4;border-radius:14px;padding:10px 16px;margin:12px 0;color:#7A1F1F}
+kbd{display:inline-block;border:1px solid #c9c9c9;border-bottom-width:2px;border-radius:6px;padding:0 8px;background:#f6f6f6;font-family:inherit;font-size:19px}
+table{border-collapse:collapse;width:100%;margin:8px 0 12px}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+th{background:#F2F1EC}
+footer{max-width:980px;margin:10px auto 40px;padding:0 20px;color:var(--muted);font-size:19px;text-align:center}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 0}
+.btn{display:inline-block;background:var(--acc);color:#fff;text-decoration:none;padding:6px 18px;border-radius:999px;font-weight:700}
+.btn.sec{background:#eee;color:#222}
+@media print{header{background:#fff;color:#000;padding:10px 0}header .ver{display:none}nav.toc,.btnrow{display:none}section{break-inside:avoid;border:0;padding:0;margin:14px 0}figure img{box-shadow:none}body{font-size:18px}}
+</style>
+</head>
+<body>
+<header><div class="in">
+<h1>คู่มือการใช้งาน “เส้นคิด” สำหรับนักเรียน</h1>
+<p>สมุดเขียนด้วยปากกาสำหรับ iPad และแท็บเล็ต · ใช้เรียน จดงาน ทำแบบฝึกหัด และส่งงานให้ครู</p>
+<div class="ver">ฉบับเวอร์ชัน 1.9.17 · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม</div>
+<div class="btnrow"><a class="btn" href="../">เปิดแอปเส้นคิด</a><a class="btn sec" href="javascript:print()">พิมพ์ / บันทึกเป็น PDF</a></div>
+</div></header>
+
+<nav class="toc"><div class="box"><b>สารบัญ</b><ol>
+<li><a href="#install">ติดตั้งและเปิดโหมดนักเรียน</a></li>
+<li><a href="#library">หน้าหลัก: สมุดและโฟลเดอร์</a></li>
+<li><a href="#toolbar">รู้จักแถบเครื่องมือ</a></li>
+<li><a href="#write">การเขียน: ปากกา ไฮไลต์ ยางลบ</a></li>
+<li><a href="#gesture">ท่านิ้วที่ต้องรู้</a></li>
+<li><a href="#select">เลือก ย้าย ย่อขยาย (บ่วงบาศ)</a></li>
+<li><a href="#shapes">รูปทรง ลูกศร และแผนผัง</a></li>
+<li><a href="#insert">แทรกรูป สติกเกอร์ ข้อความ</a></li>
+<li><a href="#math">คณิต: สมการ กราฟ เครื่องคิดเลข</a></li>
+<li><a href="#tools">ไม้บรรทัด ไม้โปรแทรกเตอร์ เลเซอร์</a></li>
+<li><a href="#audio">อัดเสียง</a></li>
+<li><a href="#pages">หน้า: เพิ่ม เลื่อน ซูม แทรก PDF</a></li>
+<li><a href="#submit">ส่งงานให้ครู / ส่งออก PDF</a></li>
+<li><a href="#save">บันทึกและสำรองข้อมูล</a></li>
+<li><a href="#present">โหมดนำเสนอ และย้ายแถบเครื่องมือ</a></li>
+<li><a href="#settings">ตั้งค่า</a></li>
+<li><a href="#faq">คำถามที่พบบ่อย</a></li>
+</ol></div></nav>
+
+<main>
+
+<section id="install">
+<h2><span class="n">1</span>ติดตั้งและเปิดโหมดนักเรียน</h2>
+<ol>
+<li>เปิดลิงก์ของแอปใน <b>Safari</b> (iPad) หรือ <b>Chrome</b> (แท็บเล็ต Android / คอมพิวเตอร์)</li>
+<li>iPad: แตะปุ่ม <b>แชร์</b> (สี่เหลี่ยมมีลูกศรชี้ขึ้น) → <b>เพิ่มไปยังหน้าจอโฮม</b> · Android: เมนู ⋮ → <b>ติดตั้งแอป</b></li>
+<li>เปิดแอปจากไอคอน “เส้นคิด” บนหน้าโฮมทุกครั้ง แอปจะเปิดเต็มจอและใช้ได้แม้ไม่มีอินเทอร์เน็ต</li>
+<li>ครั้งแรกจะมีหน้าแนะนำ แตะ <b>ถัดไป</b> หรือ <b>ข้าม</b></li>
+<li>ที่หน้าหลัก ด้านซ้ายล่างมีสวิตช์ <b>ใช้งานแบบ: ครู / นักเรียน</b> → เลือก <b>นักเรียน</b> แถบเครื่องมือจะเรียบง่ายขึ้น (ซ่อนเครื่องมือที่ครูใช้ เช่น ฉายจอ อัดคลิปวิดีโอ จับเวลา ม่าน)</li>
+</ol>
+<figure><img src="img/00-onboarding.jpg" alt="หน้าแนะนำครั้งแรก"><figcaption>หน้าแนะนำเมื่อเปิดแอปครั้งแรก</figcaption></figure>
+<div class="warn"><b>สำคัญ:</b> ใช้แอปจากไอคอนบนหน้าโฮมเสมอ ถ้าเปิดจาก Safari ธรรมดาแล้วไม่ได้ใช้นาน ๆ Safari อาจลบข้อมูลของเว็บทิ้ง สมุดที่เขียนไว้จะหาย</div>
+</section>
+
+<section id="library">
+<h2><span class="n">2</span>หน้าหลัก: สมุดและโฟลเดอร์</h2>
+<figure><img src="img/01-library.jpg" alt="หน้าหลัก คลังสมุด"><figcaption>หน้าหลัก (คลังสมุด): ซ้ายคือรายการโฟลเดอร์ กลางคือสมุดทั้งหมด</figcaption></figure>
+<h3>สร้างสมุดใหม่</h3>
+<ol>
+<li>แตะ <b>+ สมุดใหม่</b> ตั้งชื่อ (เช่น “คณิตศาสตร์ ม.2”)</li>
+<li>เลือก <b>พื้นหลัง</b> (เปล่า / เส้น / ตาราง / จุด) <b>ขนาด</b> (A4 แนวตั้ง / แนวนอน) <b>สีกระดาษ</b> และ <b>สีปก</b></li>
+<li>แตะ <b>สร้างและเริ่มเขียน</b></li>
+</ol>
+<figure><img src="img/03-new-notebook.jpg" alt="สร้างสมุดใหม่"><figcaption>หน้าต่างสร้างสมุดใหม่</figcaption></figure>
+<h3>จัดการสมุด</h3>
+<p>แตะ <b>⋯</b> มุมขวาของสมุด (หรือกดค้างที่สมุด) จะมีเมนู <b>เปลี่ยนชื่อ · ย้ายไปโฟลเดอร์ · ทำสำเนา · บันทึกเป็นไฟล์ในเครื่อง · ลบสมุด</b></p>
+<h3>โฟลเดอร์</h3>
+<p>แตะ <b>+ โฟลเดอร์ใหม่</b> ด้านซ้าย เพื่อจัดกลุ่มสมุดตามวิชา แตะ ⋯ ที่โฟลเดอร์เพื่อเปลี่ยนชื่อ/สี/ลบ (ลบโฟลเดอร์ สมุดข้างในไม่หาย)</p>
+<h3>เปิดไฟล์</h3>
+<p>แตะ <b>เปิดไฟล์ / PDF</b> เพื่อเปิดไฟล์ PDF ที่ครูส่งให้มาเขียนทับ (เช่น ใบงาน แบบฝึกหัด) หรือเปิดไฟล์สมุด .senkid.json ที่เคยสำรองไว้</p>
+<figure><img src="img/02-library-menu.jpg" alt="เมนูเพิ่มเติมหน้าหลัก"><figcaption>เมนู ⋯ ที่หน้าหลัก: สำรองสมุดทั้งหมด เปิดไฟล์ คลิปที่อัดไว้ ตั้งค่า สลับโหมดครู/นักเรียน และวิธีใช้</figcaption></figure>
+</section>
+
+<section id="toolbar">
+<h2><span class="n">3</span>รู้จักแถบเครื่องมือ</h2>
+<figure><img src="img/05-toolbar.jpg" alt="แถบเครื่องมือ"><figcaption>แถวบน: เครื่องมือหลัก · แถวล่าง: ตัวเลือกของเครื่องมือที่กำลังใช้ (ชนิดปากกา รูปแบบเส้น ขนาด สี)</figcaption></figure>
+<table>
+<tr><th style="width:34%">ปุ่ม (ซ้าย → ขวา)</th><th>ทำอะไร</th></tr>
+<tr><td>🏠 คลังสมุด · แท็บชื่อสมุด</td><td>กลับหน้าหลัก · สลับสมุดที่เปิดอยู่ · ✕ ปิดแท็บ</td></tr>
+<tr><td>ภาพย่อหน้า · พอดีหน้าจอ</td><td>เปิดแถบภาพย่อของทุกหน้าเพื่อกระโดดไปหน้าที่ต้องการ · ซูมให้เห็นทั้งหน้า</td></tr>
+<tr><td>ปากกา · ไฮไลต์ · ยางลบ</td><td>เครื่องมือเขียนหลัก (ดูข้อ 4)</td></tr>
+<tr><td>รูปทรงและลูกศร</td><td>วาดกล่อง วงกลม ลูกศร เส้นเชื่อม สำหรับทำแผนผัง (ข้อ 7)</td></tr>
+<tr><td>สติกเกอร์</td><td>แปะสติกเกอร์ข้อความและอีโมจิ (ข้อ 8)</td></tr>
+<tr><td>คณิต</td><td>แทรกสมการ กราฟ ไม้โปรแทรกเตอร์ วงเวียน (ข้อ 9)</td></tr>
+<tr><td>เครื่องคิดเลข · ไม้บรรทัด</td><td>เครื่องคิดเลขวิทยาศาสตร์ · ไม้บรรทัดวางบนกระดาษ (ข้อ 9–10)</td></tr>
+<tr><td>บ่วงบาศ</td><td>วงล้อมสิ่งที่เขียนเพื่อย้าย ย่อขยาย หมุน คัดลอก ลบ (ข้อ 6)</td></tr>
+<tr><td>แทรกรูปภาพ · กล่องข้อความ</td><td>ใส่รูปจากเครื่อง · พิมพ์ข้อความ (ข้อ 8)</td></tr>
+<tr><td>เลเซอร์พอยเตอร์</td><td>ชี้จุดบนกระดาษโดยไม่ทิ้งรอย</td></tr>
+<tr><td>อัดเสียง</td><td>อัดเสียงอธิบายผูกกับสมุดเล่มนี้ (ข้อ 11)</td></tr>
+<tr><td>เพิ่มหน้า · บันทึก · ส่งออก · ⋯ · ซ่อนแถบ</td><td>เพิ่มหน้า/แทรก PDF · บันทึกเป็นไฟล์ · ส่งงาน/ส่งออก PDF · เมนูเพิ่มเติม · โหมดนำเสนอ</td></tr>
+</table>
+<div class="tip"><b>เคล็ดลับ:</b> วางนิ้วค้างบนปุ่มไหนก็ได้ จะมีคำอธิบายสั้น ๆ ขึ้นมา</div>
+</section>
+
+<section id="write">
+<h2><span class="n">4</span>การเขียน: ปากกา ไฮไลต์ ยางลบ</h2>
+<p>ใช้ <b>ปากกา (Apple Pencil / สไตลัส)</b> เขียน ส่วน <b>นิ้ว</b> ใช้เลื่อนหน้าและซูม วางมือบนจอขณะเขียนได้ ไม่เป็นรอย</p>
+<h3>ปากกา</h3>
+<ul>
+<li>แถวล่างเลือก <b>ชนิดปากกา</b> 5 แบบ: หมึกซึม (หนาบางตามน้ำหนัก) · ลูกลื่น (เส้นสม่ำเสมอ) · ดินสอ · พู่กัน · มาร์กเกอร์</li>
+<li><b>รูปแบบเส้น</b>: ทึบ / ประ / จุด</li>
+<li><b>ขนาด</b> 5 ระดับ และ <b>สี</b> 8 สีโปรด แตะ 🌈 เพื่อเลือกสีอื่น</li>
+<li>แตะปากกาที่เลือกอยู่ <b>ซ้ำอีกครั้ง</b> จะเปิดแผงตั้งค่าเต็ม: วงล้อสี ความเข้ม ขนาดละเอียด และขนาดลัด</li>
+</ul>
+<figure><img src="img/06-pen-panel.jpg" alt="แผงตั้งค่าปากกา"><figcaption>แผงตั้งค่าปากกา (แตะปุ่มปากกาที่เลือกอยู่ซ้ำ)</figcaption></figure>
+<h3>แก้ไข/เรียงสีโปรด</h3>
+<p>แตะปุ่ม <b>✎</b> ท้ายแถวสี: ลากสีเพื่อเรียงลำดับ แตะสีเพื่อแก้ (วงล้อหรือรหัสสี) <b>×</b> ลบ <b>+</b> เพิ่ม และ “คืนค่าสีเริ่มต้น”</p>
+<figure><img src="img/07-colour-manager.jpg" alt="จัดการสี"><figcaption>หน้าจัดการสีโปรด</figcaption></figure>
+<h3>ไฮไลต์</h3>
+<p>เส้นโปร่งใสสำหรับเน้นข้อความ มีสีโปรดแยกจากปากกา เปิด <b>เส้นตรง</b> ในแผงตั้งค่าเพื่อให้ไฮไลต์เป็นแถบตรงเสมอ</p>
+<figure><img src="img/08-highlighter.jpg" alt="แถบไฮไลต์"><figcaption>แถบตัวเลือกไฮไลต์</figcaption></figure>
+<h3>ยางลบ</h3>
+<ul>
+<li><b>ลบทั้งเส้น</b>: แตะโดนเส้นไหน เส้นนั้นหายทั้งเส้น (เร็ว เหมาะกับลบตัวหนังสือ)</li>
+<li><b>ถู (ลบส่วนที่โดน)</b>: ลบเฉพาะบริเวณที่ถู ปรับขนาดได้</li>
+<li><b>ขีดฆ่าเพื่อลบ</b>: ไม่ต้องเปลี่ยนเครื่องมือ แค่ใช้ปากกาขีดไปมาซ้ำ ๆ ทับสิ่งที่ต้องการลบ (ปิดได้ในตั้งค่า)</li>
+</ul>
+<figure><img src="img/09-eraser.jpg" alt="แผงยางลบ"><figcaption>แผงยางลบ: โหมดและขนาด</figcaption></figure>
+<h3>วาดเส้นตรงและรูปทรงอัตโนมัติ</h3>
+<p>ขีดเส้นแล้ว <b>กดปากกาค้างไว้ครึ่งวินาที</b> ก่อนยก เส้นจะกลายเป็นเส้นตรง หรือรูปทรงสวย ๆ (วงกลม สี่เหลี่ยม สามเหลี่ยม ลูกศร) ตามที่วาด ถ้าอยากได้เส้นโค้งจริง ๆ ยกปากกาทันทีไม่ต้องค้าง</p>
+<figure><img src="img/10-ink.jpg" alt="ตัวอย่างการเขียน"><figcaption>เส้นมือเปล่า และรูปสี่เหลี่ยมที่ได้จากการกดค้าง</figcaption></figure>
+</section>
+
+<section id="gesture">
+<h2><span class="n">5</span>ท่านิ้วที่ต้องรู้</h2>
+<table>
+<tr><th style="width:40%">ท่า</th><th>ผล</th></tr>
+<tr><td>นิ้วเดียวลาก</td><td>เลื่อนหน้า</td></tr>
+<tr><td>สองนิ้วบีบ/ถ่าง</td><td>ซูมเข้า–ออก (บีบจนสุดจะพอดีหน้าจอ)</td></tr>
+<tr><td><b>แตะจอด้วย 2 นิ้ว</b></td><td><b>ย้อนกลับ (Undo)</b></td></tr>
+<tr><td><b>แตะจอด้วย 3 นิ้ว</b></td><td><b>ทำซ้ำ (Redo)</b></td></tr>
+<tr><td>แตะรูป/สติกเกอร์/ข้อความ 1 ครั้ง</td><td>เลือกวัตถุนั้น (มีจุดมุมย่อขยาย จุดหมุน และเมนู)</td></tr>
+<tr><td>สองนิ้วบนวัตถุที่เลือกอยู่</td><td>บีบ = ย่อขยาย · บิด = หมุน</td></tr>
+<tr><td>แตะเส้นรูปทรงที่วาดไว้</td><td>เปิดแถบแก้รูปทรง (สี เติมสี มุมมน)</td></tr>
+<tr><td>ปากกาแตะกระดาษสั้น ๆ ตอนใช้กล่องข้อความ</td><td>สร้างกล่องข้อความใหม่ตรงนั้น</td></tr>
+</table>
+<div class="tip">เครื่องที่ไม่มีปากกา: เปิด <b>เขียนด้วยนิ้ว</b> ในตั้งค่า แล้วใช้นิ้วเขียนได้ (เลื่อนหน้าด้วยสองนิ้วแทน)</div>
+</section>
+
+<section id="select">
+<h2><span class="n">6</span>เลือก ย้าย ย่อขยาย (บ่วงบาศ)</h2>
+<ol>
+<li>แตะเครื่องมือ <b>บ่วงบาศ</b> แล้วใช้ปากกาวาดวงล้อมสิ่งที่ต้องการ (เส้น รูป ข้อความ ได้หลายอย่างพร้อมกัน)</li>
+<li>ลากข้างในกรอบเพื่อ <b>ย้าย</b> · ลากจุดมุมเพื่อ <b>ย่อขยาย</b> · ลากจุดด้านบนเพื่อ <b>หมุน</b></li>
+<li>แถบด้านบนมี <b>เปลี่ยนสี · ทำสำเนา · คัดลอก · ตัด · ลบ · เสร็จ</b> (คัดลอกแล้วไปวางหน้าอื่นได้จากปุ่ม “วาง”)</li>
+</ol>
+<figure><img src="img/11-lasso.jpg" alt="บ่วงบาศ"><figcaption>เลือกด้วยบ่วงบาศ: กรอบเลือกพร้อมจุดย่อขยายและจุดหมุน</figcaption></figure>
+</section>
+
+<section id="shapes">
+<h2><span class="n">7</span>รูปทรง ลูกศร และแผนผัง</h2>
+<p>แตะ <b>รูปทรงและลูกศร</b> แถวล่างจะมีแบบให้เลือก: เส้นตรง ลูกศร ลูกศรหักมุม เส้นโค้ง สี่เหลี่ยม วงกลม สามเหลี่ยม ข้าวหลามตัด แคปซูล และ <b>มุมมน</b> วาดด้วยปากกาจากมุมหนึ่งไปอีกมุม เหมาะกับทำ Mind map / แผนผังโยงความสัมพันธ์</p>
+<figure><img src="img/12-shapes-tool.jpg" alt="เครื่องมือรูปทรง"><figcaption>แถบเครื่องมือรูปทรงและลูกศร</figcaption></figure>
+<p>รูปทรงที่วาดแล้ว <b>แตะที่เส้น 1 ครั้ง</b> จะเปิดแถบแก้ไข: สีเส้น · <b>พื้นที่</b> (ไม่เติม / สี / อ่อน–กลาง–เข้ม) · มุมมน · ทำสำเนา · ลบ</p>
+<figure><img src="img/13-shape-edit.jpg" alt="แก้รูปทรง"><figcaption>แถบแก้ไขรูปทรง หลังแตะที่รูปสี่เหลี่ยม</figcaption></figure>
+</section>
+
+<section id="insert">
+<h2><span class="n">8</span>แทรกรูป สติกเกอร์ ข้อความ</h2>
+<h3>รูปภาพ</h3>
+<p>แตะ <b>แทรกรูปภาพ</b> เลือกรูปจากคลังภาพ รูปจะวางกลางหน้าพร้อมกรอบเลือก: ลากมุม = ย่อขยาย · จุดบน = หมุน · <b>ครอป/ตัด</b> = ตัดรูปเฉพาะส่วน (ตัดเป็นรูปร่างอิสระได้) · <b>ไว้หลังสุด</b> = ส่งรูปไปอยู่ใต้ลายมือ · คัดลอก · ทำสำเนา · ลบ</p>
+<figure><img src="img/15-image.jpg" alt="แทรกรูป"><figcaption>รูปที่แทรกพร้อมแถบจัดการรูป</figcaption></figure>
+<h3>สติกเกอร์</h3>
+<p>แตะ <b>สติกเกอร์</b> เลือกป้ายข้อความ (เก่งมาก! ยอดเยี่ยม ฯลฯ) หรืออีโมจิตามหมวด (คน สัตว์ สิ่งของ สถานที่) วางแล้ว <b>แตะสติกเกอร์</b> เพื่อย่อขยาย หมุน หรือลบ</p>
+<figure><img src="img/14-stickers.jpg" alt="สติกเกอร์"><figcaption>แผงสติกเกอร์</figcaption></figure>
+<h3>กล่องข้อความ</h3>
+<p>แตะ <b>T</b> แล้วแตะบนกระดาษเพื่อพิมพ์ แถวล่างปรับ <b>ขนาด</b> <b>ตัวหนา</b> และ <b>สี</b> แตะข้อความที่พิมพ์แล้วเพื่อแก้ ย้าย ย่อขยาย หมุน</p>
+<figure><img src="img/16-text.jpg" alt="กล่องข้อความ"><figcaption>กล่องข้อความและแถบตัวเลือก</figcaption></figure>
+</section>
+
+<section id="math">
+<h2><span class="n">9</span>คณิต: สมการ กราฟ เครื่องคิดเลข</h2>
+<p>ปุ่ม <b>คณิต</b> มีเมนู: เครื่องคิดเลขวิทยาศาสตร์ · แทรกสมการ (LaTeX) · แทรกกราฟ / ระบบพิกัด / เส้นจำนวน · ไม้โปรแทรกเตอร์ · ไม้บรรทัด · วงเวียน</p>
+<figure><img src="img/17-math-menu.jpg" alt="เมนูคณิต"><figcaption>เมนูคณิต</figcaption></figure>
+<h3>สมการ</h3>
+<p>พิมพ์แบบ LaTeX เช่น <kbd>\frac{a}{b}</kbd> <kbd>\sqrt{x}</kbd> <kbd>x^2</kbd> <kbd>\pi</kbd> มีปุ่มสัญลักษณ์ช่วยกด ดูตัวอย่างสด เลือกสีและขนาดแล้วกด <b>แทรก</b> สมการจะเป็นวัตถุที่ย้าย/ย่อขยาย และ “แก้สมการ” ได้ภายหลัง</p>
+<figure><img src="img/18-equation.jpg" alt="แทรกสมการ"><figcaption>หน้าต่างแทรกสมการ</figcaption></figure>
+<h3>กราฟ / เส้นจำนวน</h3>
+<p>ใส่ช่วงแกน x, y และฟังก์ชัน y = … ได้ถึง 3 ฟังก์ชัน (เช่น <kbd>x^2-3</kbd> <kbd>2sin(x)</kbd>) จุดบนแกน x ใส่เป็น <kbd>-2, 1.5, 3o</kbd> (o = จุดโปร่ง) หรือสลับเป็น <b>เส้นจำนวน</b> แทรกแล้วแก้ได้จากปุ่ม “แก้กราฟ”</p>
+<figure><img src="img/19-graph.jpg" alt="แทรกกราฟ"><figcaption>หน้าต่างแทรกกราฟ</figcaption></figure>
+<h3>เครื่องคิดเลขวิทยาศาสตร์</h3>
+<p>แตะปุ่ม <b>เครื่องคิดเลข</b> หน้าต่างลอยลากย้ายได้ มี sin cos tan log ln √ x² xʸ ! π e และหน่วยองศา/เรเดียน ปุ่ม <b>วางลงหน้า</b> จะแทรกผลลัพธ์ลงกระดาษเป็นข้อความ</p>
+<figure><img src="img/21-calculator.jpg" alt="เครื่องคิดเลข"><figcaption>เครื่องคิดเลขวิทยาศาสตร์</figcaption></figure>
+</section>
+
+<section id="tools">
+<h2><span class="n">10</span>ไม้บรรทัด ไม้โปรแทรกเตอร์ เลเซอร์</h2>
+<ul>
+<li><b>ไม้บรรทัด</b>: ใช้นิ้วลากย้าย สองนิ้วหมุน ลากปากกาชิดขอบจะได้เส้นตรงตามไม้บรรทัด แตะปุ่มซ้ำเพื่อเก็บ</li>
+<li><b>ไม้โปรแทรกเตอร์</b> (ในเมนูคณิต): จุดกลางขอบล่างคือจุดยอดมุม อ่านองศาได้สองทิศ</li>
+<li><b>วงเวียน</b> (ในเมนูคณิต): ลากจากจุดศูนย์กลางออกไปเพื่อวาดส่วนโค้ง/วงกลม</li>
+<li><b>เลเซอร์พอยเตอร์</b>: ชี้ให้เพื่อนดูโดยไม่ทิ้งรอย เลือกแบบเส้นหาง/จุด สี และขนาดได้ที่แถวล่าง</li>
+</ul>
+<figure><img src="img/20-ruler-protractor.jpg" alt="ไม้บรรทัดและไม้โปรแทรกเตอร์"><figcaption>ไม้บรรทัดและไม้โปรแทรกเตอร์บนกระดาษ</figcaption></figure>
+</section>
+
+<section id="audio">
+<h2><span class="n">11</span>อัดเสียง</h2>
+<p>แตะปุ่ม <b>ไมค์</b> เพื่ออัดเสียงอธิบาย (เช่น อธิบายวิธีทำโจทย์ส่งครู) แตะซ้ำเพื่อหยุดชั่วคราวหรือหยุด เสียงจะผูกกับสมุดเล่มนี้ เปิดฟัง ดาวน์โหลด หรือแชร์ได้ที่ปุ่ม <b>ส่งออก → เสียงที่อัดในสมุดเล่มนี้</b></p>
+<figure><img src="img/23-audio.jpg" alt="ปุ่มอัดเสียง"><figcaption>ปุ่มไมค์อยู่ทางขวาของแถบเครื่องมือ</figcaption></figure>
+<div class="tip">ครั้งแรกระบบจะขออนุญาตใช้ไมโครโฟน ให้กด <b>อนุญาต</b> ถ้าเผลอกดไม่อนุญาต ไปที่ การตั้งค่า iPad → Safari → ไมโครโฟน</div>
+</section>
+
+<section id="pages">
+<h2><span class="n">12</span>หน้า: เพิ่ม เลื่อน ซูม แทรก PDF</h2>
+<ul>
+<li><b>เพิ่มหน้า</b>: เลือกพื้นหลังและขนาด แล้ว “เพิ่มต่อจากหน้านี้” หรือ “เพิ่มไว้ท้ายสมุด” · <b>แทรกไฟล์ PDF ต่อจากหน้านี้</b> ใช้เอาใบงานของครูมาเขียนทับ</li>
+<li>เลื่อนหน้าด้วยนิ้ว มุมล่างซ้ายบอก “หน้า x / y”</li>
+<li><b>ภาพย่อหน้า</b>: เปิดแถบซ้ายเห็นทุกหน้า แตะเพื่อไป กดค้างเพื่อย้ายลำดับ มีปุ่มเพิ่ม/ทำสำเนา/ลบหน้า</li>
+<li><b>แสดง 2 หน้าคู่</b> (ตั้งค่า) เหมาะกับจอใหญ่หรือแนวนอน</li>
+</ul>
+<div class="two">
+<figure><img src="img/24-add-page.jpg" alt="เพิ่มหน้า"><figcaption>เมนูเพิ่มหน้า / แทรก PDF</figcaption></figure>
+<figure><img src="img/25-thumbs.jpg" alt="ภาพย่อหน้า"><figcaption>แถบภาพย่อหน้า</figcaption></figure>
+</div>
+</section>
+
+<section id="submit">
+<h2><span class="n">13</span>ส่งงานให้ครู / ส่งออก PDF</h2>
+<ol>
+<li>แตะปุ่ม <b>ส่งออก</b> (ลูกศรชี้ขึ้น) → <b>ส่งงานให้ครู</b></li>
+<li>เลือกหน้าที่จะส่ง: แตะภาพย่อทีละหน้า หรือพิมพ์ช่วง เช่น <kbd>1-3, 5</kbd> · เปิด/ปิด “รวมพื้นกระดาษ (เส้น/ตาราง)”</li>
+<li>แตะ <b>ส่งงานให้ครู</b> จะได้ไฟล์ PDF พร้อมหน้าต่างแชร์ของ iPad → เลือกส่งทาง Google Classroom, LINE, AirDrop หรือบันทึกไปยังไฟล์</li>
+</ol>
+<p>เมนูเดียวกันมี <b>ส่งออกเป็น PDF</b> (เก็บไว้เอง/พิมพ์) และ <b>เสียงที่อัดในสมุดเล่มนี้</b></p>
+<div class="two">
+<figure><img src="img/26-export-menu.jpg" alt="เมนูส่งออก"><figcaption>เมนูส่งออกในโหมดนักเรียน</figcaption></figure>
+<figure><img src="img/27-submit.jpg" alt="ส่งงานให้ครู"><figcaption>เลือกหน้าที่จะส่ง</figcaption></figure>
+</div>
+<div class="tip">PDF ทุกหน้ามีบรรทัดเล็ก ๆ ที่มุมล่างระบุว่าสร้างด้วยเส้นคิด เป็นเครดิตผู้พัฒนา ลบออกไม่ได้ ไม่กระทบเนื้อหางาน</div>
+</section>
+
+<section id="save">
+<h2><span class="n">14</span>บันทึกและสำรองข้อมูล</h2>
+<ul>
+<li>แอป<b>บันทึกให้อัตโนมัติ</b>ทุกครั้งที่เขียน ไม่ต้องกดบันทึก เปิดแอปครั้งต่อไปจะอยู่ที่หน้าเดิม</li>
+<li>สมุดเก็บอยู่ใน<b>เครื่องนี้เท่านั้น</b> ถ้าเปลี่ยนเครื่องหรือล้างเครื่อง ต้องมีไฟล์สำรอง</li>
+<li><b>บันทึกเป็นไฟล์ในเครื่อง</b> (ปุ่มรูปแผ่นดิสก์): เก็บสมุดเล่มนี้เป็นไฟล์ .senkid.json ลงใน “ไฟล์” / iCloud Drive · จุดเหลืองบนปุ่ม = มีส่วนที่ยังไม่ได้บันทึกลงไฟล์</li>
+<li><b>สำรองสมุดทั้งหมด</b> (เมนู ⋯ หน้าหลัก): ได้ไฟล์เดียวรวมทุกเล่ม ควรทำเป็นระยะ เช่น ทุกสัปดาห์</li>
+<li><b>เปิดไฟล์</b> ที่หน้าหลัก เพื่อนำสมุดหรือไฟล์สำรองกลับมาเขียนต่อ</li>
+</ul>
+<figure><img src="img/29-save-file.jpg" alt="บันทึกเป็นไฟล์"><figcaption>ตัวเลือกบันทึกเป็นไฟล์ในเครื่อง</figcaption></figure>
+<div class="warn">การ “สำรองสมุดทั้งหมด” ไม่รวมเสียงที่อัด ถ้าต้องการเก็บเสียง ให้ดาวน์โหลดจากหน้าเสียงที่อัดไว้</div>
+</section>
+
+<section id="present">
+<h2><span class="n">15</span>โหมดนำเสนอ และย้ายแถบเครื่องมือ</h2>
+<ul>
+<li>แตะ <b>ซ่อนแถบเครื่องมือ</b> (ปุ่ม ˄ ขวาสุด) เพื่อเข้าโหมดนำเสนอ: กระดาษเต็มจอ เหลือแถบเล็กที่มีเครื่องมือครบ ลากไปวางตรงไหนก็ได้ ชิดขอบซ้าย/ขวาจะเป็นแผงแนวตั้ง · แตะ <b>×</b> เพื่อออก</li>
+<li>ในโหมดปกติ <b>แถบเครื่องมือแถวล่าง</b> ก็ลากย้ายได้: จับที่ ‖ ซ้ายสุดหรือลากตัวแถบ ชิดขอบซ้าย/ขวาจะตั้งเป็นแนวตั้ง ลากกลับไปวางกลางด้านบนเพื่อคืนที่เดิม</li>
+<li>ตั้งค่า → ตำแหน่งแถวบน (บน / ซ้าย / ขวา) ตามถนัดมือ</li>
+</ul>
+<figure><img src="img/30-present.jpg" alt="โหมดนำเสนอ"><figcaption>โหมดนำเสนอ: แถบเล็กลากย้ายได้ มีเครื่องมือครบ</figcaption></figure>
+</section>
+
+<section id="settings">
+<h2><span class="n">16</span>ตั้งค่า</h2>
+<p>เมนู <b>⋯ → ตั้งค่าทั้งหมด</b> ที่ควรรู้:</p>
+<ul>
+<li><b>ธีม</b> สว่าง/มืด · <b>ฟอนต์ของแอป</b> · <b>ตำแหน่งแถบเครื่องมือ</b></li>
+<li><b>เขียนด้วยนิ้ว</b> (เครื่องไม่มีปากกา) · <b>แปลงเป็นรูปทรงอัตโนมัติ</b> · <b>ขีดฆ่าเพื่อลบ</b> · <b>เติมสีรูปทรง</b></li>
+<li><b>แสดง 2 หน้าคู่</b> · <b>โหมดประหยัด</b> (เครื่องรุ่นเก่า ลื่นขึ้น)</li>
+<li><b>ใช้งานแบบ ครู/นักเรียน</b></li>
+<li><b>ข้อมูล</b>: ดูพื้นที่ที่ใช้ และปุ่มสำรอง</li>
+</ul>
+<figure><img src="img/31-settings.jpg" alt="ตั้งค่า"><figcaption>หน้าตั้งค่า</figcaption></figure>
+<p>เมนู ⋯ ในสมุดยังมี <b>พอดีหน้าจอ · ส่งออก PDF · เพิ่มหน้า · ส่งงานให้ครู · วิธีใช้</b></p>
+<figure><img src="img/28-more.jpg" alt="เมนูเพิ่มเติม"><figcaption>เมนู ⋯ ในสมุด</figcaption></figure>
+</section>
+
+<section id="faq">
+<h2><span class="n">17</span>คำถามที่พบบ่อย</h2>
+<p><b>เขียนแล้วไม่ติด / นิ้วเขียนไม่ได้</b> — ปกติแอปให้ปากกาเขียน นิ้วเลื่อน ถ้าไม่มีปากกา เปิด “เขียนด้วยนิ้ว” ในตั้งค่า</p>
+<p><b>เผลอลบ/เขียนผิด</b> — แตะจอด้วย 2 นิ้ว (ย้อนกลับ) ทำได้หลายครั้ง</p>
+<p><b>รูป/สติกเกอร์ย่อขยายไม่ได้</b> — แตะที่รูป 1 ครั้งให้ขึ้นกรอบก่อน แล้วลากจุดมุม หรือใช้สองนิ้วบีบบนรูป</p>
+<p><b>อยากเขียนทับใบงานของครู</b> — ขอไฟล์ PDF จากครู แล้วเปิดด้วย “เปิดไฟล์ / PDF” หรือ “เพิ่มหน้า → แทรกไฟล์ PDF”</p>
+<p><b>เปลี่ยน iPad / ลงเครื่องใหม่</b> — ก่อนเปลี่ยน กด “สำรองสมุดทั้งหมด” เก็บไฟล์ไว้ใน iCloud แล้วไปเปิดไฟล์ในเครื่องใหม่</p>
+<p><b>แอปช้าเมื่อหน้าเยอะ</b> — เปิด “โหมดประหยัด” ในตั้งค่า หรือแยกสมุดเป็นหลายเล่มตามบท</p>
+<p><b>ส่งงานแล้วครูเปิดไม่ได้</b> — ไฟล์ที่ส่งเป็น PDF มาตรฐาน เปิดได้ทุกเครื่อง ตรวจว่าแชร์ไฟล์ครบและไม่ได้ส่งเป็นไฟล์ .json (ไฟล์นั้นคือไฟล์สำรอง ใช้เปิดในเส้นคิดเท่านั้น)</p>
+</section>
+
+</main>
+<footer>เส้นคิด · สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม · คู่มือนี้ปรับปรุงตามเวอร์ชันล่าสุดของแอป</footer>
+</body>
+</html>
