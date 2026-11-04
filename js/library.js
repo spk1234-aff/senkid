@@ -53,7 +53,7 @@ export class Library {
     const mode = h('div', { class: 'modesw' }, h('div', { class: 'lbl' }, 'ใช้งานแบบ'),
       seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', v => { prefs.studentUI = v === 's'; savePrefs(); toast(prefs.studentUI ? 'โหมดนักเรียน: ซ่อนเครื่องมือฉายจอ อัดคลิป จับเวลา และม่าน' : 'โหมดครู: แสดงเครื่องมือครบ', 2200); }));
     const sp = h('button', { class: 'fold syncpill' }, icon('cloud'), h('span', {}, ''));
-    const paint = () => { sp.lastChild.textContent = statusText(); sp.classList.toggle('busy', sync.state === 'syncing'); sp.classList.toggle('warn', sync.state === 'auth' || sync.state === 'error'); };
+    const paint = () => { sp.lastChild.textContent = statusText(); sp.classList.toggle('spin', sync.state === 'syncing'); sp.classList.toggle('warn', sync.state === 'auth' || sync.state === 'error'); };
     sp.onclick = () => { if (!connected()) this.app.openSettings(); else if (sync.state === 'auth') signIn(); else syncNow('manual'); };
     paint(); this._unsync?.(); this._unsync = sync.on(paint);
     side.append(mode, sp, hp, st);

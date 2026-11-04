@@ -593,5 +593,5 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .cx-k.k2nd.on{background:#A5A5A5;color:#000}
 .cx-head span,.cx-hb{white-space:nowrap}.calc:not(.sci) .cx-title,.calc:not(.sci) .cx-putl{display:none}
 
-.syncpill{color:var(--muted)}.syncpill.busy svg.i{animation:spin 1.2s linear infinite}.syncpill.warn{color:#D64545}
+.syncpill{color:var(--muted)}.syncpill.spin svg.i{animation:spin 1.2s linear infinite}.syncpill.warn{color:#D64545}
 @keyframes spin{to{transform:rotate(360deg)}}
