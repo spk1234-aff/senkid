@@ -5,7 +5,7 @@ import { prefs, savePrefs, applyTheme } from './prefs.js';
 import * as db from './db.js';
 import { Library } from './library.js';
 import { Editor } from './editor.js';
-import { Recorder, AudioRecorder, openRecordings, canRecord, pickMime } from './recorder.js';
+import { Recorder, AudioRecorder, openRecordings, canRecord, pickMime, uploadPendingRecordings } from './recorder.js';
 import { STRIDE } from './render.js';
 import { buildBackup, openNotebookFile, saveNotebookFile } from './files.js';
 import { importPdf } from './pdfdoc.js';
@@ -14,7 +14,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope } from './sync.js';
 
-export const VERSION = '1.9.9';
+export const VERSION = '1.9.10';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -47,7 +47,7 @@ class App {
     catch (e) { console.error(e); prefs.lastOpen = null; savePrefs(); try { await this.openLibrary(); } catch { } toast('เปิดสมุดล่าสุดไม่สำเร็จ จึงกลับมาหน้าแรก', 3500, 'warn'); }
     finally { document.getElementById('boot')?.remove(); }
     if (!prefs.onboarded) this.onboarding();
-    initSync(this).catch(e => console.warn('sync init', e));
+    initSync(this).catch(e => console.warn('sync init', e)).finally(() => { setTimeout(uploadPendingRecordings, 8000); window.addEventListener('online', () => setTimeout(uploadPendingRecordings, 3000)); });
     if (location.hash === '#from-app') this.receiveFromApp();
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       const had = !!navigator.serviceWorker.controller, t0 = performance.now();

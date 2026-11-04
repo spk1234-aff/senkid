@@ -102,7 +102,7 @@ export class Recorder {
     freeSpace().then(v => { freeB = v; upd(); }); upd();
     const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
     body.append(h('div', { style: { height: '6px' } }),
-      row('เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
+      row('เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); if (v) uploadPendingRecordings(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
       row('เตือนเมื่ออัดนานเกิน 25 นาที', toggle(prefs.rec.warn25, v => { prefs.rec.warn25 = v; savePrefs(); })),
       row('รูปแบบไฟล์', h('span', { style: { color: 'var(--muted)' } }, mime ? (mime.includes('mp4') ? 'MP4' : 'WebM (เครื่องนี้ไม่รองรับ MP4)') : 'ค่าเริ่มต้นของเบราว์เซอร์')),
       row('ให้นาฬิกาจับเวลาติดไปในคลิป', toggle(this.app.timer.s.inClip, v => { this.app.timer.s.inClip = v; this.app.timer.save(); })));
@@ -289,10 +289,11 @@ export class AudioRecorder {
 }
 
 // after recording: push to Drive and free the space on this device
-export async function maybeUpload(meta) {
+export async function maybeUpload(meta, quiet) {
   if (!syncOn() || prefs.rec.toDrive === false || !meta.done || meta.drive) return null;
+  if (quiet && !hasFileScope()) return null;
   if (!hasFileScope()) { toast('ต้องเชื่อมต่อ Google ใหม่เพื่ออนุญาตเก็บคลิปใน Drive (ตั้งค่า > ซิงก์ > เชื่อมต่อใหม่) · คลิปนี้เก็บไว้ในเครื่องก่อน', 5000, 'warn'); return; }
-  const bz = busy('กำลังส่งคลิปขึ้น Google Drive…', fmtBytes(meta.size), 0);
+  const bz = quiet ? { set() {}, done() {} } : busy('กำลังส่งคลิปขึ้น Google Drive…', fmtBytes(meta.size), 0);
   try {
     const blob = await recBlob(meta);
     try {
@@ -300,11 +301,27 @@ export async function maybeUpload(meta) {
     meta.drive = r.id; meta.link = r.webViewLink; meta.size = blob.size; meta.mime = blob.type;
     await db.put('recs', meta);
     await db.deleteRec(meta.id); await db.put('recs', meta); // drop the local chunks, keep the record
-    toast('เก็บคลิปใน Google Drive แล้ว (โฟลเดอร์ เส้นคิด/คลิป) · ไม่กินพื้นที่เครื่อง', 3500);
+    if (!quiet) toast('เก็บคลิปใน Google Drive แล้ว (โฟลเดอร์ เส้นคิด/คลิป) · ไม่กินพื้นที่เครื่อง', 3500);
     return blob;
     } catch (e) { e._blob = blob; throw e; }
-  } catch (e) { console.warn(e); toast('ส่งขึ้น Drive ไม่สำเร็จ (' + (e.auth ? 'ต้องเชื่อมต่อ Google ใหม่' : e.message) + ') · คลิปยังอยู่ในเครื่อง', 5000, 'warn'); return e._blob || null; }
+  } catch (e) { console.warn(e); if (quiet) throw e; toast('ส่งขึ้น Drive ไม่สำเร็จ (' + (e.auth ? 'ต้องเชื่อมต่อ Google ใหม่' : e.message) + ') · คลิปยังอยู่ในเครื่อง', 5000, 'warn'); return e._blob || null; }
   finally { bz.done(); }
+}
+// older clips still on this device: move them to Drive in the background, one at a time
+let pendingRun = null;
+export function uploadPendingRecordings() {
+  if (pendingRun) return pendingRun;
+  pendingRun = (async () => {
+    if (!syncOn() || prefs.rec.toDrive === false || !hasFileScope() || !navigator.onLine) return;
+    const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive).sort((a, b) => a.created - b.created);
+    let n = 0;
+    for (const m of recs) {
+      if (!navigator.onLine) break;
+      try { if (await maybeUpload(m, true)) n++; } catch (e) { if (e.auth) break; }
+    }
+    if (n) toast(`ย้ายคลิปเก่าขึ้น Google Drive แล้ว ${n} คลิป · คืนพื้นที่ในเครื่อง`, 4000);
+  })().catch(e => console.warn('pending recs', e)).finally(() => { pendingRun = null; });
+  return pendingRun;
 }
 export async function recBlob(meta) {
   if (meta.drive) { const { gfetchBlob } = await import('./sync.js'); return gfetchBlob(meta.drive, (meta.mime || 'video/mp4').split(';')[0]); }
