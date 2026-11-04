@@ -218,10 +218,16 @@ async function doSync(reason) {
           const lpg = lp.get(pid), rpg = rPg.get(pid);
           const editedHere = id === openId && ed?.editedAt?.get(pid) && Date.now() - ed.editedAt.get(pid) < 15 * 60e3;
           if (rpg && lpg && editedHere && rpg.updated > (lpg.updated || 0)) jobs.push(async () => {
-            // written on this device in the last 15 minutes: keep ours and push it with a stamp the other side must respect
+            // written on this device recently AND changed elsewhere: merge the ink of both sides (nothing is lost), then push the merged page
+            const lpage = ed.pageMap.get(pid); if (lpage && (ed.dirty.has(pid) || (ed.live && ed.live.page === lpage))) return; // mid-stroke: next round
             await ed.flush?.(); const cur = await db.get('pages', pid); if (!cur) return;
-            cur.updated = Math.max(Date.now(), rpg.updated + 1); await db.put('pages', cur); const lp2 = ed.pageMap.get(pid); if (lp2) lp2.updated = cur.updated;
-            await upload(rpg.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(cur.updated) }, await pageOut(cur)); pushed++;
+            const rp = await pageIn(await download(rpg.f.id));
+            const have = new Set((cur.strokes || []).map(x => x.id)), seen = (ed.seenRemote ||= new Map()).get(pid) || new Set();
+            const add = (rp.strokes || []).filter(x => x.id && !have.has(x.id) && !seen.has(x.id));
+            cur.strokes = [...(cur.strokes || []), ...add]; for (const x of rp.strokes || []) if (x.id) seen.add(x.id); ed.seenRemote.set(pid, seen);
+            cur.updated = Math.max(Date.now(), rpg.updated + 1); await db.put('pages', cur);
+            if (lpage) { lpage.strokes = cur.strokes; lpage.updated = cur.updated; lpage._ver = (lpage._ver || 0) + 1; ed.thumbCache?.delete(pid); ed.need.main = true; ed.app?.broadcast?.pageChanged(lpage); }
+            await upload(rpg.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(cur.updated) }, await pageOut(cur)); pushed++; if (add.length) pulled++;
           });
           else if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) jobs.push(async () => {
             const p = await pageIn(await download(rpg.f.id)); p.updated = rpg.updated;
@@ -321,7 +327,7 @@ export async function initSync(app) {
   db.onChange(() => scheduleSync(6000));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(timer); syncNow('auto'); } else scheduleSync(1500); });
   addEventListener('online', () => scheduleSync(2000));
-  setInterval(() => scheduleSync(0), 3 * 60 * 1000);
+  setInterval(() => { if (document.visibilityState === 'visible') scheduleSync(0); }, 60 * 1000);
   scheduleSync(1200);
 }
 export function statusText() {
