@@ -833,6 +833,7 @@ export class Editor {
   inStageUI(e) { return !this.isSurface(e.target); }
 
   down(e) {
+    this.lastInput = Date.now();
     if (this.txEd && e.target === this.txEd.ta) return;
     if (this.shapeAltEl && !this.shapeAltEl.contains(e.target) && e.pointerType !== 'touch') this.hideShapeAlt();
     if (this.inStageUI(e)) return;
@@ -2274,7 +2275,7 @@ export class Editor {
   }
 
   // ---------- persistence ----------
-  markDirty(p) { if (!p) return; this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
+  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
   saveNb() { this.nbDirty = true; this.scheduleSave(); }
   scheduleSave() { clearTimeout(this.saveT); this.saveT = setTimeout(() => this.flush(), 700); }
   async flush() {

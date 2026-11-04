@@ -216,7 +216,14 @@ async function doSync(reason) {
         const jobs = [];
         for (const pid of pageList) {
           const lpg = lp.get(pid), rpg = rPg.get(pid);
-          if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) jobs.push(async () => {
+          const editedHere = id === openId && ed?.editedAt?.get(pid) && Date.now() - ed.editedAt.get(pid) < 15 * 60e3;
+          if (rpg && lpg && editedHere && rpg.updated > (lpg.updated || 0)) jobs.push(async () => {
+            // written on this device in the last 15 minutes: keep ours and push it with a stamp the other side must respect
+            await ed.flush?.(); const cur = await db.get('pages', pid); if (!cur) return;
+            cur.updated = Math.max(Date.now(), rpg.updated + 1); await db.put('pages', cur); const lp2 = ed.pageMap.get(pid); if (lp2) lp2.updated = cur.updated;
+            await upload(rpg.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(cur.updated) }, await pageOut(cur)); pushed++;
+          });
+          else if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) jobs.push(async () => {
             const p = await pageIn(await download(rpg.f.id)); p.updated = rpg.updated;
             if (id === openId) await ed.flush?.();
             const cur = await db.get('pages', pid); if (cur && (cur.updated || 0) > (lpg?.updated || 0) && (cur.updated || 0) >= rpg.updated) return; // edited here meanwhile: keep ours
@@ -278,8 +285,11 @@ async function doSync(reason) {
     if (pulled) {
       if (app?.library && !ed) app.library.load();
       if (touchedOpen && ed) {
-        const reload = async () => { const id = ed.nb.id; await ed.flush?.(); await app.openNotebook(id); toast('อัปเดตสมุดจากเครื่องอื่นแล้ว', 2000); };
-        if (!ed.live && !document.querySelector('.dialog') && !app.recorder?.active) await reload();
+        const reload = async () => { const id = ed.nb.id, view = { z: ed.z, ox: ed.ox, oy: ed.oy, fit: ed.fitMode, cur: ed.currentPage()?.id }; await ed.flush?.(); await app.openNotebook(id);
+          const e2 = app.editor; if (e2 && e2.nb?.id === id && view.cur && e2.pageMap.has(view.cur)) { e2.z = view.z; e2.ox = view.ox; e2.oy = view.oy; e2.fitMode = view.fit; e2.clampView?.(); e2.viewChanged?.(); e2.need.main = e2.need.ui = true; }
+          toast('อัปเดตสมุดจากเครื่องอื่นแล้ว', 2000); };
+        const busyWriting = Date.now() - (ed.lastInput || 0) < 120e3;
+        if (!ed.live && !busyWriting && !document.querySelector('.dialog') && !app.recorder?.active) await reload();
         else { const b = document.createElement('button'); b.className = 'pill prim'; b.style.cssText = 'height:40px;margin-left:10px;pointer-events:auto'; b.textContent = 'โหลดใหม่'; b.onclick = () => { t.remove(); reload(); }; const t = document.createElement('div'); t.className = 'toast keep updbar'; t.append('มีการแก้ไขสมุดเล่มนี้จากเครื่องอื่น', b); document.getElementById('toasts').append(t); setTimeout(() => t.remove(), 15000); }
       }
     }
