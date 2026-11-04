@@ -316,9 +316,10 @@ export function uploadPendingRecordings() {
     if (!syncOn() || prefs.rec.toDrive === false || !hasFileScope() || !navigator.onLine) return;
     const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive).sort((a, b) => a.created - b.created);
     let n = 0;
+    if (recs.length) toast(`กำลังย้ายคลิปเก่า ${recs.length} คลิปขึ้น Google Drive อยู่เบื้องหลัง…`, 4000);
     for (const m of recs) {
       if (!navigator.onLine) break;
-      try { if (await maybeUpload(m, true)) n++; } catch (e) { if (e.auth) break; }
+      try { if (await maybeUpload(m, true)) { n++; m.drive && document.dispatchEvent(new CustomEvent('senkid:rec-moved')); } } catch (e) { if (e.auth) break; }
     }
     if (n) toast(`ย้ายคลิปเก่าขึ้น Google Drive แล้ว ${n} คลิป · คืนพื้นที่ในเครื่อง`, 4000);
   })().catch(e => console.warn('pending recs', e)).finally(() => { pendingRun = null; });
@@ -369,6 +370,12 @@ export async function openRecordings(nb) {
   const list = h('div', { class: 'reclist' });
   const render = () => {
     list.innerHTML = '';
+    const pend = recs.filter(r => r.done && !r.drive).length;
+    if (pend && syncOn()) {
+      if (!hasFileScope()) { const b = h('button', { class: 'pill prim', style: { height: '40px' } }, 'เชื่อมต่อใหม่'); b.onclick = () => signIn(); list.append(h('div', { class: 'bk-banner warn' }, h('div', {}, `มี ${pend} คลิปรอส่งขึ้น Google Drive · ต้องเชื่อมต่อ Google ใหม่ก่อนเพื่ออนุญาตเก็บคลิปใน Drive`), b)); }
+      else if (prefs.rec.toDrive === false) list.append(h('div', { class: 'bk-banner' }, h('div', {}, `มี ${pend} คลิปเก็บอยู่ในเครื่อง · เปิด "เก็บคลิปใน Google Drive" ในตั้งค่าการอัดเพื่อย้ายขึ้นอัตโนมัติ`)));
+      else { const b = h('button', { class: 'pill prim', style: { height: '40px' } }, pendingRun ? 'กำลังส่ง…' : 'ส่งตอนนี้'); b.disabled = !!pendingRun; b.onclick = async () => { b.disabled = true; b.textContent = 'กำลังส่ง…'; await uploadPendingRecordings(); render(); }; list.append(h('div', { class: 'bk-banner' }, h('div', {}, pendingRun ? `กำลังย้าย ${pend} คลิปขึ้น Google Drive อยู่เบื้องหลัง…` : `มี ${pend} คลิปรอส่งขึ้น Google Drive`), b)); }
+    }
     if (!recs.length) { list.append(h('p', { style: { color: 'var(--muted)', textAlign: 'center', padding: '30px 0' } }, nb ? 'สมุดเล่มนี้ยังไม่มีเสียงที่อัดไว้ · แตะปุ่มไมค์บนแถบเครื่องมือเพื่อเริ่มอัด' : 'ยังไม่มีคลิปหรือเสียงที่อัดไว้')); return; }
     for (const m of recs) {
       const d = new Date(m.created);
@@ -383,6 +390,6 @@ export async function openRecordings(nb) {
       list.append(it);
     }
   };
-  render();
+  render(); document.addEventListener('senkid:rec-moved', render);
   dialog(nb ? 'เสียงที่อัดในสมุดเล่มนี้' : 'คลิปและเสียงที่อัดไว้', list, [], { width: 720 });
 }
