@@ -311,3 +311,16 @@ export function busy(msg, sub) {
 }
 // run an async job with the busy box
 export async function withBusy(msg, fn) { const b = busy(msg); try { return await fn(b); } finally { b.done(); } }
+
+// iPad: navigator.share must run straight from a tap — after a long build, ask for one more tap
+export function shareFileDialog(file, { title = 'ไฟล์พร้อมแล้ว', sub = '', label } = {}) {
+  const mb = Math.max(0.1, Math.round(file.size / 1e5) / 10);
+  const go = h('button', { class: 'pill prim', style: { height: '46px', width: '100%' } }, icon('share'), label || `แชร์ / บันทึกไฟล์ (${mb} MB)`);
+  const dg = dialog(title, h('div', {}, sub ? h('p', { class: 'sub', style: { margin: '0 0 10px' } }, sub) : null, go), [{ label: 'ปิด' }], { width: 480 });
+  return new Promise((res) => {
+    go.onclick = async () => {
+      try { await navigator.share({ files: [file], title: file.name }); dg.close(); res('shared'); }
+      catch (e) { if (e.name === 'AbortError') return; downloadBlob(file, file.name); dg.close(); res('downloaded'); }
+    };
+  });
+}

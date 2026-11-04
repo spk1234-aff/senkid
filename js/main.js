@@ -1,6 +1,6 @@
 // เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // App shell: routing between library and editor, settings, help, onboarding, backup
-import { h, icon, toast, dialog, seg, toggle, downloadBlob, pickFile, fmtBytes, uid, logoMark, brandWord, busy, $ } from './ui.js';
+import { h, icon, toast, dialog, seg, toggle, downloadBlob, pickFile, fmtBytes, uid, logoMark, brandWord, busy, shareFileDialog, $ } from './ui.js';
 import { prefs, savePrefs, applyTheme } from './prefs.js';
 import * as db from './db.js';
 import { Library } from './library.js';
@@ -14,7 +14,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected } from './sync.js';
 
-export const VERSION = '1.9.2';
+export const VERSION = '1.9.3';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -136,10 +136,12 @@ class App {
     const name = `senkid-${kind}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.senkid.json`;
     const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
     if (kind === 'all') { prefs.lastBackup = Date.now(); savePrefs(); }
-    // iPad: the share sheet offers "Save to Files" → iCloud Drive, which survives losing the device
+    // iPad: the share sheet offers "Save to Files" → iCloud Drive. It must open straight from a tap, so ask for one more tap after the file is ready
     const f = new File([blob], name, { type: 'application/json' });
-    if (/iPad|iPhone|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document && navigator.canShare?.({ files: [f] })) {
-      try { await navigator.share({ files: [f], title: 'สำรองสมุดเส้นคิด' }); toast('เลือก "บันทึกไปยังไฟล์" แล้วเก็บใน iCloud Drive จะปลอดภัยที่สุด', 3500); return; } catch (e) { if (e.name === 'AbortError') return; }
+    if (navigator.canShare?.({ files: [f] })) {
+      const r = await shareFileDialog(f, { title: 'ไฟล์สำรองพร้อมแล้ว', sub: `สมุด ${out.notebooks.length} เล่ม · กดแล้วเลือก "บันทึกไปยังไฟล์" (Save to Files) → iCloud Drive จะปลอดภัยที่สุด หรือส่งเข้า LINE/AirDrop ก็ได้`, label: `บันทึกไฟล์ (${Math.max(0.1, Math.round(blob.size / 1e5) / 10)} MB)` });
+      if (r === 'shared') toast('สำรองแล้ว', 2000);
+      return;
     }
     downloadBlob(blob, name);
     toast(ids.length === 1 ? `สำรอง "${out.notebooks[0]?.name}" แล้ว` : `สำรองสมุด ${out.notebooks.length} เล่มแล้ว`);

@@ -470,8 +470,9 @@ export class Editor {
     let blob; try { blob = await exportPdf(pages, this.paper, { onProgress: (i, n) => b.set(null, `หน้า ${i} จาก ${n}`, i / n) }); } catch (e) { toast('ทำ PDF ไม่สำเร็จ: ' + e.message, 3000, 'warn'); return; } finally { b.done(); }
     const d = new Date(), name = `${this.nb.name} ${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear() + 543}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
     const f = new File([blob], name, { type: 'application/pdf' });
-    if (navigator.canShare?.({ files: [f] })) { try { await navigator.share({ files: [f], title: this.nb.name }); return; } catch (e) { if (e.name === 'AbortError') return; } }
-    const { downloadBlob } = await import('./ui.js'); downloadBlob(blob, name); toast(`บันทึก ${name} แล้ว · ส่งต่อให้นักเรียนได้เลย`, 3000);
+    const { shareFileDialog, downloadBlob } = await import('./ui.js');
+    if (navigator.canShare?.({ files: [f] })) { await shareFileDialog(f, { title: 'PDF พร้อมส่งแล้ว', sub: `${pages.length} หน้า · ส่งเข้า LINE, Google Classroom, AirDrop หรือบันทึกไปยังไฟล์`, label: 'ส่งให้นักเรียน' }); return; }
+    downloadBlob(blob, name); toast(`บันทึก ${name} แล้ว · ส่งต่อให้นักเรียนได้เลย`, 3000);
   }
   notebookMenu(anchor) {
     menu(anchor, [

@@ -302,7 +302,8 @@ export async function shareRecording(meta) {
   const bz = busy('กำลังเตรียมไฟล์…'); let b; try { b = await recBlob(meta); } finally { bz.done(); }
   const f = new File([b], fileName(meta), { type: b.type });
   if (navigator.canShare && navigator.canShare({ files: [f] })) {
-    try { await navigator.share({ files: [f], title: meta.name }); } catch (e) { if (e.name !== 'AbortError') toast('แชร์ไม่สำเร็จ: ' + e.message, 3000, 'warn'); }
+    const { shareFileDialog } = await import('./ui.js');
+    await shareFileDialog(f, { title: 'คลิปพร้อมแล้ว', sub: 'ส่งเข้า LINE, AirDrop หรือบันทึกลงรูปภาพ/ไฟล์', label: 'แชร์คลิป (' + fmtBytes(b.size) + ')' });
   } else { downloadBlob(b, f.name); toast('เครื่องนี้แชร์ไฟล์ไม่ได้ จึงดาวน์โหลดไฟล์แทน', 3000); }
 }
 

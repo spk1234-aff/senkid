@@ -130,8 +130,9 @@ export async function saveNotebookFile(nb, livePages, { forceNew = false, onStag
   }
   const file = new File([text], name, { type: 'application/json' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: nb.name }); return { how: 'shared', name }; }
-    catch (e) { if (e.name === 'AbortError') return null; }
+    const { shareFileDialog } = await import('./ui.js');
+    const r = await shareFileDialog(file, { title: 'ไฟล์สมุดพร้อมแล้ว', sub: 'กดแล้วเลือก "บันทึกไปยังไฟล์" หรือส่งต่อ', label: 'บันทึกไฟล์' });
+    return { how: r, name };
   }
   const d = new Date(), q = (n) => String(n).padStart(2, '0');
   const ascii = `senkid-notebook-${d.getFullYear()}${q(d.getMonth() + 1)}${q(d.getDate())}-${q(d.getHours())}${q(d.getMinutes())}.senkid.json`;
