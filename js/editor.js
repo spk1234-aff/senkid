@@ -171,11 +171,18 @@ export class Editor {
       }, t === id);
       dock.append(tool('pen', prefs.penType, 'ปากกา (แตะอีกครั้งเพื่อตั้งค่า)'), tool('hl', 'hl', 'ไฮไลต์ (แตะอีกครั้งเพื่อตั้งค่า)'), tool('eraser', 'eraser', 'ยางลบ (แตะอีกครั้งเพื่อตั้งค่า)'),
         tool('lasso', 'lasso', 'บ่วงบาศ: เลือก ย้าย ย่อขยาย'), tool('laser', 'laser', 'เลเซอร์'), B('curtain', 'ม่านบังคำตอบ', () => this.toggleCurtain(), !!this.curtain));
-      // everything else from the normal toolbar, so nothing is missing while presenting
-      dock.append(h('i', { class: 'dsep' }),
-        tool('shapes', 'shape', 'รูปทรงและลูกศร'), B('sticker', 'สติกเกอร์', (b) => this.stickerPanel(b)), B('equation', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์', (b) => this.mathMenu(b)),
-        B('calc', 'เครื่องคิดเลข', async () => (await import('./calculator.js')).toggleCalculator(this), !!document.querySelector('.calc')), B('ruler', 'ไม้บรรทัด', () => this.toggleRuler(), !!this.ruler),
-        B('image', 'แทรกรูปภาพ', () => this.pickImage()), tool('text', 'text', 'กล่องข้อความ'), B('mic', 'อัดเสียง', (b) => this.app.audioClick(this, b), !!this.app.audio?.active), B('pageplus', 'เพิ่มหน้า', (b) => this.addPageMenu(b)));
+      // the rest of the toolbar lives behind one button, so the strip stays small on the projector
+      dock.append(h('i', { class: 'dsep' }), B('plus', 'เครื่องมืออื่น: รูปทรง สติกเกอร์ คณิต เครื่องคิดเลข ไม้บรรทัด รูป ข้อความ อัดเสียง เพิ่มหน้า', (b) => menu(b, [
+        { icon: 'shape', label: 'รูปทรงและลูกศร', action: () => this.setTool('shapes') },
+        { icon: 'sticker', label: 'สติกเกอร์', action: () => this.stickerPanel(b) },
+        { icon: 'equation', label: 'สมการ / กราฟ / ไม้โปรแทรกเตอร์', action: () => this.mathMenu(b) },
+        { icon: 'calc', label: 'เครื่องคิดเลข', action: async () => (await import('./calculator.js')).toggleCalculator(this) },
+        { icon: 'ruler', label: this.ruler ? 'เก็บไม้บรรทัด' : 'ไม้บรรทัด', action: () => this.toggleRuler() },
+        { icon: 'image', label: 'แทรกรูปภาพ', action: () => this.pickImage() },
+        { icon: 'text', label: 'กล่องข้อความ', action: () => this.setTool('text') },
+        { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง', action: () => this.app.audioClick(this, b) },
+        { icon: 'pageplus', label: 'เพิ่มหน้า / แทรก PDF', action: () => this.addPageMenu(b) },
+      ], this.popOpts()), t === 'shapes' || t === 'text'));
       if (prefs.studentUI) for (const el of dock.querySelectorAll('button')) if (/^ม่านบัง/.test(el.title)) el.remove();
       // options for the current tool
       const c = this.cur();
