@@ -92,7 +92,14 @@ async function listAll() {
   return out;
 }
 async function download(fileId, asBlob) { const r = await gfetch(`${API}/files/${fileId}?alt=media`); return asBlob ? r.blob() : r.json(); }
+// Drive caps each app property at 124 bytes (key + value, UTF-8): Thai file names blow past that fast
+function clipProp(key, val, limit = 124) {
+  const enc = new TextEncoder(); let v = String(val ?? ''); const max = limit - enc.encode(key).length - 2;
+  while (enc.encode(v).length > max) v = v.slice(0, -1);
+  return v;
+}
 async function upload(existingId, name, appProperties, body, mime) {
+  if (appProperties) for (const k of Object.keys(appProperties)) appProperties[k] = clipProp(k, appProperties[k]);
   const meta = { name, appProperties }; if (!existingId) meta.parents = ['appDataFolder'];
   const blob = body instanceof Blob ? body : new Blob([JSON.stringify(body)], { type: mime || 'application/json' });
   if (blob.size < 4.5e6) {
