@@ -746,9 +746,12 @@ export class Editor {
     if (isel && !this.imgDrag?.hideUI) {
       const r = this.rects.get(isel.page.id), s = isel.s;
       ctx.setTransform(R, 0, 0, R, 0, 0);
-      const X0 = this.ox + (r.x + s.x) * this.z, Y0 = this.oy + (r.y + s.y) * this.z, Wd = s.w * this.z, Hd = s.h * this.z;
-      ctx.lineWidth = 2; ctx.strokeStyle = '#2F5BEA'; ctx.strokeRect(X0, Y0, Wd, Hd);
-      for (const [x, y] of [[X0, Y0], [X0 + Wd, Y0], [X0, Y0 + Hd], [X0 + Wd, Y0 + Hd]]) { ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.stroke(); }
+      const H = this.objHandles(s, r);
+      ctx.lineWidth = 2; ctx.strokeStyle = '#2F5BEA'; ctx.beginPath(); ctx.moveTo(...H.tl); ctx.lineTo(...H.tr); ctx.lineTo(...H.br); ctx.lineTo(...H.bl); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(...H.top); ctx.lineTo(...H.rotH); ctx.stroke();
+      for (const k of ['tl', 'tr', 'bl', 'br']) { const [x, y] = H[k]; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.stroke(); }
+      { const [x, y] = H.rotH; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.stroke(); ctx.beginPath(); ctx.arc(x, y, 4.5, -2.4, 1.6); ctx.lineWidth = 1.8; ctx.stroke(); }
+      if (s.rot) { const deg = Math.round(s.rot * 180 / Math.PI) % 360; ctx.font = 'bold 15px "TH Sarabun New", sans-serif'; ctx.fillStyle = '#2F5BEA'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(deg + '°', H.rotH[0], H.rotH[1] - 13); }
       if (!this.imgDrag) this.placeImgBar();
     } else if (!isel && !this.lsel && this.imgBar && !this.imgBar.classList.contains('hidden') && !(this.imgBar.dataset.kind === 'shape' && this.selStroke())) this.imgBar.classList.add('hidden');
     const sel = this.selStroke();
@@ -1868,7 +1871,7 @@ export class Editor {
     if (hit && hit.t === 'text') this.editTextInline(page, hit); else this.editTextInline(page, null, wx - r.x, wy - r.y);
   }
   imgAt(page, x, y) {
-    for (let i = page.strokes.length - 1; i >= 0; i--) { const s = page.strokes[i]; if ((s.t === 'img' || s.t === 'text') && x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h) return s; }
+    for (let i = page.strokes.length - 1; i >= 0; i--) { const s = page.strokes[i]; if (s.t !== 'img' && s.t !== 'text') continue; const [lx, ly] = objLocal(s, x, y); if (lx >= s.x && lx <= s.x + s.w && ly >= s.y && ly <= s.y + s.h) return s; }
     return null;
   }
   selImage() {
@@ -1916,13 +1919,21 @@ export class Editor {
     this.imgBar.style.left = Math.max(8, Math.min(this.W - bw - 8, x - bw / 2)) + 'px';
     this.imgBar.style.top = Math.max(8, y) + 'px';
   }
+  // screen positions of an image/text object's corners and its rotate handle
+  objHandles(s, r) {
+    const cx = s.x + s.w / 2, cy = s.y + s.h / 2, c = Math.cos(s.rot || 0), sn = Math.sin(s.rot || 0);
+    const P = (lx, ly) => { const dx = lx - cx, dy = ly - cy; return [this.ox + (r.x + cx + dx * c - dy * sn) * this.z, this.oy + (r.y + cy + dx * sn + dy * c) * this.z]; };
+    const top = P(cx, s.y); const [tx, ty] = top, rh = [tx - 30 * sn, ty - 30 * c];
+    return { tl: P(s.x, s.y), tr: P(s.x + s.w, s.y), bl: P(s.x, s.y + s.h), br: P(s.x + s.w, s.y + s.h), rotH: [tx + 30 * sn, ty - 30 * c], center: P(cx, cy), top };
+  }
   imgHandleAt(sx, sy, touch) {
     const sel = this.selImage(); if (!sel) return null;
     const r = this.rects.get(sel.page.id), s = sel.s, tol = touch ? 28 : 18;
-    const X0 = this.ox + (r.x + s.x) * this.z, Y0 = this.oy + (r.y + s.y) * this.z, X1 = X0 + s.w * this.z, Y1 = Y0 + s.h * this.z;
-    const cs = [['tl', X0, Y0], ['tr', X1, Y0], ['bl', X0, Y1], ['br', X1, Y1]];
-    for (const [id, x, y] of cs) if (Math.hypot(sx - x, sy - y) < tol) return { kind: 'resize', corner: id, sel };
-    if (sx > X0 && sx < X1 && sy > Y0 && sy < Y1) return { kind: 'move', sel };
+    const H = this.objHandles(s, r);
+    if (Math.hypot(sx - H.rotH[0], sy - H.rotH[1]) < tol) return { kind: 'rotate', sel };
+    for (const id of ['tl', 'tr', 'bl', 'br']) if (Math.hypot(sx - H[id][0], sy - H[id][1]) < tol) return { kind: 'resize', corner: id, sel };
+    const [wx, wy] = this.toWorld(sx, sy), [lx, ly] = objLocal(s, wx - r.x, wy - r.y);
+    if (lx > s.x && lx < s.x + s.w && ly > s.y && ly < s.y + s.h) return { kind: 'move', sel };
     return null;
   }
   dragImage(sx, sy) {
@@ -1930,13 +1941,23 @@ export class Editor {
     const px = wx - r.x, py = wy - r.y;
     let ns;
     if (d.kind === 'move') ns = { ...s0, x: s0.x + px - d.px, y: s0.y + py - d.py, bb: null };
-    else {
+    else if (d.kind === 'rotate') {
+      const cx = s0.x + s0.w / 2, cy = s0.y + s0.h / 2; let a = Math.atan2(py - cy, px - cx) + Math.PI / 2;
+      for (const q of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 2 * Math.PI, -Math.PI]) if (Math.abs(a - q) < Math.PI / 60) a = q; // snap to right angles
+      ns = { ...s0, rot: ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) || 0, bb: null }; if (!ns.rot) delete ns.rot;
+    } else {
+      const [lpx, lpy] = objLocal(s0, px, py); // resize in the object's own (unrotated) frame
       const ax = d.corner.includes('l') ? s0.x + s0.w : s0.x, ay = d.corner.includes('t') ? s0.y + s0.h : s0.y;
+      px = lpx; py = lpy;
       const ratio = s0.h / s0.w;
       let w = Math.max(20, Math.abs(px - ax)); let hh = w * ratio;
       if (Math.abs(py - ay) > hh) { hh = Math.max(20 * ratio, Math.abs(py - ay)); w = hh / ratio; }
       ns = { ...s0, w, h: hh, x: d.corner.includes('l') ? ax - w : ax, y: d.corner.includes('t') ? ay - hh : ay, bb: null };
       if (s0.t === 'text') ns.size = Math.max(6, s0.size * w / s0.w);
+      if (s0.rot) { // keep the dragged corner under the finger after the centre moved
+        const c0 = [s0.x + s0.w / 2, s0.y + s0.h / 2], c1 = [ns.x + ns.w / 2, ns.y + ns.h / 2], dx = c1[0] - c0[0], dy = c1[1] - c0[1], co = Math.cos(s0.rot), sn = Math.sin(s0.rot);
+        ns.x += (dx * co - dy * sn) - dx; ns.y += (dx * sn + dy * co) - dy;
+      }
     }
     const st = d.page.strokes, i = st.indexOf(d.cur); if (i >= 0) st[i] = ns; d.cur = ns;
     this.imgSel = { pid: d.page.id, sid: ns.id };
@@ -2311,8 +2332,10 @@ function splitStroke(s, x, y, r) {
   return runs.map(run => ({ ...base, id: uid(), pts: Float32Array.from(run), bb: null }));
 }
 
+// point (page coords) into an image/text object's own unrotated frame
+export function objLocal(s, x, y) { if (!s.rot) return [x, y]; const cx = s.x + s.w / 2, cy = s.y + s.h / 2, c = Math.cos(-s.rot), sn = Math.sin(-s.rot), dx = x - cx, dy = y - cy; return [cx + dx * c - dy * sn, cy + dx * sn + dy * c]; }
 export function serializePage(p) {
-  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, meta: s.meta }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.hs) o.hs = s.hs; if (s.fill) o.fill = s.fill; if (s.fc) o.fc = s.fc; if (s.raw) o.raw = s.raw; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
+  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, rot: s.rot || undefined }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, meta: s.meta, rot: s.rot || undefined }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.hs) o.hs = s.hs; if (s.fill) o.fill = s.fill; if (s.fc) o.fc = s.fc; if (s.raw) o.raw = s.raw; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
 }
 
 // affine transform of any page object (M = [a,b,c,d,e,f]; sc = uniform scale; ang = rotation)
@@ -2321,6 +2344,7 @@ export function transformStroke(s, M, sc, ang) {
   if (s.t === 'img' || s.t === 'text') {
     const cx = s.x + s.w / 2, cy = s.y + s.h / 2, w = s.w * sc, hh = s.h * sc, nx = X(cx, cy), ny = Y(cx, cy);
     const o = { ...s, x: nx - w / 2, y: ny - hh / 2, w, h: hh, bb: null };
+    if (ang) o.rot = (s.rot || 0) + ang;
     if (s.t === 'text') o.size = s.size * sc;
     return o;
   }

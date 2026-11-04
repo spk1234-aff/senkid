@@ -2,6 +2,7 @@
 // Records ONLY the paper area (main + live canvases) + microphone audio.
 import { h, icon, toast, dialog, popover, seg, toggle, fmtBytes, fmtTime, downloadBlob, confirmBox, uid, busy } from './ui.js';
 import { prefs, savePrefs } from './prefs.js';
+import { connected as syncOn, hasFileScope, uploadRecording, driveFileUrl, deleteDriveFile, signIn } from './sync.js';
 import * as db from './db.js';
 
 const RES = [['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K']];
@@ -101,6 +102,7 @@ export class Recorder {
     freeSpace().then(v => { freeB = v; upd(); }); upd();
     const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
     body.append(h('div', { style: { height: '6px' } }),
+      row('เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
       row('เตือนเมื่ออัดนานเกิน 25 นาที', toggle(prefs.rec.warn25, v => { prefs.rec.warn25 = v; savePrefs(); })),
       row('รูปแบบไฟล์', h('span', { style: { color: 'var(--muted)' } }, mime ? (mime.includes('mp4') ? 'MP4' : 'WebM (เครื่องนี้ไม่รองรับ MP4)') : 'ค่าเริ่มต้นของเบราว์เซอร์')),
       row('ให้นาฬิกาจับเวลาติดไปในคลิป', toggle(this.app.timer.s.inClip, v => { this.app.timer.s.inClip = v; this.app.timer.save(); })));
@@ -200,7 +202,8 @@ export class Recorder {
     if (this.state === 'idle') return;
     const bz = busy('กำลังบันทึกคลิป…', 'รอสักครู่ อย่าเพิ่งปิดแอป');
     try { await this._stop(); } finally { bz.done(); }
-    await showRecording(this.meta, true);
+    const blob = await maybeUpload(this.meta);
+    await showRecording(this.meta, true, blob);
   }
   async _stop() {
     const dur = this.elapsed();
@@ -280,11 +283,31 @@ export class AudioRecorder {
     await Promise.all(this.writes);
     Object.assign(this.meta, { duration: dur, size: this.bytes, done: true });
     await db.put('recs', this.meta);
+    await maybeUpload(this.meta);
     toast(`บันทึกเสียงแล้ว (${fmtTime(dur)}) · ฟังได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้`, 3500);
   }
 }
 
+// after recording: push to Drive and free the space on this device
+export async function maybeUpload(meta) {
+  if (!syncOn() || prefs.rec.toDrive === false || !meta.done || meta.drive) return null;
+  if (!hasFileScope()) { toast('ต้องเชื่อมต่อ Google ใหม่เพื่ออนุญาตเก็บคลิปใน Drive (ตั้งค่า > ซิงก์ > เชื่อมต่อใหม่) · คลิปนี้เก็บไว้ในเครื่องก่อน', 5000, 'warn'); return; }
+  const bz = busy('กำลังส่งคลิปขึ้น Google Drive…', fmtBytes(meta.size), 0);
+  try {
+    const blob = await recBlob(meta);
+    try {
+    const r = await uploadRecording(blob, fileName(meta), (t, p) => bz.set('กำลังส่งคลิปขึ้น Google Drive…', t, p));
+    meta.drive = r.id; meta.link = r.webViewLink; meta.size = blob.size; meta.mime = blob.type;
+    await db.put('recs', meta);
+    await db.deleteRec(meta.id); await db.put('recs', meta); // drop the local chunks, keep the record
+    toast('เก็บคลิปใน Google Drive แล้ว (โฟลเดอร์ เส้นคิด/คลิป) · ไม่กินพื้นที่เครื่อง', 3500);
+    return blob;
+    } catch (e) { e._blob = blob; throw e; }
+  } catch (e) { console.warn(e); toast('ส่งขึ้น Drive ไม่สำเร็จ (' + (e.auth ? 'ต้องเชื่อมต่อ Google ใหม่' : e.message) + ') · คลิปยังอยู่ในเครื่อง', 5000, 'warn'); return e._blob || null; }
+  finally { bz.done(); }
+}
 export async function recBlob(meta) {
+  if (meta.drive) { const { gfetchBlob } = await import('./sync.js'); return gfetchBlob(meta.drive, (meta.mime || 'video/mp4').split(';')[0]); }
   const chunks = (await db.chunksOf(meta.id)).sort((a, b) => a.seq - b.seq).map(c => c.blob);
   const type = (meta.mime || (meta.kind === 'audio' ? 'audio/mp4' : 'video/mp4')).split(';')[0];
   const raw = new Blob(chunks, { type });
@@ -307,8 +330,8 @@ export async function shareRecording(meta) {
   } else { downloadBlob(b, f.name); toast('เครื่องนี้แชร์ไฟล์ไม่ได้ จึงดาวน์โหลดไฟล์แทน', 3000); }
 }
 
-export async function showRecording(meta, fresh) {
-  const bz = busy('กำลังเปิดคลิป…'); let blob; try { blob = await recBlob(meta); } finally { bz.done(); }
+export async function showRecording(meta, fresh, blob) {
+  if (!blob) { const bz = busy(meta.drive ? 'กำลังดึงคลิปจาก Google Drive…' : 'กำลังเปิดคลิป…'); try { blob = await recBlob(meta); } catch (e) { bz.done(); toast('เปิดคลิปไม่ได้: ' + (e.auth ? 'ต้องเชื่อมต่อ Google ใหม่' : e.message), 4000, 'warn'); return; } finally { bz.done(); } }
   const url = URL.createObjectURL(blob);
   const body = h('div');
   if (meta.kind === 'audio') body.append(h('audio', { src: url, controls: true, style: { width: '100%', marginTop: '8px' } }));
@@ -316,7 +339,7 @@ export async function showRecording(meta, fresh) {
   body.append(h('div', { class: 'stats' },
     h('div', {}, h('span', {}, 'ความยาว'), h('b', {}, fmtTime(meta.duration || 0))),
     h('div', {}, h('span', {}, 'ขนาดไฟล์'), h('b', {}, fmtBytes(blob.size) + (meta.kind === 'audio' ? ' · เสียง' : ' · ' + (meta.res === '2160' ? '4K' : meta.res + 'p'))))));
-  body.append(h('p', { style: { fontSize: '19px', color: 'var(--muted)', margin: '12px 0 0' } }, 'คลิปเก็บไว้ในแอปแล้ว เปิดดูอีกครั้งได้ที่เมนู ⋯ > คลิปที่อัดไว้ · บน iPad กด "แชร์" แล้วเลือก "บันทึกวิดีโอ" เพื่อเก็บลงแอปรูปภาพ'));
+  body.append(h('p', { style: { fontSize: '19px', color: 'var(--muted)', margin: '12px 0 0' } }, meta.drive ? 'คลิปอยู่ใน Google Drive (โฟลเดอร์ เส้นคิด/คลิป) ไม่กินพื้นที่เครื่อง · เปิดดูอีกครั้งได้ที่เมนู ⋯ > คลิปที่อัดไว้' : 'คลิปเก็บไว้ในแอปแล้ว เปิดดูอีกครั้งได้ที่เมนู ⋯ > คลิปที่อัดไว้ · บน iPad กด "แชร์" แล้วเลือก "บันทึกวิดีโอ" เพื่อเก็บลงแอปรูปภาพ'));
   dialog(fresh ? 'อัดคลิปเสร็จแล้ว' : meta.name, body, [
     { label: 'บันทึกไฟล์', icon: 'download', action: () => { saveRecording(meta); return false; } },
     { label: meta.kind === 'audio' ? 'แชร์ / ส่งต่อ' : 'แชร์ / บันทึกลงรูปภาพ', icon: 'share', cls: 'prim', flex: 2, action: () => { shareRecording(meta); return false; } },
@@ -335,8 +358,10 @@ export async function openRecordings(nb) {
         icon(m.kind === 'audio' ? 'mic' : 'film'),
         h('div', { class: 'meta' }, h('b', {}, m.name), h('div', {}, `${d.toLocaleDateString('th-TH')} ${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} · ${fmtTime(m.duration || 0)} · ${fmtBytes(m.size)}${m.done ? '' : ' · ไม่สมบูรณ์ (กู้คืนจากการอัดที่ค้าง)'}`)));
       const B = (ic, t, fn) => { const b = h('button', { class: 'btn sq', title: t }, icon(ic)); b.onclick = fn; return b; };
+      if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
+      else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
-        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { await db.deleteRec(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
+        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } await db.deleteRec(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
       list.append(it);
     }
   };

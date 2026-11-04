@@ -232,7 +232,10 @@ export function strokeVector(s) {
 // ---------- bounding box ----------
 export function strokeBB(s) {
   if (s.bb) return s.bb;
-  if (s.t === 'img' || s.t === 'text') { s.bb = [s.x, s.y, s.x + s.w, s.y + s.h]; return s.bb; }
+  if (s.t === 'img' || s.t === 'text') {
+    if (s.rot) { const cx = s.x + s.w / 2, cy = s.y + s.h / 2, c = Math.abs(Math.cos(s.rot)), sn = Math.abs(Math.sin(s.rot)), w2 = (s.w * c + s.h * sn) / 2, h2 = (s.w * sn + s.h * c) / 2; s.bb = [cx - w2, cy - h2, cx + w2, cy + h2]; return s.bb; }
+    s.bb = [s.x, s.y, s.x + s.w, s.y + s.h]; return s.bb;
+  }
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const arr = s.shape ? shapePolyline(s.shape, 24) : s.pts, st = s.shape ? 2 : STRIDE;
   for (let i = 0; i < arr.length; i += st) { const x = arr[i], y = arr[i + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
@@ -299,8 +302,12 @@ export function buildGeom(s, pen, minW, final) {
 // ---------- draw one stroke ----------
 // ctx is in page coordinates. k = device pixels per page point. final: stroke finished (for tapers)
 export function drawStroke(ctx, s, k, darkPaper, final = true) {
-  if (s.t === 'img') { drawImageObj(ctx, s); return; }
-  if (s.t === 'text') { drawText(ctx, s, darkPaper); return; }
+  if (s.t === 'img' || s.t === 'text') {
+    if (s.rot) { ctx.save(); const cx = s.x + s.w / 2, cy = s.y + s.h / 2; ctx.translate(cx, cy); ctx.rotate(s.rot); ctx.translate(-cx, -cy); }
+    if (s.t === 'img') drawImageObj(ctx, s); else drawText(ctx, s, darkPaper);
+    if (s.rot) ctx.restore();
+    return;
+  }
   const color = s.t === 'hl' ? s.c : inkFor(s.c, darkPaper);
   const minW = 0.8 / k;
   ctx.save();

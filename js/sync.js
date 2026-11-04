@@ -7,7 +7,7 @@ import { toast } from './ui.js';
 
 // OAuth client (Google Cloud project of the teacher). Can be overridden in settings.
 export const DEFAULT_CLIENT_ID = '991820377436-rhlp8jjecl11j10svd76736nejhacqi0.apps.googleusercontent.com';
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata openid email';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file openid email';
 const API = 'https://www.googleapis.com/drive/v3', UP = 'https://www.googleapis.com/upload/drive/v3';
 const TOKEN_KEY = 'senkid.gtoken';
 const appUrl = () => new URL('./', location.href).href;
@@ -45,7 +45,7 @@ export async function handleRedirect() {
   history.replaceState(null, '', location.pathname + location.search);
   if (!pending || h.get('state') !== pending.state) return false;
   if (h.get('error')) { if (!pending.silent) toast('เชื่อมต่อ Google ไม่สำเร็จ: ' + h.get('error'), 4000, 'warn'); setState('auth', { error: h.get('error') }); return true; }
-  const tok = { t: h.get('access_token'), exp: Date.now() + (+h.get('expires_in') || 3600) * 1000 };
+  const tok = { t: h.get('access_token'), exp: Date.now() + (+h.get('expires_in') || 3600) * 1000, scope: h.get('scope') || '' };
   localStorage.setItem(TOKEN_KEY, JSON.stringify(tok));
   prefs.sync = { ...(prefs.sync || {}), on: true }; savePrefs();
   try { const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tok.t } }); if (r.ok) { const u = await r.json(); prefs.sync.email = u.email || ''; savePrefs(); } } catch { }
@@ -290,3 +290,38 @@ export function statusText() {
     default: return sync.error ? sync.error : hm ? `ซิงก์แล้ว ${hm}` : 'พร้อมซิงก์';
   }
 }
+
+// ---------- recordings → a visible Drive folder "เส้นคิด/คลิป" (needs the drive.file permission) ----------
+export function hasFileScope() { const t = readToken(); return !!t && (!t.scope || /drive\.file/.test(t.scope)); }
+async function folderId(name, parent) {
+  const q = new URLSearchParams({ q: `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parent}' in parents`, fields: 'files(id)' });
+  const j = await (await gfetch(`${API}/files?${q}`)).json();
+  if (j.files?.[0]) return j.files[0].id;
+  const r = await gfetch(`${API}/files?fields=id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] }) });
+  return (await r.json()).id;
+}
+export async function uploadRecording(blob, name, onProgress) {
+  if (!connected() || !readToken()) throw Object.assign(new Error('auth'), { auth: true });
+  const root = await folderId('เส้นคิด', 'root'), dir = await folderId('คลิป', root);
+  onProgress?.('กำลังอัปโหลด…');
+  const r0 = await gfetch(`${UP}/files?uploadType=resumable&fields=id,webViewLink`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': blob.type || 'application/octet-stream', 'X-Upload-Content-Length': String(blob.size) }, body: JSON.stringify({ name, parents: [dir] }) });
+  const loc = r0.headers.get('Location'); if (!loc) throw new Error('resumable: no location');
+  const tok = readToken();
+  // upload in chunks so the progress bar moves and a dropped connection can resume
+  const CH = 8 * 1024 * 1024; let off = 0, out = null;
+  while (off < blob.size) {
+    const end = Math.min(blob.size, off + CH), part = blob.slice(off, end);
+    let r; for (let tries = 0; ; tries++) {
+      r = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': blob.type || 'application/octet-stream', 'Content-Range': `bytes ${off}-${end - 1}/${blob.size}`, Authorization: 'Bearer ' + tok.t }, body: part });
+      if (r.status === 308 || r.ok) break;
+      if (tries >= 2) throw new Error('upload ' + r.status);
+      await new Promise(res => setTimeout(res, 1500));
+    }
+    if (r.ok) out = await r.json();
+    off = end; onProgress?.(`กำลังอัปโหลด… ${Math.round(off / blob.size * 100)}%`, off / blob.size);
+  }
+  return out; // {id, webViewLink}
+}
+export async function driveFileUrl(id) { const r = await gfetch(`${API}/files/${id}?alt=media`); return URL.createObjectURL(await r.blob()); }
+export async function deleteDriveFile(id) { await remove(id); }
+export async function gfetchBlob(id, type) { const r = await gfetch(`${API}/files/${id}?alt=media`); const b = await r.blob(); return type && b.type !== type ? new Blob([b], { type }) : b; }
