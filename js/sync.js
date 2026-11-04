@@ -216,28 +216,35 @@ async function doSync(reason) {
         const jobs = [];
         for (const pid of pageList) {
           const lpg = lp.get(pid), rpg = rPg.get(pid);
-          const editedHere = id === openId && ed?.editedAt?.get(pid) && Date.now() - ed.editedAt.get(pid) < 15 * 60e3;
-          if (rpg && lpg && editedHere && rpg.updated > (lpg.updated || 0)) jobs.push(async () => {
-            // written on this device recently AND changed elsewhere: merge the ink of both sides (nothing is lost), then push the merged page
-            const lpage = ed.pageMap.get(pid); if (lpage && (ed.dirty.has(pid) || (ed.live && ed.live.page === lpage))) return; // mid-stroke: next round
-            await ed.flush?.(); const cur = await db.get('pages', pid); if (!cur) return;
-            const rp = await pageIn(await download(rpg.f.id));
-            const have = new Set((cur.strokes || []).map(x => x.id)), seen = (ed.seenRemote ||= new Map()).get(pid) || new Set();
-            const add = (rp.strokes || []).filter(x => x.id && !have.has(x.id) && !seen.has(x.id));
-            cur.strokes = [...(cur.strokes || []), ...add]; for (const x of rp.strokes || []) if (x.id) seen.add(x.id); ed.seenRemote.set(pid, seen);
-            cur.updated = Math.max(Date.now(), rpg.updated + 1); await db.put('pages', cur);
-            if (lpage) { lpage.strokes = cur.strokes; lpage.updated = cur.updated; lpage._ver = (lpage._ver || 0) + 1; ed.thumbCache?.delete(pid); ed.need.main = true; ed.app?.broadcast?.pageChanged(lpage); }
-            await upload(rpg.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(cur.updated) }, await pageOut(cur)); pushed++; if (add.length) pulled++;
-          });
-          else if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) jobs.push(async () => {
-            const p = await pageIn(await download(rpg.f.id)); p.updated = rpg.updated;
+          if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) jobs.push(async () => {
+            // remote is newer. If this device also has ink on the page, do a 3-way merge against the last synced state
+            // (what was added here stays, what was erased there goes) so nothing written on either side is lost.
+            const lpage = id === openId ? ed.pageMap.get(pid) : null;
+            if (lpage && (ed.dirty.has(pid) || (ed.live && ed.live.page === lpage))) return; // mid-stroke: next round
             if (id === openId) await ed.flush?.();
-            const cur = await db.get('pages', pid); if (cur && (cur.updated || 0) > (lpg?.updated || 0) && (cur.updated || 0) >= rpg.updated) return; // edited here meanwhile: keep ours
-            await db.savePagesAndNotebook([p], null); pulled++;
-            if (id === openId && !ed.applyRemotePage(p)) touchedOpen = true;
+            const rp = await pageIn(await download(rpg.f.id)); rp.updated = rpg.updated;
+            const cur = await db.get('pages', pid);
+            const base = new Set((await db.get('kv', 'sync:base:' + pid))?.v || []);
+            const lIds = (cur?.strokes || []).map(x => x.id), rIds = new Set((rp.strokes || []).map(x => x.id));
+            const localChanged = !!cur && ((cur.updated || 0) > 0 || lIds.length) && (lIds.some(x => !base.has(x)) || [...base].some(x => !lIds.includes(x)) || !base.size);
+            if (cur && localChanged && lIds.length) {
+              const keep = (cur.strokes || []).filter(x => !x.id || rIds.has(x.id) || !base.has(x.id)); // drop what the other side erased
+              const have = new Set(keep.map(x => x.id));
+              const add = (rp.strokes || []).filter(x => x.id && !have.has(x.id) && !base.has(x.id)); // take what the other side added
+              const merged = { ...cur, strokes: [...keep, ...add], bg: rp.bg || cur.bg, pdf: rp.pdf || cur.pdf, updated: Math.max(Date.now(), rpg.updated + 1) };
+              await db.put('pages', merged);
+              if (lpage) { lpage.strokes = merged.strokes; lpage.updated = merged.updated; lpage._ver = (lpage._ver || 0) + 1; ed.thumbCache?.delete(pid); ed.need.main = true; ed.app?.broadcast?.pageChanged(lpage); }
+              await upload(rpg.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(merged.updated) }, await pageOut(merged)); pushed++; if (add.length) pulled++;
+              await db.put('kv', { k: 'sync:base:' + pid, v: merged.strokes.map(x => x.id).filter(Boolean) });
+              return;
+            }
+            await db.savePagesAndNotebook([rp], null); pulled++;
+            await db.put('kv', { k: 'sync:base:' + pid, v: [...rIds].filter(Boolean) });
+            if (id === openId && !ed.applyRemotePage(rp)) touchedOpen = true;
           });
           else if (lpg && (!rpg || (lpg.updated || 0) > rpg.updated)) jobs.push(async () => {
             await upload(rpg?.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(lpg.updated || 0) }, await pageOut(lpg)); pushed++;
+            await db.put('kv', { k: 'sync:base:' + pid, v: (lpg.strokes || []).map(x => x.id).filter(Boolean) });
           });
         }
         // a few pages at a time (first upload of a big notebook)
@@ -324,10 +331,26 @@ export async function initSync(app) {
   }
   sessionStorage.removeItem('senkid.silent');
   setState('idle');
+  // the connection lapsing must never go unnoticed again: a bar stays up until it is reconnected
+  let authBar = null;
+  sync.on((st) => {
+    if (st.state === 'auth' && !authBar) {
+      const b = document.createElement('button'); b.className = 'pill prim'; b.style.cssText = 'height:40px;margin-left:10px;pointer-events:auto'; b.textContent = 'เชื่อมต่อใหม่';
+      b.onclick = async () => { await app.editor?.flush?.(); signIn(); };
+      authBar = document.createElement('div'); authBar.className = 'toast keep updbar warn'; authBar.append('การซิงก์หยุดทำงาน · การเชื่อม Google หมดอายุ', b); document.getElementById('toasts').append(authBar);
+    } else if (st.state !== 'auth' && authBar) { authBar.remove(); authBar = null; }
+  });
   db.onChange(() => scheduleSync(6000));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { clearTimeout(timer); syncNow('auto'); } else scheduleSync(1500); });
   addEventListener('online', () => scheduleSync(2000));
   setInterval(() => { if (document.visibilityState === 'visible') scheduleSync(0); }, 60 * 1000);
+  setInterval(() => {
+    if (!connected() || document.visibilityState !== 'visible' || !navigator.onLine) return;
+    const t = readToken(); const ed = app.editor;
+    const soon = !t || (t.exp - Date.now() < 8 * 60e3);
+    const idle = Date.now() - (ed?.lastInput || 0) > 3 * 60e3 && !ed?.dirty?.size && !ed?.live && !app.recorder?.active && !app.audio?.active && !document.querySelector('.dialog');
+    if (soon && idle && sessionStorage.getItem('senkid.silent') !== '1') { sessionStorage.setItem('senkid.silent', '1'); (async () => { await ed?.flush?.(); signIn({ silent: true }); })(); }
+  }, 30 * 1000);
   scheduleSync(1200);
 }
 export function statusText() {
