@@ -2,7 +2,7 @@
 // Records ONLY the paper area (main + live canvases) + microphone audio.
 import { h, icon, toast, dialog, popover, seg, toggle, fmtBytes, fmtTime, downloadBlob, confirmBox, uid, busy } from './ui.js';
 import { prefs, savePrefs } from './prefs.js';
-import { connected as syncOn, hasFileScope, uploadRecording, driveFileUrl, deleteDriveFile, signIn } from './sync.js';
+import { connected as syncOn, hasFileScope, uploadRecording, driveFileUrl, deleteDriveFile, signIn, scheduleSync } from './sync.js';
 import * as db from './db.js';
 
 const RES = [['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K']];
@@ -301,6 +301,7 @@ export async function maybeUpload(meta, quiet) {
     meta.drive = r.id; meta.link = r.webViewLink; meta.size = blob.size; meta.mime = blob.type;
     await db.put('recs', meta);
     await db.deleteRec(meta.id); await db.put('recs', meta); // drop the local chunks, keep the record
+    scheduleSync(3000);
     if (!quiet) toast('เก็บคลิปใน Google Drive แล้ว (โฟลเดอร์ เส้นคิด/คลิป) · ไม่กินพื้นที่เครื่อง', 3500);
     return blob;
     } catch (e) { e._blob = blob; throw e; }
@@ -378,7 +379,7 @@ export async function openRecordings(nb) {
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
       else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
-        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } await db.deleteRec(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
+        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } if (m.drive) { const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[m.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); scheduleSync(3000); } await db.deleteRec(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
       list.append(it);
     }
   };

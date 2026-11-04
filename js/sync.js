@@ -156,13 +156,14 @@ async function doSync(reason) {
   try {
     await ed?.flush?.();
     const remote = await listAll();
-    const rNb = new Map(), rPg = new Map(), rPdf = new Map(), rDel = new Map();
+    const rNb = new Map(), rPg = new Map(), rPdf = new Map(), rDel = new Map(); let rRecs = null;
     for (const f of remote) {
       const a = f.appProperties || {};
       if (a.kind === 'nb') rNb.set(a.id, { f, updated: +a.updated || 0 });
       else if (a.kind === 'page') rPg.set(a.id, { f, nb: a.nb, updated: +a.updated || 0 });
       else if (a.kind === 'pdf') rPdf.set(a.id, { f });
       else if (a.kind === 'del') rDel.set(a.id, { f, t: +a.t || 0 });
+      else if (a.kind === 'recs') rRecs = f;
     }
     const local = new Map((await db.getAll('notebooks')).map(n => [n.id, n]));
     const tomb = (await db.get('kv', 'sync:deleted'))?.v || {};
@@ -237,6 +238,22 @@ async function doSync(reason) {
         }
         else if (!l && r) { setState('syncing', { progress: 'ดาวน์โหลด PDF ' + (r.f.appProperties.name || '') }); const blob = await download(r.f.id, true); await db.put('pdfs', { id: pdfId, name: r.f.appProperties.name || 'เอกสาร.pdf', pages: +r.f.appProperties.pages || 0, blob, created: Date.now() }); pulled++; touchedOpen = touchedOpen || !!openId; }
       }
+      // 4) recordings index (clips themselves live in Drive, folder เส้นคิด/คลิป) — one small json shared by all devices
+      try {
+        const idx = rRecs ? await download(rRecs.id) : { recs: {}, deleted: {} };
+        const rdel = { ...(idx.deleted || {}), ...((await db.get('kv', 'sync:recdel'))?.v || {}) };
+        const mine = (await db.getAll('recs')).filter(r => r.drive && r.done);
+        const merged = { ...(idx.recs || {}) };
+        let changed = !rRecs;
+        for (const m of mine) { if (rdel[m.id]) continue; const { ...meta } = m; if (JSON.stringify(merged[m.id]) !== JSON.stringify(meta)) { merged[m.id] = meta; changed = true; } }
+        for (const id of Object.keys(rdel)) if (merged[id]) { delete merged[id]; changed = true; }
+        const localIds = new Set((await db.getAll('recs')).map(r => r.id));
+        for (const [id, m] of Object.entries(merged)) if (!localIds.has(id)) { await db.put('recs', m); pulled++; }
+        for (const id of Object.keys(rdel)) if (localIds.has(id)) { const l = await db.get('recs', id); if (l?.drive) { await db.deleteRec(id); } }
+        if (JSON.stringify(rdel) !== JSON.stringify(idx.deleted || {})) changed = true;
+        if (changed) await upload(rRecs?.id, 'recs.json', { kind: 'recs', id: 'recs' }, { recs: merged, deleted: rdel });
+        await db.put('kv', { k: 'sync:recdel', v: {} });
+      } catch (e) { if (e.auth) throw e; console.warn('sync recs', e); }
     } finally { db.setQuiet(false); }
     sync.lastSync = Date.now(); prefs.sync.last = sync.lastSync; savePrefs();
     setState('idle', { error: pdfFailMsg, progress: '' });
