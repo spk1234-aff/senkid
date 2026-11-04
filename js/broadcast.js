@@ -4,6 +4,7 @@ import { buildBackup, fileNameFor } from './files.js';
 import { prefs, savePrefs } from './prefs.js';
 import { connected as syncOn } from './sync.js';
 import { serializePage } from './editor.js';
+import { RtcLink, teacherPair, canPair } from './pair.js';
 
 export class Broadcast {
   constructor(app) {
@@ -11,15 +12,16 @@ export class Broadcast {
     this.mode = prefs.studentMode || 'follow';
     try { this.ch = new BroadcastChannel('senkid-live'); } catch { this.ch = null; }
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
+    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; toast('เชื่อมหน้าต่าง Safari แล้ว', 1800); } else if (this.rtcWas) toast('หน้าต่าง Safari หลุดการเชื่อมต่อ', 2500, 'warn'); this.rtcWas = v; this.app.editor?.buildToolbar(); } });
     app.timer.onChange((st) => this.post({ type: 'timer', st }));
   }
   get connected() { return performance.now() - this.lastAlive < 4500; }
-  post(m) { try { this.ch && this.connected && this.ch.postMessage(m); } catch (e) { console.warn(e); } }
-  onMsg(m) {
+  post(m) { if (!this.connected) return; try { this.ch && this.ch.postMessage(m); } catch (e) { console.warn(e); } if (this.rtc.open) this.rtc.send(m); }
+  onMsg(m, viaRtc) {
     if (!m) return;
     if (m.type === 'alive' || m.type === 'hello') {
       const was = this.connected; this.lastAlive = performance.now();
-      try { this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
+      try { if (viaRtc) this.rtc.send({ type: 'ack' }); else this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
       if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
     } else if (m.type === 'need') {
       const ed = this.app.editor; if (!ed) return;
@@ -38,7 +40,7 @@ export class Broadcast {
     this.pending.set(p.id, setTimeout(() => { this.pending.delete(p.id); const ed = this.app.editor; if (ed && ed.pageMap.get(p.id) === p) this.post({ type: 'page', nb: ed.nb.id, page: serializePage(p) }); }, 40));
   }
   frame(ed) {
-    if (!this.ch || !this.connected) return;
+    if (!this.connected) return;
     // view
     const [x0, y0] = ed.toWorld(0, 0), [x1, y1] = ed.toWorld(ed.W, ed.H);
     const cur = ed.currentPage();
@@ -65,6 +67,18 @@ export class Broadcast {
 }
 
 let studentWin = null;
+let pairing = false;
+async function startPairing(b) {
+  if (pairing) return; pairing = true;
+  const bz = busy('กำลังเตรียมจับคู่กับ Safari…');
+  try {
+    const url = new URL('student.html#pair', location.href).href;
+    const p = teacherPair(b.rtc, { onStatus: (st) => { if (st === 'offer') { bz.done(); location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } } });
+    const ok = await p;
+    if (!ok) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
+  } catch (e) { console.warn('pair', e); toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
+  finally { bz.done(); pairing = false; }
+}
 export const isHomeApp = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches;
 export const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const APP_URL = () => new URL('./', location.href).href;
@@ -186,9 +200,13 @@ export function studentMenu(app, anchor, ed) {
   open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
   if (isHomeApp() && isIOS()) {
     // the student window only works inside Safari on iPad
-    const open = h('button', { class: 'pill prim' }, icon('screen'), 'เปิดเส้นคิดใน Safari');
+    const open = h('button', { class: 'pill sec' }, icon('screen'), 'หรือเปิดเส้นคิดใน Safari แล้วสอนที่นั่น');
     open.onclick = () => { close(); ed?.flush?.(); location.href = 'x-safari-' + APP_URL(); };
-    box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', syncOn() ? 'ใช้ได้ใน Safari เท่านั้น · สมุดซิงก์ผ่าน Drive อยู่แล้ว เปิด Safari แล้วสอนต่อได้เลย (รอซิงก์ตามทันสัก 10 วินาที)' : 'ใช้ได้ใน Safari เท่านั้น · เปิด "ซิงก์ผ่าน Google Drive" ในตั้งค่าก่อน สมุดจะตามไป Safari เอง', open));
+    if (canPair() && syncOn()) {
+      const pairBtn = h('button', { class: 'pill prim' }, icon('screen'), b.rtc.open ? 'เปิดหน้าต่างนักเรียนใน Safari อีกครั้ง' : 'ส่งหน้าจอนักเรียนไป Safari');
+      pairBtn.onclick = () => { close(); startPairing(b); };
+      box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'สอนในแอปนี้ต่อได้ · จะเปิดหน้าจอนักเรียนใน Safari ให้ แล้วลากหน้าต่างนั้นไปทีวี (ต้องเปิด Stage Manager) · ใช้เน็ตแค่ตอนจับคู่', h('div', {}, pairBtn, h('div', { class: 'tvtip' }, h('b', {}, 'ขั้นตอน: '), 'กดปุ่ม → Safari เปิดขึ้นมา → กลับมาที่แอปเส้นคิด (รอ "เชื่อมหน้าต่าง Safari แล้ว") → กดค้างจุดสีเขียวของหน้าต่าง Safari → "ย้ายไปยัง…" ทีวี'), open)));
+    } else box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', syncOn() ? 'เชื่อมต่อ Google ในตั้งค่าก่อน แล้วจะส่งหน้าจอนักเรียนไป Safari จากแอปนี้ได้' : 'เปิด "ซิงก์ผ่าน Google Drive" ในตั้งค่าก่อน แล้วจะส่งหน้าจอนักเรียนไป Safari จากแอปนี้ได้', open));
   } else {
     if (isIOS()) {
       // a real link: press-and-hold gives iPad's own "Open in New Window", which skips the "move tab to new window" step

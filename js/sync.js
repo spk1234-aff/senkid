@@ -1,7 +1,7 @@
 // Cloud sync through the teacher's own Google Drive (hidden app folder).
 // Each notebook record, each page and each PDF is one file in Drive; newer `updated` wins.
 import * as db from './db.js';
-import { prefs, savePrefs } from './prefs.js';
+import { prefs, savePrefs, toolPrefs, applyToolPrefs } from './prefs.js';
 import { blobToDataURL, dataURLToBlob } from './images.js';
 import { toast } from './ui.js';
 
@@ -113,6 +113,9 @@ async function upload(existingId, name, appProperties, body, mime) {
     throw err;
   }
 }
+// small helpers for other modules (pairing file)
+export async function driveFind(kind) { const q = new URLSearchParams({ spaces: 'appDataFolder', q: `appProperties has { key='kind' and value='${kind}' }`, fields: 'files(id,name,appProperties)' }); const j = await (await gfetch(`${API}/files?${q}`)).json(); return (j.files || [])[0] || null; }
+export const driveDownload = download, driveUpload = upload;
 async function remove(fileId) { try { await gfetch(`${API}/files/${fileId}`, { method: 'DELETE' }); } catch (e) { if (!/404/.test(e.message)) throw e; } }
 
 // ---------- (de)serialising ----------
@@ -156,7 +159,7 @@ async function doSync(reason) {
   try {
     await ed?.flush?.();
     const remote = await listAll();
-    const rNb = new Map(), rPg = new Map(), rPdf = new Map(), rDel = new Map(); let rRecs = null;
+    const rNb = new Map(), rPg = new Map(), rPdf = new Map(), rDel = new Map(); let rRecs = null, rPrefs = null;
     for (const f of remote) {
       const a = f.appProperties || {};
       if (a.kind === 'nb') rNb.set(a.id, { f, updated: +a.updated || 0 });
@@ -164,6 +167,7 @@ async function doSync(reason) {
       else if (a.kind === 'pdf') rPdf.set(a.id, { f });
       else if (a.kind === 'del') rDel.set(a.id, { f, t: +a.t || 0 });
       else if (a.kind === 'recs') rRecs = f;
+      else if (a.kind === 'prefs') rPrefs = f;
     }
     const local = new Map((await db.getAll('notebooks')).map(n => [n.id, n]));
     const tomb = (await db.get('kv', 'sync:deleted'))?.v || {};
@@ -254,6 +258,12 @@ async function doSync(reason) {
         if (changed) await upload(rRecs?.id, 'recs.json', { kind: 'recs', id: 'recs' }, { recs: merged, deleted: rdel });
         await db.put('kv', { k: 'sync:recdel', v: {} });
       } catch (e) { if (e.auth) throw e; console.warn('sync recs', e); }
+      // 5) tool settings (colours, pen sizes…): newest device wins
+      try {
+        const rp = rPrefs ? await download(rPrefs.id) : null, rt = rp?.stamp || 0, lt = prefs.toolsStamp || 0;
+        if (rp && rt > lt) { applyToolPrefs(rp.tools || {}, rt); app?.editor?.buildToolbar?.(); app?.editor?.buildDock?.(); try { (await import('./fonts.js')).applyUiFont(); } catch { } }
+        else if (lt > rt) await upload(rPrefs?.id || null, 'prefs.json', { kind: 'prefs', id: 'prefs' }, { stamp: lt, tools: toolPrefs() });
+      } catch (e) { if (e.auth) throw e; console.warn('sync prefs', e); }
     } finally { db.setQuiet(false); }
     sync.lastSync = Date.now(); prefs.sync.last = sync.lastSync; savePrefs();
     setState('idle', { error: pdfFailMsg, progress: '' });

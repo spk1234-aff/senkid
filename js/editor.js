@@ -9,7 +9,7 @@ import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js
 import { openExportDialog, exportPdf } from './exportpdf.js';
 import { recognize, straighten, shapeHandles, moveHandle, shapeAs } from './shapes.js';
 import * as db from './db.js';
-import { openPenPanel, openEraserPanel } from './penpanel.js';
+import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
 import { normalizeImage, openCropper, rotateBlob, setImageReadyHook } from './images.js';
 import { canLinkFiles, getHandle, handlePermission, writeHandle, buildBackup } from './files.js';
 
@@ -175,7 +175,8 @@ export class Editor {
       if (t === 'pen' || t === 'hl') {
         dock.append(h('i', { class: 'dsep' }));
         const cur = c.color, cols = t === 'hl' ? prefs.hlFavorites.slice(0, 5) : prefs.favorites.slice(0, 5);
-        for (const col of cols) { const b = h('button', { class: 'dsw' + (String(cur).toUpperCase() === col.toUpperCase() ? ' on' : ''), title: col }, h('i', { style: { background: col } })); b.onclick = (e) => { e.stopPropagation(); this.setColor(col); }; dock.append(b); }
+        for (const col of cols) { const b = h('button', { class: 'dsw' + (String(cur).toUpperCase() === col.toUpperCase() ? ' on' : ''), title: col }, h('i', { style: { background: col } })); b.onclick = (e) => { e.stopPropagation(); this.setColor(col); }; onLongPress(b, () => openColorManager(b, this, this.popOpts())); dock.append(b); }
+        { const eb = h('button', { class: 'db', title: 'แก้ไข / เรียงสี' }, icon('edit')); eb.onclick = (e) => { e.stopPropagation(); openColorManager(eb, this, this.popOpts()); }; dock.append(eb); }
         if (t === 'pen') {
           dock.append(h('i', { class: 'dsep' }));
           const isLine = (id) => id === 'solid' ? !['dash', 'dot'].includes(prefs.penType) : prefs.penType === id;
@@ -226,14 +227,26 @@ export class Editor {
     Object.assign(dock.style, { left: x + 'px', top: y + 'px', right: 'auto', transform: 'none' });
   }
   armDockDrag(dock, grip) {
-    grip.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); e.stopPropagation();
+    // drag from the grip right away, or from anywhere on the dock once the finger has moved a bit (a plain tap still presses the button)
+    const begin = (e, offX, offY) => {
       const W = this.stage.clientWidth, H = this.stage.clientHeight, sr = this.stage.getBoundingClientRect();
-      dock.classList.add('dragging'); try { grip.setPointerCapture(e.pointerId); } catch { }
-      const mv = (ev) => { prefs.dockXY = { x: Math.max(0, Math.min(1, (ev.clientX - sr.left) / W)), y: Math.max(0, Math.min(1, (ev.clientY - sr.top) / H)) }; this.placeDock(dock); };
-      const up = () => { grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); dock.classList.remove('dragging'); savePrefs(); };
-      grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+      dock.classList.add('dragging'); try { dock.setPointerCapture(e.pointerId); } catch { }
+      const mv = (ev) => { prefs.dockXY = { x: Math.max(0, Math.min(1, (ev.clientX + offX - sr.left) / W)), y: Math.max(0, Math.min(1, (ev.clientY + offY - sr.top) / H)) }; this.placeDock(dock); };
+      const up = () => { dock.removeEventListener('pointermove', mv); dock.removeEventListener('pointerup', up); dock.removeEventListener('pointercancel', up); dock.classList.remove('dragging'); savePrefs(); };
+      dock.addEventListener('pointermove', mv); dock.addEventListener('pointerup', up); dock.addEventListener('pointercancel', up);
+      mv(e);
+    };
+    dock.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const gr = grip.getBoundingClientRect(), gx = gr.left + gr.width / 2, gy = gr.top + gr.height / 2;
+      if (grip.contains(e.target)) { e.preventDefault(); e.stopPropagation(); begin(e, 0, 0); return; }
+      // elsewhere on the dock: wait for real movement
+      const sx = e.clientX, sy = e.clientY, id = e.pointerId; let started = false;
+      const pm = (ev) => { if (ev.pointerId !== id || started) return; if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10) { started = true; dock._dragged = true; cleanup(); begin(ev, gx - sx, gy - sy); } };
+      const cleanup = () => { dock.removeEventListener('pointermove', pm); dock.removeEventListener('pointerup', cleanup); dock.removeEventListener('pointercancel', cleanup); };
+      dock.addEventListener('pointermove', pm); dock.addEventListener('pointerup', cleanup); dock.addEventListener('pointercancel', cleanup);
     });
+    dock.addEventListener('click', (e) => { if (dock._dragged) { dock._dragged = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
   }
   // fill the screen width with the page (bigger for students on a TV) ↔ whole page
   toggleFitWide() {
@@ -281,14 +294,16 @@ export class Editor {
     const favs = (t === 'hl' ? prefs.hlFavorites : prefs.favorites).slice(0, this.vertical ? 6 : 8);
     for (const col of favs) {
       const on = t !== 'eraser' && c.color && col.toUpperCase() === c.color.toUpperCase();
-      const b = h('button', { class: 'sw' + (on ? ' on' : ''), title: col }, h('i', { style: { background: col } }));
+      const b = h('button', { class: 'sw' + (on ? ' on' : ''), title: col + ' (กดค้างเพื่อจัดการสี)' }, h('i', { style: { background: col } }));
       b.onclick = () => { if (on) openPenPanel(b, this, this.popOpts()); else this.setColor(col); };
+      onLongPress(b, () => openColorManager(b, this, this.popOpts()));
       g3.append(b);
     }
     if (c.color && !favs.some(x => x.toUpperCase() === c.color.toUpperCase()) && t !== 'eraser') {
       const b = h('button', { class: 'sw on', title: c.color }, h('i', { style: { background: c.color } }));
       b.onclick = () => openPenPanel(b, this, this.popOpts()); g3.append(b);
     }
+    if (t !== 'eraser') { const eb = h('button', { class: 'btn sq cm-open', title: 'แก้ไข / เรียงสี', 'aria-label': 'แก้ไขสี' }, icon('edit')); eb.onclick = () => openColorManager(eb, this, this.popOpts()); g3.append(eb); }
     // sizes
     this.gSizes = h('div', { class: 'grp' });
     this.fillSizes();
@@ -437,6 +452,7 @@ export class Editor {
       }
       const more = h('button', { class: 'sw wheel-sw', title: 'สีอื่น ๆ' }, h('i'));
       more.onclick = () => openPenPanel(more, this, {}); bar.append(more);
+      const eb = h('button', { class: 'sw cm-open', title: 'แก้ไข / เรียงสี', 'aria-label': 'แก้ไขสี' }, icon('edit')); eb.onclick = () => openColorManager(eb, this, {}); bar.append(eb);
     }
     if (prefs.toolbarHidden && !this.peek) bar.classList.add('hidden');
     this.stage.append(cap, bar);
@@ -1049,12 +1065,14 @@ export class Editor {
     if (this.live && this.live.id === e.pointerId) { this.commitLive(); return; }
     if (this.erasing && this.erasing.id === e.pointerId) { this.finishErase(); return; }
     if (this.pointers.has(e.pointerId)) {
+      if (this.pan?.img) this.endImgGesture(this.pan); // lifting either finger ends the pinch on the picture
       this.pointers.delete(e.pointerId);
       if (this.pointers.size === 0) {
         const g = this.gesture; this.gesture = null; this.pan = null;
-        if (g && !cancel && performance.now() - g.t0 < 320 && g.moved < 14) {
+        if (g && !g.img && !cancel && performance.now() - g.t0 < 320 && g.moved < 14) {
           if (g.max === 1 && this.tool === 'text') { if (this.imgSel) this.deselectImage(); this.textAtFinger(e); }
-          else if (g.max === 1 && this.imgSel) this.deselectImage();
+          else if (g.max === 1 && this.imgSel) { const was = this.imgSel.sid; this.deselectImage(); if (this.tapImage(e) && this.imgSel?.sid === was) { /* same picture: keep it selected */ } }
+          else if (g.max === 1 && this.tapImage(e)) { }
           else if (g.max === 1 && this.tapShape(e)) { }
           if (g.max === 2) { this.undo(); toast('ย้อนกลับ', 900); }
           else if (g.max === 3) { this.redo(); toast('ทำซ้ำ', 900); }
@@ -1096,13 +1114,28 @@ export class Editor {
     const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length, cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
     const d = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
     this.pan = { cx, cy, d, z: this.z, ox: this.ox, oy: this.oy, n: pts.length, mode: pts.length > 1 ? null : 'pan', hist: [{ t: performance.now(), x: cx, y: cy }] };
+    // two fingers on a selected picture / sticker: pinch = resize, twist = rotate (instead of zooming the page)
+    if (pts.length === 2 && this.imgSel) {
+      const sel = this.selImage(), r = sel && this.rects.get(sel.page.id);
+      if (sel) { const [wx, wy] = this.toWorld(cx, cy), [lx, ly] = objLocal(sel.s, wx - r.x, wy - r.y), m = 30 / this.z; if (lx > sel.s.x - m && lx < sel.s.x + sel.s.w + m && ly > sel.s.y - m && ly < sel.s.y + sel.s.h + m) { const d = this.imgDrag; this.imgDrag = null; this.pan.mode = 'img'; if (this.gesture) this.gesture.img = true; this.pan.img = { page: sel.page, orig: d ? d.orig : sel.s, base: sel.s, cur: d && d.cur !== d.orig ? d.cur : null, ang: Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) }; this.imgBar.classList.add('hidden'); } }
+    }
     this.fling = null; cancelAnimationFrame(this.flingRaf);
   }
   updateGesture() {
     const P = this.pan; if (!P) return;
     const pts = [...this.pointers.values()];
-    if (pts.length !== P.n) { this.startGesture(); return; }
+    if (pts.length !== P.n) { if (P.mode === 'img') this.endImgGesture(); this.startGesture(); return; }
     const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length, cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+    if (P.mode === 'img') {
+      const G = P.img, s0 = G.base, d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y), sc = Math.max(0.05, d / Math.max(1, P.d));
+      let da = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) - G.ang; if (Math.abs(da) < 0.06) da = 0;
+      const c0x = s0.x + s0.w / 2, c0y = s0.y + s0.h / 2, ncx = c0x + (cx - P.cx) / this.z, ncy = c0y + (cy - P.cy) / this.z, w = s0.w * sc, hh = s0.h * sc;
+      if (w < 8 || hh < 8) return;
+      let rot = ((s0.rot || 0) + da) % (2 * Math.PI); if (rot < 0) rot += 2 * Math.PI; for (const q of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2, 2 * Math.PI]) if (Math.abs(rot - q) < Math.PI / 60) rot = q % (2 * Math.PI);
+      const ns = { ...s0, x: ncx - w / 2, y: ncy - hh / 2, w, h: hh, bb: null }; if (rot) ns.rot = rot; else delete ns.rot; if (s0.t === 'text') ns.size = s0.size * sc;
+      const cur = G.cur || s0; G.page.strokes = G.page.strokes.map(x => x === cur ? ns : x); G.cur = ns; this.imgSel = { pid: G.page.id, sid: ns.id };
+      this.need.main = this.need.ui = true; return;
+    }
     let z = P.z;
     if (pts.length > 1 && P.d > 0) {
       const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
@@ -1190,7 +1223,12 @@ export class Editor {
   commitLive() {
     clearInterval(this.holdTimer);
     const L = this.live; if (!L) return;
-    if (L.far < 6 && performance.now() - L.t0 < 350 && L.kind !== 'hl') { const hit = this.shapeAt(L.page, L.sx, L.sy, true); if (hit) { this.live = null; this.need.live = true; this.selectShape(L.page, hit); return; } }
+    if (L.far < 10 && performance.now() - L.t0 < 450 && L.kind !== 'hl') {
+      const hit = this.shapeAt(L.page, L.sx, L.sy, true); if (hit) { this.live = null; this.need.live = true; this.selectShape(L.page, hit); return; }
+      // a tap on a sticker / picture selects it (menu: delete, copy…) instead of leaving a dot
+      const r = this.rects.get(L.page.id), [wx, wy] = this.toWorld(L.sx, L.sy), img = r && this.imgAt(L.page, wx - r.x, wy - r.y);
+      if (img && img.t === 'img') { this.live = null; this.need.live = true; this.selectImage(L.page.id, img.id); return; }
+    }
     const s = this.liveStroke(false);
     this.live = null; this.need.live = true;
     if (!s) return;
@@ -1859,10 +1897,17 @@ export class Editor {
     this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
     this.markDirty(page); this.need.main = true;
     this.selectImage(page.id, obj.id);
-    if (sticker || meta) { }
+    if (sticker) { if (!prefs.stickerHinted) { prefs.stickerHinted = true; savePrefs(); toast('ลากมุมเพื่อย่อ‑ขยาย · แตะสติกเกอร์อีกครั้งเพื่อลบหรือคัดลอก', 3200); } }
+    else if (meta) { }
     else if (select) toast('แทรกรูปแล้ว · กด “ครอป/ตัด” เพื่อตัดรูป', 2600);
     else if (!crop) toast('วางรูปแล้ว · กดค้างบนรูปเพื่อเลือกอีกครั้ง', 2200);
   }
+  endImgGesture(P = this.pan) {
+    const G = P?.img; if (!G || !G.cur) return; P.img = null;
+    const after = G.page.strokes.slice(), before = after.map(x => x === G.cur ? G.orig : x);
+    this.pushHistory({ k: 'str', items: [{ pid: G.page.id, before, after }] }); this.markDirty(G.page); this.buildImgBar(); this.imgBar.classList.remove('hidden'); this.need.main = this.need.ui = true;
+  }
+  tapImage(e) { const r = this.stage.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return false; const pr = this.rects.get(page.id), img = this.imgAt(page, wx - pr.x, wy - pr.y); if (img && img.t === 'img') { this.selectImage(page.id, img.id); return true; } return false; }
   tapShape(e) { const r = this.stage.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return false; const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return true; } if (this.sel) this.deselect(); return false; }
   textAtFinger(e) { // finger tap with the text tool: new text box, or edit the text under the finger
     if (performance.now() - (this.txDone || 0) < 700) return;
@@ -1928,7 +1973,7 @@ export class Editor {
   }
   imgHandleAt(sx, sy, touch) {
     const sel = this.selImage(); if (!sel) return null;
-    const r = this.rects.get(sel.page.id), s = sel.s, tol = touch ? 28 : 18;
+    const r = this.rects.get(sel.page.id), s = sel.s, tol = (touch ? 28 : 18) + (Math.min(s.w, s.h) * this.z < 90 ? 8 : 0);
     const H = this.objHandles(s, r);
     if (Math.hypot(sx - H.rotH[0], sy - H.rotH[1]) < tol) return { kind: 'rotate', sel };
     for (const id of ['tl', 'tr', 'bl', 'br']) if (Math.hypot(sx - H[id][0], sy - H[id][1]) < tol) return { kind: 'resize', corner: id, sel };

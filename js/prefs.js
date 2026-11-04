@@ -46,8 +46,14 @@ try { state = merge(defaults(), JSON.parse(localStorage.getItem(KEY) || '{}')); 
 export const prefs = state;
 let t = null;
 const subs = new Set();
+// the part of the settings that should be the same on every device of the teacher
+export const SYNCED_KEYS = ['pens', 'penColor', 'penAlpha', 'hl', 'eraser', 'favorites', 'hlFavorites', 'laser', 'uiFont', 'shapeFill', 'shapeFillA', 'shapeRecog', 'scribbleErase', 'newNb'];
+export function toolPrefs() { const o = {}; for (const k of SYNCED_KEYS) if (state[k] !== undefined) o[k] = state[k]; return o; }
+export function applyToolPrefs(o, stamp) { for (const k of SYNCED_KEYS) if (o[k] !== undefined) state[k] = o[k]; state.toolsStamp = stamp; lastTools = JSON.stringify(toolPrefs()); savePrefs(); }
+let lastTools = JSON.stringify(toolPrefs());
 export function savePrefs() {
   clearTimeout(t);
+  const tp = JSON.stringify(toolPrefs()); if (tp !== lastTools) { lastTools = tp; state.toolsStamp = Date.now(); }
   t = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { } }, 150);
   subs.forEach(f => f());
 }

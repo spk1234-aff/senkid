@@ -7,6 +7,7 @@ import { setImageReadyHook } from './images.js';
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d', { alpha: false });
 const wait = document.getElementById('wait'), tm = document.getElementById('tm'), tmf = document.getElementById('tmf'), ov = document.getElementById('ov');
 const ch = new BroadcastChannel('senkid-live');
+let rtc = null; const send = (m) => { try { ch.postMessage(m); } catch { } if (rtc?.open) rtc.send(m); };
 const pages = new Map();
 let tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
 
@@ -14,13 +15,13 @@ function size() { const d = Math.min(3, devicePixelRatio || 1); cv.width = Math.
 addEventListener('resize', size); size();
 setPdfReadyHook(() => dirty = true); setImageReadyHook(() => dirty = true);
 
-ch.onmessage = (e) => {
-  const m = e.data; if (!m) return; lastMsg = performance.now(); window.__senkidLast = lastMsg;
+const onMsg = (m) => {
+  if (!m) return; lastMsg = performance.now(); window.__senkidLast = lastMsg;
   if (m.type === 'meta') { if (m.nb !== nb) { nb = m.nb; pages.clear(); } paper = m.paper || paper; dirty = true; }
   else if (m.type === 'view') {
     if (m.nb !== nb) { nb = m.nb; pages.clear(); }
     view = m; paper = m.paper || paper;
-    const need = m.vis.filter(id => !pages.has(id)); if (need.length) ch.postMessage({ type: 'need', pids: need });
+    const need = m.vis.filter(id => !pages.has(id)); if (need.length) send({ type: 'need', pids: need });
     wait.style.display = 'none'; dirty = true;
   } else if (m.type === 'page') { if (m.nb === nb) { for (const s of m.page.strokes) if (s.pts && !(s.pts instanceof Float32Array)) s.pts = Float32Array.from(s.pts); pages.set(m.page.id, m.page); dirty = true; } }
   else if (m.type === 'live') { live = m.s ? { pid: m.pid, s: m.s } : null; dirty = true; }
@@ -28,9 +29,22 @@ ch.onmessage = (e) => {
   else if (m.type === 'timer') timer(m.st);
   else if (m.type === 'tools') { tools = m; dirty = true; calcShow(m.calc); }
 };
+ch.onmessage = (e) => onMsg(e.data);
 ch.postMessage({ type: 'hello' });
-setInterval(() => ch.postMessage({ type: 'alive' }), 1500);
-setInterval(() => { if (performance.now() - lastMsg > 6000 && view) { wait.style.display = 'flex'; wait.querySelector('p').textContent = 'ขาดการเชื่อมต่อกับหน้าจอครู · เปิดเส้นคิดค้างไว้ในเบราว์เซอร์เดียวกัน'; } }, 2000);
+setInterval(() => send({ type: 'alive' }), 1500);
+setInterval(() => { if (performance.now() - lastMsg > 6000 && view) { wait.style.display = 'flex'; wait.querySelector('p').textContent = rtc ? 'ขาดการเชื่อมต่อกับแอปเส้นคิด · กลับไปที่แอปแล้วกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง' : 'ขาดการเชื่อมต่อกับหน้าจอครู · เปิดเส้นคิดค้างไว้ในเบราว์เซอร์เดียวกัน'; } }, 2000);
+// opened from the home-screen app: pair through Drive, then talk directly
+if (location.hash.includes('pair')) (async () => {
+  const msg = (t) => { wait.style.display = 'flex'; wait.querySelector('p').textContent = t; };
+  try {
+    const { RtcLink, studentPair, canPair } = await import('./pair.js');
+    if (!canPair()) { msg('ต้องเชื่อมต่อ Google ใน Safari ก่อน (เปิดเส้นคิดใน Safari → ตั้งค่า → ซิงก์ผ่าน Google Drive)'); return; }
+    rtc = new RtcLink({ onMsg, onState: (v) => { if (v) { send({ type: 'hello' }); msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } } });
+    msg('กำลังจับคู่กับแอปเส้นคิด…');
+    const ok = await studentPair(rtc, { onStatus: (st, e) => { if (st === 'waiting') msg('รอรหัสจับคู่จากแอปเส้นคิด… (กดปุ่มในแอปอีกครั้งถ้านานเกินไป)'); else if (st === 'answered') msg('ตอบรับแล้ว · กลับไปที่แอปเส้นคิดเพื่อเชื่อมต่อให้เสร็จ'); else if (st === 'error') msg('อ่านรหัสจับคู่ไม่ได้: ' + (e?.message || e)); } });
+    if (!ok) msg('จับคู่ไม่สำเร็จ (หมดเวลา) · กดปุ่มในแอปเส้นคิดอีกครั้ง แล้วโหลดหน้านี้ใหม่');
+  } catch (e) { console.warn(e); msg('จับคู่ไม่สำเร็จ: ' + (e.message || e)); }
+})();
 
 function transform() {
   const W = innerWidth, H = innerHeight;

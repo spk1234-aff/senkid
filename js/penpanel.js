@@ -219,3 +219,65 @@ export function openEraserPanel(anchor, ed, opts = {}) {
     h('p', { style: { fontSize: '18px', color: 'var(--muted)', margin: '12px 0 0' } }, 'เคล็ดลับ: แตะด้วย 2 นิ้ว = ย้อนกลับ · แตะด้วย 3 นิ้ว = ทำซ้ำ'));
   return popover(anchor, box, opts);
 }
+
+// ---- colour manager: long-press any swatch on the toolbar / dock ----
+// reorder by dragging, tap a swatch to change that colour, × removes, + adds. Shared by pen and highlighter lists.
+export function openColorManager(anchor, ed, opts = {}) {
+  const isHl = () => ed.tool === 'hl';
+  const list = () => isHl() ? prefs.hlFavorites : prefs.favorites;
+  const box = h('div', { class: 'cmgr' });
+  box.append(h('div', { class: 'ttl' }, h('b', {}, isHl() ? 'สีไฮไลต์' : 'สีปากกา'), h('div', { class: 'sub' }, 'ลากเพื่อเรียง · แตะเพื่อแก้สี · × ลบ')));
+  const favsEl = h('div', { class: 'favs edit cm-list' }); box.append(favsEl);
+  const editor = h('div', { class: 'cm-edit hidden' }); box.append(editor);
+  let editIdx = -1;
+  const commit = () => { savePrefs(); ed.buildToolbar(); ed.buildDock?.(); };
+  function openEditor(i) {
+    editIdx = i; const l = list(); editor.classList.remove('hidden'); editor.innerHTML = '';
+    const cur = l[i];
+    const wheel = h('input', { type: 'color', value: cur.slice(0, 7), class: 'cm-wheel' });
+    const hex = h('input', { type: 'text', value: cur.toUpperCase(), class: 'field cm-hex', maxlength: 7, spellcheck: false, autocapitalize: 'characters' });
+    const prev = h('i', { class: 'cm-prev', style: { background: cur } });
+    const apply = (v) => { if (!/^#[0-9A-F]{6}$/i.test(v)) return; l[i] = v.toUpperCase(); prev.style.background = v; hex.value = v.toUpperCase(); wheel.value = v; commit(); refresh(false); };
+    wheel.oninput = () => apply(wheel.value); hex.onchange = () => apply(hex.value.startsWith('#') ? hex.value : '#' + hex.value);
+    const useBtn = h('button', { class: 'pill prim', style: { height: '40px' } }, 'ใช้สีนี้'); useBtn.onclick = () => { ed.setColor(l[i]); };
+    const doneBtn = h('button', { class: 'pill ghost', style: { height: '40px' } }, 'ปิด'); doneBtn.onclick = () => { editor.classList.add('hidden'); editIdx = -1; refresh(); };
+    editor.append(h('div', { class: 'row' }, prev, h('label', { class: 'cm-wrap' }, wheel, h('span', {}, 'วงล้อสี')), hex), h('div', { class: 'row' }, useBtn, doneBtn));
+  }
+  function refresh(rebuild = true) {
+    if (!rebuild) { $$('.sw', favsEl).forEach((b, j) => { b.querySelector('i').style.background = list()[j]; b.classList.toggle('on', j === editIdx); }); return; }
+    favsEl.innerHTML = '';
+    const l = list();
+    l.forEach((c, i) => {
+      const b = h('button', { class: 'sw' + (i === editIdx ? ' on' : ''), title: c }, h('i', { style: { background: c } }), h('span', { class: 'x' }, '×'));
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); b.setPointerCapture(e.pointerId);
+        const sx = e.clientX, sy = e.clientY; let moved = false; let target = i;
+        const onX = e.target.classList.contains('x');
+        const mv = (ev) => {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) moved = true;
+          if (!moved) return;
+          b.style.transform = `translate(${ev.clientX - sx}px,${ev.clientY - sy}px)`; b.style.zIndex = 5;
+          $$('.sw', favsEl).forEach((k, j) => { if (k === b) return; const r = k.getBoundingClientRect(); if (ev.clientX > r.left && ev.clientX < r.right && ev.clientY > r.top && ev.clientY < r.bottom) target = j; });
+        };
+        const upf = () => {
+          b.removeEventListener('pointermove', mv); b.removeEventListener('pointerup', upf); b.removeEventListener('pointercancel', upf);
+          b.style.transform = ''; b.style.zIndex = '';
+          const L = list();
+          if (moved && target !== i) { const [c] = L.splice(i, 1); L.splice(target, 0, c); if (editIdx === i) editIdx = target; commit(); refresh(); }
+          else if (!moved && onX) { if (L.length <= 1) { toast('ต้องมีอย่างน้อย 1 สี', 1200); return; } L.splice(i, 1); if (editIdx === i) { editIdx = -1; editor.classList.add('hidden'); } commit(); refresh(); }
+          else if (!moved) openEditor(i), refresh();
+        };
+        b.addEventListener('pointermove', mv); b.addEventListener('pointerup', upf); b.addEventListener('pointercancel', upf);
+      }, { capture: true });
+      favsEl.append(b);
+    });
+    const add = h('button', { class: 'add', title: 'เพิ่มสี' }, icon('plus'));
+    add.onclick = () => { const L = list(); if (L.length >= 16) { toast('เก็บได้สูงสุด 16 สี', 1500); return; } const cur = (ed.cur().color || '#1E2A55').toUpperCase(); L.push(L.some(c => c.toUpperCase() === cur) ? '#888888' : cur); commit(); openEditor(L.length - 1); refresh(); };
+    favsEl.append(add);
+  }
+  refresh();
+  const reset = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '8px', fontSize: '18px' } }, 'คืนค่าสีเริ่มต้น');
+  reset.onclick = () => { const d = isHl() ? ['#F5B83D', '#7FE07A', '#7CC7FF', '#FF8FB1', '#C9A7FF'] : ['#1E2A55', '#2F5BEA', '#D64545', '#1E9E5A', '#F5B83D', '#7A4BD6', '#000000', '#E06B2D']; list().splice(0, list().length, ...d); editIdx = -1; editor.classList.add('hidden'); commit(); refresh(); };
+  box.append(reset);
+  return popover(anchor, box, opts);
+}
