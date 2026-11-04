@@ -618,3 +618,10 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .ctxbar .cgrip{width:16px;height:40px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;cursor:grab;flex:none;margin-right:4px;touch-action:none}
 .ctxbar .cgrip i{display:block;width:2.5px;height:22px;border-radius:2px;background:rgba(255,255,255,.55)}
 .ctxbar.dragging{opacity:.92;box-shadow:0 14px 40px rgba(0,0,0,.4)}
+
+.ctxbar.vert{flex-direction:row;flex-wrap:wrap;justify-content:center;align-content:flex-start;width:112px;max-width:none;max-height:calc(100% - 20px);overflow-x:hidden;overflow-y:auto;padding:8px 5px;border-radius:22px;gap:4px 2px}
+.ctxbar.vert .grp{flex-wrap:wrap;width:100px;justify-content:center;gap:2px}
+.ctxbar.vert .vsep{width:80px;height:1px;margin:4px 0}
+.ctxbar.vert .cgrip{width:100px;height:16px;flex-direction:column;margin:0 0 2px}
+.ctxbar.vert .cgrip i{width:22px;height:2.5px}
+.ctxbar.vert .grow{display:none}

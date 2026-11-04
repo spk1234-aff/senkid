@@ -244,17 +244,26 @@ export class Editor {
     makeDraggable(bar, {
       grip,
       onStart: (sx, sy) => { const r = bar.getBoundingClientRect(); sr = this.stage.getBoundingClientRect(); dx = sx - r.left; dy = sy - r.top; },
-      onMove: (x, y) => { const W = this.stage.clientWidth, H = this.stage.clientHeight, bw = bar.offsetWidth, bh = bar.offsetHeight; prefs.ctxXY = { x: Math.max(0, Math.min(1, (x - dx - sr.left) / Math.max(1, W - bw))), y: Math.max(0, Math.min(1, (y - dy - sr.top) / Math.max(1, H - bh))) }; this.placeCtx(bar); },
+      onMove: (x, y) => {
+        const W = this.stage.clientWidth, H = this.stage.clientHeight;
+        // near the left/right edge the row stands up as a column (like the presentation dock)
+        const side = x - sr.left < 70 ? 'l' : sr.right - x < 70 ? 'r' : null;
+        const wasV = bar.classList.contains('vert'); bar.classList.toggle('vert', !!side);
+        if (!!side !== wasV) { const r = bar.getBoundingClientRect(); dx = Math.min(dx, r.width - 10); dy = Math.min(dy, r.height - 10); }
+        const bw = bar.offsetWidth, bh = bar.offsetHeight;
+        prefs.ctxXY = { side, x: Math.max(0, Math.min(1, (x - dx - sr.left) / Math.max(1, W - bw))), y: Math.max(0, Math.min(1, (y - dy - sr.top) / Math.max(1, H - bh))) }; this.placeCtx(bar);
+      },
       onEnd: () => { const W = this.stage.clientWidth, cx = bar.offsetLeft + bar.offsetWidth / 2; if (prefs.ctxXY && Math.abs(cx - W / 2) < 60 && bar.offsetTop < 40) { prefs.ctxXY = null; this.placeCtx(bar); toast('แถบกลับที่เดิมแล้ว', 900); } savePrefs(); },
     });
     this.placeCtx(bar);
   }
   placeCtx(bar) {
     const P = prefs.ctxXY;
-    bar.classList.toggle('free', !!P);
+    bar.classList.toggle('free', !!P); bar.classList.toggle('vert', !!P?.side);
     if (!P) { bar.style.left = bar.style.top = ''; return; }
     const W = this.stage.clientWidth, H = this.stage.clientHeight, bw = bar.offsetWidth, bh = bar.offsetHeight;
-    bar.style.left = Math.round(P.x * Math.max(0, W - bw)) + 'px'; bar.style.top = Math.round(P.y * Math.max(0, H - bh)) + 'px';
+    const left = P.side === 'l' ? 8 : P.side === 'r' ? W - bw - 8 : Math.round(P.x * Math.max(0, W - bw));
+    bar.style.left = left + 'px'; bar.style.top = Math.round(P.y * Math.max(0, H - bh)) + 'px';
   }
   // fill the screen width with the page (bigger for students on a TV) ↔ whole page
   toggleFitWide() {
