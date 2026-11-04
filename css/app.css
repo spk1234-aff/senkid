@@ -512,7 +512,7 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .pdock .dgrip{width:40px;height:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:grab;touch-action:none;flex:none}
 .pdock .dgrip i{display:block;width:22px;height:2.5px;border-radius:2px;background:rgba(255,255,255,.6)}
 .pdock.dragging{opacity:1;transition:none}
-.pdock.horiz{flex-direction:row;padding:4px 6px;max-width:calc(100% - 12px);max-height:none;overflow-x:auto;overflow-y:hidden}
+.pdock.horiz{flex-direction:row;flex-wrap:wrap;justify-content:center;row-gap:2px;padding:4px 6px;max-width:calc(100% - 12px);max-height:none;overflow:visible}
 .pdock.horiz .dsep{width:1px;height:26px;margin:0 4px}
 .pdock.horiz .dgrip{width:16px;height:40px;flex-direction:row}
 .pdock.horiz .dgrip i{width:2.5px;height:22px}
@@ -625,3 +625,10 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .ctxbar.vert .cgrip{width:100px;height:16px;flex-direction:column;margin:0 0 2px}
 .ctxbar.vert .cgrip i{width:22px;height:2.5px}
 .ctxbar.vert .grow{display:none}
+/* vertical dock: two columns so every tool fits on screen */
+.pdock:not(.horiz){flex-direction:row;flex-wrap:wrap;justify-content:center;align-content:flex-start;width:146px;gap:2px 2px}
+.pdock:not(.horiz) .db,.pdock:not(.horiz) .dsw{height:38px}
+.pdock:not(.horiz) .dgrip{width:100%}
+.pdock:not(.horiz) .dsep{width:110px;height:1px;margin:3px 0}
+.pdock:not(.horiz) .dpg{width:100%}
+.pdock:not(.horiz) .dtog{width:100%}

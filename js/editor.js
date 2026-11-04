@@ -171,6 +171,12 @@ export class Editor {
       }, t === id);
       dock.append(tool('pen', prefs.penType, 'ปากกา (แตะอีกครั้งเพื่อตั้งค่า)'), tool('hl', 'hl', 'ไฮไลต์ (แตะอีกครั้งเพื่อตั้งค่า)'), tool('eraser', 'eraser', 'ยางลบ (แตะอีกครั้งเพื่อตั้งค่า)'),
         tool('lasso', 'lasso', 'บ่วงบาศ: เลือก ย้าย ย่อขยาย'), tool('laser', 'laser', 'เลเซอร์'), B('curtain', 'ม่านบังคำตอบ', () => this.toggleCurtain(), !!this.curtain));
+      // everything else from the normal toolbar, so nothing is missing while presenting
+      dock.append(h('i', { class: 'dsep' }),
+        tool('shapes', 'shape', 'รูปทรงและลูกศร'), B('sticker', 'สติกเกอร์', (b) => this.stickerPanel(b)), B('equation', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์', (b) => this.mathMenu(b)),
+        B('calc', 'เครื่องคิดเลข', async () => (await import('./calculator.js')).toggleCalculator(this), !!document.querySelector('.calc')), B('ruler', 'ไม้บรรทัด', () => this.toggleRuler(), !!this.ruler),
+        B('image', 'แทรกรูปภาพ', () => this.pickImage()), tool('text', 'text', 'กล่องข้อความ'), B('mic', 'อัดเสียง', (b) => this.app.audioClick(this, b), !!this.app.audio?.active), B('pageplus', 'เพิ่มหน้า', (b) => this.addPageMenu(b)));
+      if (prefs.studentUI) for (const el of dock.querySelectorAll('button')) if (/^ม่านบัง/.test(el.title)) el.remove();
       // options for the current tool
       const c = this.cur();
       if (t === 'pen' || t === 'hl') {
