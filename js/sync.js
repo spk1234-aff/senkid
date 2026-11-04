@@ -6,7 +6,7 @@ import { blobToDataURL, dataURLToBlob } from './images.js';
 import { toast } from './ui.js';
 
 // OAuth client (Google Cloud project of the teacher). Can be overridden in settings.
-export const DEFAULT_CLIENT_ID = '';
+export const DEFAULT_CLIENT_ID = '991820377436-rhlp8jjecl11j10svd76736nejhacqi0.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata openid email';
 const API = 'https://www.googleapis.com/drive/v3', UP = 'https://www.googleapis.com/upload/drive/v3';
 const TOKEN_KEY = 'senkid.gtoken';
