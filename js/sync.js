@@ -176,17 +176,22 @@ async function doSync(reason) {
         if (l && (!r || (l.updated || 0) > r.updated)) { await upload(r?.f.id, `nb-${id}.json`, { kind: 'nb', id, updated: String(l.updated || 0) }, nbOut(l)); pushed++; }
         // pages of this notebook
         const lp = new Map((await db.pagesOf(id)).map(p => [p.id, p]));
+        const jobs = [];
         for (const pid of pageList) {
           const lpg = lp.get(pid), rpg = rPg.get(pid);
-          if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) {
+          if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) jobs.push(async () => {
             const p = await pageIn(await download(rpg.f.id)); p.updated = rpg.updated;
             if (id === openId) await ed.flush?.();
-            const cur = await db.get('pages', pid); if (cur && (cur.updated || 0) > (lpg?.updated || 0) && (cur.updated || 0) >= rpg.updated) continue; // edited here meanwhile: keep ours
+            const cur = await db.get('pages', pid); if (cur && (cur.updated || 0) > (lpg?.updated || 0) && (cur.updated || 0) >= rpg.updated) return; // edited here meanwhile: keep ours
             await db.savePagesAndNotebook([p], null); pulled++; if (id === openId) touchedOpen = true;
-          } else if (lpg && (!rpg || (lpg.updated || 0) > rpg.updated)) {
+          });
+          else if (lpg && (!rpg || (lpg.updated || 0) > rpg.updated)) jobs.push(async () => {
             await upload(rpg?.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(lpg.updated || 0) }, await pageOut(lpg)); pushed++;
-          }
+          });
         }
+        // a few pages at a time (first upload of a big notebook)
+        let done = 0; const total = jobs.length;
+        await Promise.all(Array.from({ length: Math.min(4, total) }, async () => { while (jobs.length) { const j = jobs.shift(); await j(); done++; if (total > 3) setState('syncing', { progress: `${nb.name || 'สมุด'} · หน้า ${done}/${total}` }); } }));
         // remote pages no longer in the notebook
         for (const [pid, rpg] of rPg) if (rpg.nb === id && !pageList.includes(pid)) { await remove(rpg.f.id); rPg.delete(pid); }
         // local pages no longer in the notebook (removed on another device)
