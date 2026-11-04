@@ -74,7 +74,7 @@ export class Library {
       '-',
       { icon: 'gear', label: 'ตั้งค่า', action: () => this.app.openSettings() },
       { icon: 'user', label: prefs.studentUI ? 'เปลี่ยนเป็นโหมดครู' : 'เปลี่ยนเป็นโหมดนักเรียน', action: () => { prefs.studentUI = !prefs.studentUI; savePrefs(); this.render(); toast(prefs.studentUI ? 'โหมดนักเรียน' : 'โหมดครู', 1500); } },
-      ...(isIOS() ? [isHomeApp() ? { icon: 'screen', label: 'ย้ายสมุดทั้งหมดไปสอนใน Safari', action: () => transferDialog(null, 'safari', { all: true }) } : { icon: 'home', label: 'ส่งสมุดทั้งหมดกลับแอปบนหน้าจอโฮม', action: () => transferDialog(null, 'app', { all: true }) }] : []),
+      ...(isIOS() && !connected() ? [isHomeApp() ? { icon: 'screen', label: 'ย้ายสมุดทั้งหมดไปสอนใน Safari', action: () => transferDialog(null, 'safari', { all: true }) } : { icon: 'home', label: 'ส่งสมุดทั้งหมดกลับแอปบนหน้าจอโฮม', action: () => transferDialog(null, 'app', { all: true }) }] : []),
       { icon: 'help', label: 'วิธีใช้', action: () => this.app.openHelp() },
     ]);
     const titleEl = h('div', { class: 'title' });
@@ -95,7 +95,7 @@ export class Library {
   // reminder: everything lives only on this device, so nudge a backup once a week
   backupBanner() {
     // taught in Safari after moving the notebooks over: remind to send them back to the home-screen app
-    if (prefs.fromApp && isIOS() && !isHomeApp()) {
+    if (prefs.fromApp && isIOS() && !isHomeApp() && !connected()) {
       const newest = Math.max(0, ...this.nbs.map(n => n.updated || 0));
       if (newest > Math.max(prefs.lastSyncBack || 0, prefs.fromApp || 0) && Date.now() > (prefs.syncSnooze || 0)) {
         const go = h('button', { class: 'pill prim' }, icon('home'), 'ส่งกลับแอป'), later = h('button', { class: 'pill ghost' }, 'ไว้ทีหลัง');
