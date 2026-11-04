@@ -39,10 +39,17 @@ if (location.hash.includes('pair')) (async () => {
   try {
     const { RtcLink, studentPair, canPair } = await import('./pair.js');
     if (!canPair()) { msg('ต้องเชื่อมต่อ Google ใน Safari ก่อน (เปิดเส้นคิดใน Safari → ตั้งค่า → ซิงก์ผ่าน Google Drive)'); return; }
-    rtc = new RtcLink({ onMsg, onState: (v) => { if (v) { send({ type: 'hello' }); msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } } });
+    let answered = 0, open = false;
+    rtc = new RtcLink({ onMsg, onState: (v) => { open = v; if (v) { send({ type: 'hello' }); msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } else { view = null; msg('หลุดการเชื่อมต่อ · ในแอปเส้นคิดกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง หน้านี้จะต่อให้เอง'); } } });
     msg('กำลังจับคู่กับแอปเส้นคิด…');
-    const ok = await studentPair(rtc, { onStatus: (st, e) => { if (st === 'waiting') msg('รอรหัสจับคู่จากแอปเส้นคิด… (กดปุ่มในแอปอีกครั้งถ้านานเกินไป)'); else if (st === 'answered') msg('ตอบรับแล้ว · กลับไปที่แอปเส้นคิดเพื่อเชื่อมต่อให้เสร็จ'); else if (st === 'error') msg('อ่านรหัสจับคู่ไม่ได้: ' + (e?.message || e)); } });
-    if (!ok) msg('จับคู่ไม่สำเร็จ (หมดเวลา) · กดปุ่มในแอปเส้นคิดอีกครั้ง แล้วโหลดหน้านี้ใหม่');
+    // keep this window alive on the TV: whenever the app publishes a new pairing code, answer it again
+    while (true) {
+      const t = await studentPair(rtc, { timeoutMs: 1e12, skipBefore: answered, onStatus: (st, e) => { if (open) return; if (st === 'waiting') msg(answered ? 'รอการเชื่อมต่อจากแอปเส้นคิด… (กดปุ่ม "ส่งหน้าจอนักเรียนไป Safari" ในแอป)' : 'รอรหัสจับคู่จากแอปเส้นคิด… (กดปุ่มในแอปอีกครั้งถ้านานเกินไป)'); else if (st === 'answered') msg('ตอบรับแล้ว · กลับไปที่แอปเส้นคิดเพื่อเชื่อมต่อให้เสร็จ'); else if (st === 'error') msg('อ่านรหัสจับคู่ไม่ได้: ' + (e?.message || e)); } });
+      if (t) answered = t;
+      // wait until this link closes (or never opened within a minute) before listening for the next code
+      const t0 = Date.now(); let wasOpen = false;
+      while (true) { await new Promise(r => setTimeout(r, 1000)); if (open) wasOpen = true; else if (wasOpen || Date.now() - t0 > 60e3) break; }
+    }
   } catch (e) { console.warn(e); msg('จับคู่ไม่สำเร็จ: ' + (e.message || e)); }
 })();
 

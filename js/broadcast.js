@@ -68,12 +68,12 @@ export class Broadcast {
 
 let studentWin = null;
 let pairing = false;
-async function startPairing(b) {
+async function startPairing(b, openSafari = true) {
   if (pairing) return; pairing = true;
   const bz = busy('กำลังเตรียมจับคู่กับ Safari…');
   try {
     const url = new URL('student.html#pair', location.href).href;
-    const p = teacherPair(b.rtc, { onStatus: (st) => { if (st === 'offer') { bz.done(); location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } } });
+    const p = teacherPair(b.rtc, { onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
     const ok = await p;
     if (!ok) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
   } catch (e) { console.warn('pair', e); toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
@@ -203,9 +203,10 @@ export function studentMenu(app, anchor, ed) {
     const open = h('button', { class: 'pill sec' }, icon('screen'), 'หรือเปิดเส้นคิดใน Safari แล้วสอนที่นั่น');
     open.onclick = () => { close(); ed?.flush?.(); location.href = 'x-safari-' + APP_URL(); };
     if (canPair() && syncOn()) {
-      const pairBtn = h('button', { class: 'pill prim' }, icon('screen'), b.rtc.open ? 'เปิดหน้าต่างนักเรียนใน Safari อีกครั้ง' : 'ส่งหน้าจอนักเรียนไป Safari');
-      pairBtn.onclick = () => { close(); startPairing(b); };
-      box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'สอนในแอปนี้ต่อได้ · จะเปิดหน้าจอนักเรียนใน Safari ให้ แล้วลากหน้าต่างนั้นไปทีวี (ต้องเปิด Stage Manager) · ใช้เน็ตแค่ตอนจับคู่', h('div', {}, pairBtn, h('div', { class: 'tvtip' }, h('b', {}, 'ขั้นตอน: '), 'กดปุ่ม → Safari เปิดขึ้นมา → กลับมาที่แอปเส้นคิด (รอ "เชื่อมหน้าต่าง Safari แล้ว") → กดค้างจุดสีเขียวของหน้าต่าง Safari → "ย้ายไปยัง…" ทีวี'), open)));
+      const pairBtn = h('button', { class: 'pill prim' }, icon('screen'), b.rtc.open ? 'เชื่อมต่อใหม่ (เปิด Safari)' : 'ส่งหน้าจอนักเรียนไป Safari');
+      pairBtn.onclick = () => { close(); startPairing(b, true); };
+      const reBtn = h('button', { class: 'pill sec' }, icon('sync'), 'ต่อกับหน้าต่าง Safari ที่เปิดค้างไว้บนทีวี'); reBtn.onclick = () => { close(); startPairing(b, false); };
+      box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'สอนในแอปนี้ต่อได้ · จะเปิดหน้าจอนักเรียนใน Safari ให้ แล้วลากหน้าต่างนั้นไปทีวี (ต้องเปิด Stage Manager) · ใช้เน็ตแค่ตอนจับคู่', h('div', {}, pairBtn, h('div', { class: 'tvtip' }, h('b', {}, 'ครั้งแรก: '), 'กดปุ่ม → Safari เปิดขึ้นมา → กลับมาที่แอปเส้นคิด (รอ "เชื่อมหน้าต่าง Safari แล้ว") → กดค้างจุดสีเขียวของหน้าต่าง Safari → "ย้ายไปยัง…" ทีวี · ', h('b', {}, 'ครั้งต่อไป: '), 'ปล่อยหน้าต่างนั้นไว้บนทีวี แล้วกดปุ่มด้านล่างนี้แทน ไม่ต้องสลับแอป'), reBtn, open)));
     } else box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', syncOn() ? 'เชื่อมต่อ Google ในตั้งค่าก่อน แล้วจะส่งหน้าจอนักเรียนไป Safari จากแอปนี้ได้' : 'เปิด "ซิงก์ผ่าน Google Drive" ในตั้งค่าก่อน แล้วจะส่งหน้าจอนักเรียนไป Safari จากแอปนี้ได้', open));
   } else {
     if (isIOS()) {

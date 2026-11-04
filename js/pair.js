@@ -106,18 +106,18 @@ export async function teacherPair(link, { onStatus, timeoutMs = 180e3 } = {}) {
 }
 
 // student (Safari window opened with #pair): take the newest offer, answer it
-export async function studentPair(link, { onStatus, timeoutMs = 180e3 } = {}) {
+export async function studentPair(link, { onStatus, timeoutMs = 180e3, skipBefore = 0 } = {}) {
   const t0 = Date.now(); let last = null;
   while (Date.now() - t0 < timeoutMs) {
     let j = null; try { j = await readPair(); } catch (e) { console.warn('pair poll', e); onStatus?.('error', e); await sleep(3000); continue; }
-    if (j && j.offer && !j.ans && Date.now() - j.t < 10 * 60e3 && j.t !== last) {
+    if (j && j.offer && !j.ans && Date.now() - j.t < 10 * 60e3 && j.t !== last && j.t > skipBefore) {
       last = j.t;
       const pc = link._pc(); pc.ondatachannel = (e) => link._bind(e.channel);
       await pc.setRemoteDescription({ type: 'offer', sdp: j.offer });
       await pc.setLocalDescription(await pc.createAnswer()); await iceDone(pc);
       await savePair({ ...j, ans: pc.localDescription.sdp });
       onStatus?.('answered');
-      return true;
+      return j.t;
     }
     onStatus?.('waiting');
     await sleep(1500);
