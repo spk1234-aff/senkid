@@ -324,3 +324,26 @@ export function shareFileDialog(file, { title = 'ไฟล์พร้อมแ�
     };
   });
 }
+
+// Free dragging of floating bars. iPad: finger and Apple Pencil both arrive as touch events, which we take over
+// completely (preventDefault) so Safari never turns the move into a scroll or cancels it. Mouse/trackpad: pointer events.
+// Dragging starts right away on the grip, or anywhere on the element once the finger has moved `threshold` px
+// (so a plain tap still presses the button underneath).
+export function makeDraggable(el, { grip = null, threshold = 10, onStart, onMove, onEnd } = {}) {
+  let a = null;
+  const begin = (x, y) => { a.started = true; el.classList.add('dragging'); el._dragged = true; onStart?.(a.sx, a.sy); onMove?.(x, y); };
+  const start = (x, y, target) => { a = { sx: x, sy: y, started: false }; if (grip && grip.contains(target)) begin(x, y); };
+  const move = (x, y) => { if (!a) return false; if (!a.started) { if (Math.hypot(x - a.sx, y - a.sy) < threshold) return false; begin(x, y); } else onMove?.(x, y); return true; };
+  const end = () => { if (!a) return; const st = a.started; a = null; el.classList.remove('dragging'); if (st) { onEnd?.(); setTimeout(() => { el._dragged = false; }, 0); } };
+  el.addEventListener('touchstart', (e) => { if (e.touches.length !== 1) { end(); return; } const t = e.touches[0]; start(t.clientX, t.clientY, e.target); if (a?.started) e.preventDefault(); }, { passive: false });
+  el.addEventListener('touchmove', (e) => { if (!a || e.touches.length !== 1) return; const t = e.touches[0]; if (move(t.clientX, t.clientY)) e.preventDefault(); }, { passive: false });
+  el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    start(e.clientX, e.clientY, e.target); if (a?.started) e.preventDefault();
+    const mv = (ev) => move(ev.clientX, ev.clientY), up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); end(); };
+    window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+  });
+  // a drag must not end in a button press
+  el.addEventListener('click', (e) => { if (el._dragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+}

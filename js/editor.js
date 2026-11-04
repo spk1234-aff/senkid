@@ -10,6 +10,7 @@ import { openExportDialog, exportPdf } from './exportpdf.js';
 import { recognize, straighten, shapeHandles, moveHandle, shapeAs } from './shapes.js';
 import * as db from './db.js';
 import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
+import { makeDraggable } from './ui.js';
 import { normalizeImage, openCropper, rotateBlob, setImageReadyHook } from './images.js';
 import { canLinkFiles, getHandle, handlePermission, writeHandle, buildBackup } from './files.js';
 
@@ -227,26 +228,33 @@ export class Editor {
     Object.assign(dock.style, { left: x + 'px', top: y + 'px', right: 'auto', transform: 'none' });
   }
   armDockDrag(dock, grip) {
-    // drag from the grip right away, or from anywhere on the dock once the finger has moved a bit (a plain tap still presses the button)
-    const begin = (e, offX, offY) => {
-      const W = this.stage.clientWidth, H = this.stage.clientHeight, sr = this.stage.getBoundingClientRect();
-      dock.classList.add('dragging'); try { dock.setPointerCapture(e.pointerId); } catch { }
-      const mv = (ev) => { prefs.dockXY = { x: Math.max(0, Math.min(1, (ev.clientX + offX - sr.left) / W)), y: Math.max(0, Math.min(1, (ev.clientY + offY - sr.top) / H)) }; this.placeDock(dock); };
-      const up = () => { dock.removeEventListener('pointermove', mv); dock.removeEventListener('pointerup', up); dock.removeEventListener('pointercancel', up); dock.classList.remove('dragging'); savePrefs(); };
-      dock.addEventListener('pointermove', mv); dock.addEventListener('pointerup', up); dock.addEventListener('pointercancel', up);
-      mv(e);
-    };
-    dock.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      const gr = grip.getBoundingClientRect(), gx = gr.left + gr.width / 2, gy = gr.top + gr.height / 2;
-      if (grip.contains(e.target)) { e.preventDefault(); e.stopPropagation(); begin(e, 0, 0); return; }
-      // elsewhere on the dock: wait for real movement
-      const sx = e.clientX, sy = e.clientY, id = e.pointerId; let started = false;
-      const pm = (ev) => { if (ev.pointerId !== id || started) return; if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10) { started = true; dock._dragged = true; cleanup(); begin(ev, gx - sx, gy - sy); } };
-      const cleanup = () => { dock.removeEventListener('pointermove', pm); dock.removeEventListener('pointerup', cleanup); dock.removeEventListener('pointercancel', cleanup); };
-      dock.addEventListener('pointermove', pm); dock.addEventListener('pointerup', cleanup); dock.addEventListener('pointercancel', cleanup);
+    let offX = 0, offY = 0, sr = null, W = 1, H = 1;
+    makeDraggable(dock, {
+      grip,
+      onStart: (sx, sy) => { const gr = grip.getBoundingClientRect(); sr = this.stage.getBoundingClientRect(); W = this.stage.clientWidth; H = this.stage.clientHeight; offX = gr.left + gr.width / 2 - sx; offY = gr.top + gr.height / 2 - sy; if (grip.contains(document.elementFromPoint(sx, sy))) offX = offY = 0; },
+      onMove: (x, y) => { prefs.dockXY = { x: Math.max(0, Math.min(1, (x + offX - sr.left) / W)), y: Math.max(0, Math.min(1, (y + offY - sr.top) / H)) }; this.placeDock(dock); },
+      onEnd: () => savePrefs(),
     });
-    dock.addEventListener('click', (e) => { if (dock._dragged) { dock._dragged = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  }
+  // the floating tool row (pen types / colours / sizes) can be dragged anywhere too; drop it back near the top centre to re-dock
+  armCtxDrag(bar) {
+    const grip = h('div', { class: 'dgrip cgrip', title: 'ลากเพื่อย้ายแถบ' }, h('i'), h('i'));
+    bar.prepend(grip);
+    let dx = 0, dy = 0, sr = null;
+    makeDraggable(bar, {
+      grip,
+      onStart: (sx, sy) => { const r = bar.getBoundingClientRect(); sr = this.stage.getBoundingClientRect(); dx = sx - r.left; dy = sy - r.top; },
+      onMove: (x, y) => { const W = this.stage.clientWidth, H = this.stage.clientHeight, bw = bar.offsetWidth, bh = bar.offsetHeight; prefs.ctxXY = { x: Math.max(0, Math.min(1, (x - dx - sr.left) / Math.max(1, W - bw))), y: Math.max(0, Math.min(1, (y - dy - sr.top) / Math.max(1, H - bh))) }; this.placeCtx(bar); },
+      onEnd: () => { const W = this.stage.clientWidth, cx = bar.offsetLeft + bar.offsetWidth / 2; if (prefs.ctxXY && Math.abs(cx - W / 2) < 60 && bar.offsetTop < 40) { prefs.ctxXY = null; this.placeCtx(bar); toast('แถบกลับที่เดิมแล้ว', 900); } savePrefs(); },
+    });
+    this.placeCtx(bar);
+  }
+  placeCtx(bar) {
+    const P = prefs.ctxXY;
+    bar.classList.toggle('free', !!P);
+    if (!P) { bar.style.left = bar.style.top = ''; return; }
+    const W = this.stage.clientWidth, H = this.stage.clientHeight, bw = bar.offsetWidth, bh = bar.offsetHeight;
+    bar.style.left = Math.round(P.x * Math.max(0, W - bw)) + 'px'; bar.style.top = Math.round(P.y * Math.max(0, H - bh)) + 'px';
   }
   // fill the screen width with the page (bigger for students on a TV) ↔ whole page
   toggleFitWide() {
@@ -455,7 +463,7 @@ export class Editor {
       const eb = h('button', { class: 'sw cm-open', title: 'แก้ไข / เรียงสี', 'aria-label': 'แก้ไขสี' }, icon('edit')); eb.onclick = () => openColorManager(eb, this, {}); bar.append(eb);
     }
     if (prefs.toolbarHidden && !this.peek) bar.classList.add('hidden');
-    this.stage.append(cap, bar);
+    this.stage.append(cap, bar); this.armCtxDrag(bar);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
     this.app.timer.attach(this);

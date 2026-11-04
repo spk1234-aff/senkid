@@ -313,7 +313,7 @@ video.preview{width:100%;max-height:44vh;border-radius:12px;background:#000;marg
 .tb2 .center .btn{width:52px;height:46px;border-radius:12px}
 .tb2 .center .btn svg.i{width:27px;height:27px}
 .tb2 .recbtn{margin-right:6px}
-.ctxbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:2px;padding:5px 8px;border-radius:18px;
+.ctxbar{touch-action:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:2px;padding:5px 8px;border-radius:18px;
   background:rgba(38,40,46,.94);color:#fff;box-shadow:0 8px 26px rgba(0,0,0,.25);max-width:calc(100% - 200px);overflow-x:auto;scrollbar-width:none;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 .ctxbar::-webkit-scrollbar{display:none}
 .ctxbar .chip{height:40px;border:0;border-radius:12px;background:transparent;color:rgba(255,255,255,.85);padding:0 12px;display:inline-flex;align-items:center;gap:6px;font-size:20px;white-space:nowrap;flex:none}
@@ -612,3 +612,9 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 
 .btn.sq.cm-open{width:34px;min-width:34px;opacity:.7}.btn.sq.cm-open svg.i{width:18px;height:18px}
 .ctxbar .sw.cm-open{color:rgba(255,255,255,.75);display:flex;align-items:center;justify-content:center}.ctxbar .sw.cm-open svg.i{width:18px;height:18px}
+
+.ctxbar.free{transform:none;bottom:auto;max-width:calc(100% - 20px)}
+.stage.thumbs-open .ctxbar.free{left:auto;max-width:calc(100% - 20px)}
+.ctxbar .cgrip{width:16px;height:40px;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:3px;cursor:grab;flex:none;margin-right:4px;touch-action:none}
+.ctxbar .cgrip i{display:block;width:2.5px;height:22px;border-radius:2px;background:rgba(255,255,255,.55)}
+.ctxbar.dragging{opacity:.92;box-shadow:0 14px 40px rgba(0,0,0,.4)}
