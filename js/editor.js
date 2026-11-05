@@ -186,7 +186,7 @@ export class Editor {
         { icon: 'text', label: 'กล่องข้อความ', action: () => this.setTool('text') },
         { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง', action: () => this.app.audioClick(this, b) },
         { icon: 'pageplus', label: 'เพิ่มหน้า / แทรก PDF', action: () => this.addPageMenu(b) },
-        ...(prefs.studentUI ? [] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'dice', label: 'สุ่มชื่อนักเรียน / จัดกลุ่ม', action: () => this.app.picker.open(b) }, { icon: 'rec', label: this.app.recorder?.active ? 'หยุดอัดคลิป' : 'อัดคลิป', action: () => this.app.recorderClick(this, b) }]),
+        ...(prefs.studentUI ? [] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'dice', label: 'สุ่มชื่อนักเรียน / จัดกลุ่ม', action: () => this.app.picker.open(b) }]),
       ], this.popOpts()), t === 'shapes' || t === 'text'));
       if (prefs.studentUI) for (const el of dock.querySelectorAll('button')) if (/^ม่านบัง/.test(el.title)) el.remove();
       // options for the current tool
@@ -353,8 +353,8 @@ export class Editor {
     this.recBtn = h('button', { class: 'recbtn', title: 'อัดคลิป' }, h('span', { class: 'dot' }), h('span', { class: 'lab' }, 'อัดคลิป'));
     this.recBtn.onclick = () => this.app.recorderClick(this, this.recBtn);
     onLongPress(this.recBtn, () => this.app.recorderSettings(this, this.recBtn));
-    this.micBtn = B('mic', 'อัดเสียง', (b) => this.app.audioClick(this, b));
-    const g4 = h('div', { class: 'grp' }, this.micBtn, this.recBtn,
+    this.micBtn = B('mic', 'อัดเสียง + ลายมือ (กดค้างเพื่อตั้งค่า)', (b) => this.app.audioClick(this, b)); onLongPress(this.micBtn, () => this.app.recorderSettings(this, this.micBtn));
+    const g4 = h('div', { class: 'grp' }, this.micBtn,
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
       B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · ลากขีดบนแถบเล็กเพื่อย้ายไปไหนก็ได้ · ˄˅ เปลี่ยนหน้า · แตะเครื่องมือซ้ำเพื่อตั้งค่า · × ออก', 4500, 'keep'); }));
@@ -402,12 +402,12 @@ export class Editor {
     this.recBtn = h('button', { class: 'recbtn', title: 'อัดคลิป (กดค้างเพื่อตั้งค่า)' }, h('span', { class: 'dot' }), h('span', { class: 'lab' }, 'อัดคลิป'));
     this.recBtn.onclick = () => this.app.recorderClick(this, this.recBtn);
     onLongPress(this.recBtn, () => this.app.recorderSettings(this, this.recBtn));
-    this.micBtn = B('mic', 'อัดเสียง', (b) => this.app.audioClick(this, b));
+    this.micBtn = B('mic', 'อัดเสียง + ลายมือ (กดค้างเพื่อตั้งค่า)', (b) => this.app.audioClick(this, b)); onLongPress(this.micBtn, () => this.app.recorderSettings(this, this.micBtn));
     const right = h('div', { class: 'side r' },
       B('timer', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b), this.app.timer.visible),
       B('dice', 'สุ่มชื่อนักเรียน / จัดกลุ่ม', (b) => this.app.picker.open(b), !!this.app.picker?.el?.isConnected),
       B('screen', 'หน้าจอนักเรียน / นำเสนอ', (b) => this.app.studentMenu(b), this.app.broadcast?.connected),
-      this.micBtn, this.recBtn,
+      this.micBtn,
       B('pageplus', 'เพิ่มหน้า', (b) => this.addPageMenu(b)),
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       B('share', 'ส่งออก / สำรอง', (b) => this.exportMenu(b)),

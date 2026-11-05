@@ -17,7 +17,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.39';
+export const VERSION = '1.9.40';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -125,7 +125,7 @@ class App {
     if (next) this.openNotebook(next); else this.openLibrary();
   }
   recorderClick(ed, btn) { if (this.audio.active) { toast('หยุดอัดเสียงก่อน แล้วจึงอัดคลิป'); return; } this.recorder.click(ed, btn); }
-  recorderSettings(ed, btn) { if (!this.recorder.active) this.recorder.settings(ed, btn); }
+  recorderSettings(ed, btn) { if (!this.recorder.active && !this.audio.active) this.recorder.settings(ed, btn, true); }
   openRecordings(nb) { openRecordings(nb); }
   studentMenu(anchor) { if (this.editor) studentMenu(this, anchor, this.editor); }
   audioClick(ed, btn) {
@@ -213,7 +213,7 @@ class App {
       card(
         row('ธีม', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
         row('ฟอนต์ของแอป', (() => { const cur = UI_FONTS.find(f => f[0] === (prefs.uiFont || 'sarabun')) || UI_FONTS[0]; const b = h('button', { class: 'pill sec', style: { height: '42px', fontFamily: familyOf(cur[0]) } }, cur[1], icon('down')); b.onclick = () => this.fontPicker(b); return b; })(), 'ปุ่มและเมนู · ข้อความบนกระดาษไม่เปลี่ยน'),
-        row('โหมดนักเรียน', toggle(!!prefs.studentUI, v => { prefs.studentUI = v; savePrefs(); refreshEd(); }), 'ซ่อนเครื่องมือของครู (ฉายจอ อัดคลิป จับเวลา ม่าน) ให้แถบเรียบง่าย'),
+        row('โหมดนักเรียน', toggle(!!prefs.studentUI, v => { prefs.studentUI = v; savePrefs(); refreshEd(); }), 'ซ่อนเครื่องมือของครู (ฉายจอ อัดเสียง จับเวลา ม่าน) ให้แถบเรียบง่าย'),
                 row('ตำแหน่งแถบเครื่องมือ', seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, v => { prefs.toolbarPos = v; savePrefs(); refreshEd(); })),
         row('แสดง 2 หน้าคู่เมื่อจอแนวนอน', toggle(prefs.twoPage, v => { prefs.twoPage = v; savePrefs(); this.editor?.relayout(true); })),
         row('ซ่อนแถบเครื่องมือ', toggle(prefs.toolbarHidden, v => { prefs.toolbarHidden = v; savePrefs(); refreshEd(); }))),
@@ -231,7 +231,7 @@ class App {
         row('หมุนปากกา (Apple Pencil Pro)', yes(c.twist), 'เว็บยังรับค่าการหมุนจาก Safari ไม่ได้'),
         row('บีบปากกา (squeeze)', h('span', { style: { color: 'var(--muted)' } }, 'เว็บไม่รองรับ'), 'Apple ยังไม่เปิดให้เว็บแอปใช้'),
         row('จุดถี่ (coalesced) / คาดการณ์เส้น', h('span', { style: { color: 'var(--muted)' } }, `${c.coalesced ? 'มี' : 'ไม่มี'} / ${c.predicted ? 'มี' : 'ไม่มี'}`)),
-        row('อัดคลิป', yes(canRecord(), mime && mime.includes('mp4') ? 'ได้ (MP4)' : 'ได้ (WebM)')))
+        row('อัดเสียง + ลายมือ', yes(typeof MediaRecorder !== 'undefined', 'ได้')))
     );
     const right = h('div', {},
       h('div', { class: 'sec-t' }, 'ประสิทธิภาพ'),
@@ -308,15 +308,11 @@ class App {
         'ใช้ 2 นิ้วแตะจอ = ย้อนกลับ · ใช้ 3 นิ้วแตะจอ = ทำซ้ำ',
         'ขีดเส้นแล้ว<b>กดค้างไว้ครึ่งวินาที</b> เส้นจะกลายเป็นเส้นตรง ลูกศร สามเหลี่ยม สี่เหลี่ยม วงกลม วงรี หรือรูป 5–6 เหลี่ยม จากนั้นลากจุดสีน้ำเงินเพื่อปรับรูปทรงได้',
         'เครื่องที่ไม่มีปากกา: เปิด "เขียนด้วยนิ้ว" ในเมนู ⋯'),
-      sec('อัดคลิป',
-        'แตะปุ่มแดง <b>อัดคลิป</b> แล้วเลือกไมค์และความละเอียด',
-        'คลิปจะมีแค่พื้นที่กระดาษกับเสียง ไม่มีแถบเครื่องมือ เมนู หรือแจ้งเตือนติดไป',
-        'ระหว่างอัด แตะปุ่มแดงเพื่อหยุดชั่วคราวหรือหยุดและบันทึก คลิปจะถูกเก็บในแอปทีละช่วง ถ้าแอปปิดไปกลางคันยังกู้คืนได้จากเมนู "คลิปที่อัดไว้"',
-        'ถ้าต้องการเก็บคลิปลงแอปรูปภาพบน iPad ให้กด <b>แชร์</b> แล้วเลือก <b>บันทึกวิดีโอ</b>',
-        'แนะนำให้เปิดโหมดห้ามรบกวนก่อนอัด เพื่อไม่ให้มีเสียงแจ้งเตือนติดเข้าไปในคลิป'),
-      sec('อัดเสียง',
-        'แตะปุ่ม<b>ไมค์</b>ข้างปุ่มอัดคลิป เพื่ออัดเฉพาะเสียงขณะสอน แตะอีกครั้งเพื่อหยุดชั่วคราวหรือหยุด',
-        'เสียงจะผูกกับสมุดเล่มนั้น เปิดฟังได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้'),
+      sec('อัดบทเรียน (เสียง + ลายมือ)',
+        'แตะปุ่ม<b>ไมค์</b> แอปจะอัดเสียงและจำลำดับทุกเส้นที่เขียน การลบ ย้าย เปลี่ยนหน้า ซูม และเลเซอร์ไปพร้อมกัน (ไฟล์เล็กมาก) แตะอีกครั้งเพื่อหยุดชั่วคราวหรือหยุด',
+        'เปิดดูได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้ > <b>เล่นย้อน</b> เส้นจะปรากฏตามจังหวะเสียง เลื่อนไปช่วงไหนก็ได้ ปรับความเร็วได้',
+        'ต้องการไฟล์วิดีโอ: ในเครื่องเล่นกด <b>ส่งออกเป็นวิดีโอ</b> เลือกความละเอียด ได้ MP4 ไปอยู่ใน "คลิปที่อัดไว้" (ใช้เวลาเท่าความยาวจริง)',
+        'กดค้างปุ่มไมค์เพื่อเลือกไมโครโฟนและตั้งค่าเก็บเสียงใน Google Drive'),
       sec('ข้อมูลและการสำรอง',
         'แอปบันทึกให้อัตโนมัติทุกครั้งที่เขียน ไม่ต้องกดบันทึก เปิดแอปครั้งต่อไปจะกลับมาที่สมุดและหน้าเดิม',
         'สมุดทั้งหมดเก็บในเครื่องนี้เท่านั้น ไม่มีระบบบัญชีและไม่ส่งข้อมูลขึ้นอินเทอร์เน็ต',
@@ -428,7 +424,7 @@ class App {
     const slides = [
       ['ปากกาเขียน · นิ้วเลื่อนและซูม', 'วางมือบนจอขณะเขียนได้ ไม่เป็นรอย ถ้าเครื่องไม่มีปากกา เปิด "เขียนด้วยนิ้ว" ในเมนู ⋯ ได้', 'write'],
       ['แตะปากกาซ้ำ เพื่อปรับขนาดและสี', 'มีปากกา 9 แบบ แต่ละหัวจำขนาดไว้แยกกัน เพิ่มสีที่ใช้บ่อยได้ไม่จำกัด', 'pens'],
-      ['อัดคลิปเฉพาะกระดาษ', 'คลิปมีแค่ลายมือกับเสียงของครู ไม่มีเมนูหรือแจ้งเตือนติดไปด้วย', 'rec'],
+      ['อัดเสียง + ลายมือ แล้วเล่นย้อนได้', 'กดปุ่มไมค์เพื่ออัดเสียงพร้อมทุกเส้นที่เขียน เล่นย้อนดูหรือส่งออกเป็นวิดีโอได้ภายหลัง', 'rec'],
       ['ขีดแล้วกดค้าง = รูปทรงสวย', 'ขีดเส้นแล้วกดค้างไว้ครึ่งวินาที เส้นจะกลายเป็นเส้นตรง วงกลม หรือสามเหลี่ยมที่สมบูรณ์', 'shape'],
     ];
     let i = 0;

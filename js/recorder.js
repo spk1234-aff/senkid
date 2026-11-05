@@ -7,7 +7,7 @@ import * as db from './db.js';
 
 const RES = [['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K']];
 const BITRATE = { 720: 3e6, 1080: 5e6, 1440: 8e6, 2160: 12e6 };
-const AUDIO_BPS = 128e3;
+const AUDIO_BPS = 128e3; // audio-only recordings use 96 kbps (see AudioRecorder)
 
 export function pickMime() {
   if (typeof MediaRecorder === 'undefined') return null;
@@ -49,13 +49,17 @@ export class Recorder {
     const close = popover(btn, box, ed.popOpts());
   }
 
-  async settings(ed, btn) {
-    if (!canRecord()) { dialog('อัดคลิปไม่ได้', h('p', {}, 'เบราว์เซอร์นี้ไม่รองรับการอัดคลิป ลองใช้ Safari บน iPad (iPadOS 16 ขึ้นไป) หรือ Chrome รุ่นล่าสุด'), [{ label: 'ปิด', cls: 'prim' }]); return; }
+  async settings(ed, btn, audioOnly = false) {
+    if (!canRecord() && !audioOnly) { dialog('อัดคลิปไม่ได้', h('p', {}, 'เบราว์เซอร์นี้ไม่รองรับการอัดคลิป ลองใช้ Safari บน iPad (iPadOS 16 ขึ้นไป) หรือ Chrome รุ่นล่าสุด'), [{ label: 'ปิด', cls: 'prim' }]); return; }
     const mime = pickMime();
     let res = prefs.rec.res;
     const body = h('div');
     const ratio = ed.W / ed.H;
-    body.append(h('div', { class: 'recprev' },
+    if (audioOnly) body.append(h('div', { class: 'recprev' },
+      h('div', { class: 'box', style: { width: '72px', height: '72px', display: 'grid', placeItems: 'center' } }, icon('mic')),
+      h('div', { style: { fontSize: '21px' } }, 'อัด', h('b', {}, 'เสียงไมค์'), 'พร้อม', h('b', {}, 'ลายมือทุกเส้น'), 'ที่เขียนระหว่างอัด', h('br'),
+        h('span', { style: { color: 'var(--muted)' } }, 'ดูย้อนหลังได้จาก "คลิปที่อัดไว้" แล้วส่งออกเป็นวิดีโอ MP4 ได้ภายหลัง · ไฟล์เล็กมาก (≈ 1 MB/นาที)'))));
+    else body.append(h('div', { class: 'recprev' },
       h('div', { class: 'box', style: { aspectRatio: ratio, width: ratio >= 1 ? '120px' : 'auto', height: ratio >= 1 ? 'auto' : '100px' } }, icon('pages')),
       h('div', { style: { fontSize: '21px' } }, 'คลิปจะมีแค่', h('b', {}, 'พื้นที่กระดาษ'), 'กับ', h('b', {}, 'เสียงไมค์'), h('br'),
         h('span', { style: { color: 'var(--muted)' } }, 'ไม่มีแถบเครื่องมือ เมนู แถบสถานะ หรือแจ้งเตือนติดไปด้วย ซูมหรือเลื่อนหน้าระหว่างอัดได้ตามปกติ'))));
@@ -63,18 +67,29 @@ export class Recorder {
     const micSel = h('select', { class: 'field' }, h('option', { value: '' }, 'ไมค์เริ่มต้นของเครื่อง'));
     const meter = h('div', { class: 'meter' }); for (let i = 0; i < 26; i++) meter.append(h('span'));
     const testBtn = h('button', { class: 'pill sec', style: { flex: 'none' } }, icon('mic'), 'ทดสอบไมค์');
-    body.append(h('div', { class: 'lbl' }, 'ไมโครโฟน'), h('div', { style: { display: 'flex', gap: '8px' } }, micSel, testBtn), meter);
-    const fillMics = async () => {
+    const refreshBtn = h('button', { class: 'pill sec', style: { flex: 'none' }, title: 'ค้นหาไมค์ใหม่ (หลังเสียบไมค์แยก)' }, icon('sync'));
+    const micSub = h('div', { class: 'sub', style: { marginTop: '4px' } });
+    body.append(h('div', { class: 'lbl' }, 'ไมโครโฟน'), h('div', { style: { display: 'flex', gap: '8px' } }, micSel, refreshBtn, testBtn), micSub, meter);
+    const fillMics = async (askPerm = false) => {
       try {
-        const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
+        let devs = await listMics();
+        // labels are blank until the mic permission was granted once; ask (briefly) so the teacher can tell the mics apart
+        if (askPerm && devs.length && devs.every(d => !d.label)) { try { const st = await navigator.mediaDevices.getUserMedia({ audio: true }); st.getTracks().forEach(t => t.stop()); devs = await listMics(); } catch { } }
         micSel.innerHTML = ''; micSel.append(h('option', { value: '' }, 'ไมค์เริ่มต้นของเครื่อง'));
-        devs.forEach((d, i) => { if (d.deviceId === 'default' || !d.deviceId) return; micSel.append(h('option', { value: d.deviceId }, d.label || `ไมค์ ${i + 1}`)); });
-        micSel.value = [...micSel.options].some(o => o.value === prefs.rec.mic) ? prefs.rec.mic : '';
+        devs.forEach((d, i) => micSel.append(h('option', { value: d.deviceId }, d.label || `ไมค์ ${i + 1}`)));
+        const cur = await resolveMic();
+        micSel.value = cur ? cur.deviceId : '';
+        const missing = !cur && prefs.rec.micLabel;
+        micSub.textContent = missing ? `ไม่พบไมค์ "${prefs.rec.micLabel}" ตอนนี้ · ถ้าเสียบแล้วจะกลับมาใช้ให้เอง` : devs.length > 1 ? `พบไมค์ ${devs.length} ตัว · ตัวที่เลือกจะถูกจำไว้ แม้ถอดแล้วเสียบใหม่` : devs.length === 1 && devs[0].label ? `พบ: ${devs[0].label}` : 'เสียบไมค์แยกแล้วกดปุ่มรีเฟรชหากยังไม่ขึ้นในรายการ';
+        micSub.style.color = missing ? 'var(--warn, #b45309)' : '';
       } catch { }
     };
-    fillMics();
-    micSel.onchange = () => { prefs.rec.mic = micSel.value; savePrefs(); if (this.testStream) startMeter(); };
-    const stopMeter = () => { cancelAnimationFrame(this.meterRaf); this.testStream?.getTracks().forEach(t => t.stop()); this.testStream = null; this.testCtx?.close?.(); this.testCtx = null; };
+    fillMics(true);
+    refreshBtn.onclick = () => fillMics(true);
+    const onDev = () => { fillMics(); if (!this.testStream) toast('อุปกรณ์เสียงเปลี่ยน · อัปเดตรายการไมค์แล้ว', 2000); };
+    try { navigator.mediaDevices.addEventListener('devicechange', onDev); } catch { }
+    micSel.onchange = () => { prefs.rec.mic = micSel.value; prefs.rec.micLabel = micSel.value ? (micSel.selectedOptions[0]?.textContent || '') : ''; savePrefs(); fillMics(); if (this.testStream) startMeter(); };
+    const stopMeter = () => { try { navigator.mediaDevices.removeEventListener('devicechange', onDev); } catch { } cancelAnimationFrame(this.meterRaf); this.testStream?.getTracks().forEach(t => t.stop()); this.testStream = null; this.testCtx?.close?.(); this.testCtx = null; };
     const startMeter = async () => {
       stopMeter();
       try {
@@ -90,11 +105,11 @@ export class Recorder {
     testBtn.onclick = startMeter;
     // resolution
     const est = h('b'), free = h('b'), freeSub = h('span');
-    body.append(h('div', { class: 'lbl' }, 'ความละเอียด'), seg(RES, res, (v) => { res = v; prefs.rec.res = v; savePrefs(); upd(); }));
+    if (!audioOnly) body.append(h('div', { class: 'lbl' }, 'ความละเอียด'), seg(RES, res, (v) => { res = v; prefs.rec.res = v; savePrefs(); upd(); }));
     body.append(h('div', { class: 'stats' }, h('div', {}, h('span', {}, 'ขนาดไฟล์โดยประมาณ'), est), h('div', {}, h('span', {}, 'พื้นที่ที่แอปใช้ได้'), free, freeSub)));
     let freeB = null;
     const upd = () => {
-      const perMin = (BITRATE[res] + AUDIO_BPS) * 60 / 8;
+      const perMin = (audioOnly ? 96e3 : BITRATE[res] + AUDIO_BPS) * 60 / 8;
       est.textContent = '≈ ' + fmtBytes(perMin) + ' / นาที';
       free.textContent = freeB == null ? '–' : fmtBytes(freeB);
       freeSub.textContent = freeB == null ? '' : ` (อัดได้ราว ${Math.floor(freeB / perMin / 60) >= 1 ? Math.floor(freeB / perMin / 60) + ' ชม.' : Math.floor(freeB / perMin) + ' นาที'})`;
@@ -102,13 +117,13 @@ export class Recorder {
     freeSpace().then(v => { freeB = v; upd(); }); upd();
     const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
     body.append(h('div', { style: { height: '6px' } }),
-      row('เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); if (v) uploadPendingRecordings(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
-      row('เตือนเมื่ออัดนานเกิน 25 นาที', toggle(prefs.rec.warn25, v => { prefs.rec.warn25 = v; savePrefs(); })),
-      row('รูปแบบไฟล์', h('span', { style: { color: 'var(--muted)' } }, mime ? (mime.includes('mp4') ? 'MP4' : 'WebM (เครื่องนี้ไม่รองรับ MP4)') : 'ค่าเริ่มต้นของเบราว์เซอร์')),
-      row('ให้นาฬิกาจับเวลาติดไปในคลิป', toggle(this.app.timer.s.inClip, v => { this.app.timer.s.inClip = v; this.app.timer.save(); })));
-    dialog('ตั้งค่าการอัดคลิป', body, [
+      row(audioOnly ? 'เก็บไฟล์เสียงใน Google Drive' : 'เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); if (v) uploadPendingRecordings(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
+      ...(audioOnly ? [] : [row('เตือนเมื่ออัดนานเกิน 25 นาที', toggle(prefs.rec.warn25, v => { prefs.rec.warn25 = v; savePrefs(); }))]),
+      ...(audioOnly ? [] : [row('รูปแบบไฟล์', h('span', { style: { color: 'var(--muted)' } }, mime ? (mime.includes('mp4') ? 'MP4' : 'WebM (เครื่องนี้ไม่รองรับ MP4)') : 'ค่าเริ่มต้นของเบราว์เซอร์')),
+      row('ให้นาฬิกาจับเวลาติดไปในคลิป', toggle(this.app.timer.s.inClip, v => { this.app.timer.s.inClip = v; this.app.timer.save(); }))]));
+    dialog(audioOnly ? 'ตั้งค่าการอัดเสียง + ลายมือ' : 'ตั้งค่าการอัดคลิป', body, [
       { label: 'ยกเลิก' },
-      { label: 'เริ่มอัด', cls: 'danger', flex: 2, icon: 'rec', action: async () => { stopMeter(); await this.start(ed, res, mime); } },
+      audioOnly ? { label: 'เริ่มอัดเสียง', cls: 'prim', flex: 2, icon: 'mic', action: async () => { stopMeter(); await this.app.audio.start(ed); } } : { label: 'เริ่มอัด', cls: 'danger', flex: 2, icon: 'rec', action: async () => { stopMeter(); await this.start(ed, res, mime); } },
     ], { width: 700, onClose: stopMeter });
   }
 
@@ -222,14 +237,32 @@ export class Recorder {
   }
 }
 
-// the chosen microphone is a preference, not a requirement: iPadOS renews device ids, so a stale id must not stop the recording
+// the chosen microphone is a preference, not a requirement: iPadOS renews device ids, so a stale id must not stop the recording.
+// We remember both id and label; when the id is gone (new session, re-plugged mic) we re-match by label, then fall back to default.
+export async function listMics() {
+  try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default'); } catch { return []; }
+}
+export async function resolveMic() {
+  if (!prefs.rec.mic && !prefs.rec.micLabel) return null;
+  const devs = await listMics();
+  let d = devs.find(x => x.deviceId === prefs.rec.mic);
+  if (!d && prefs.rec.micLabel) d = devs.find(x => x.label && x.label === prefs.rec.micLabel);
+  if (d && d.deviceId !== prefs.rec.mic) { prefs.rec.mic = d.deviceId; savePrefs(); }
+  return d || null;
+}
+export function micName(label) { return label || 'ไมค์เริ่มต้นของเครื่อง'; }
 async function openMic() {
   const base = { echoCancellation: true, noiseSuppression: true };
-  if (prefs.rec.mic) {
-    try { return await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: prefs.rec.mic } } }); }
-    catch (e) { if (!/constraint|NotFound|Overconstrained/i.test(e.name + ' ' + e.message)) throw e; prefs.rec.mic = ''; savePrefs(); }
+  const want = await resolveMic();
+  if (want) {
+    try { const st = await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: want.deviceId } } }); st._micLabel = want.label || st.getAudioTracks()[0]?.label; return st; }
+    catch (e) { if (!/constraint|NotFound|Overconstrained/i.test(e.name + ' ' + e.message)) throw e; }
+  } else if (prefs.rec.mic || prefs.rec.micLabel) {
+    toast(`ไม่พบไมค์ "${micName(prefs.rec.micLabel)}" · ใช้ไมค์เริ่มต้นของเครื่องแทน`, 3500, 'warn');
   }
-  return navigator.mediaDevices.getUserMedia({ audio: base });
+  const st = await navigator.mediaDevices.getUserMedia({ audio: base });
+  st._micLabel = st.getAudioTracks()[0]?.label || ''; st._fallback = !!want;
+  return st;
 }
 export function pickAudioMime() {
   if (typeof MediaRecorder === 'undefined') return null;
@@ -254,7 +287,7 @@ export class AudioRecorder {
     if (this.state === 'idle') return this.start(ed);
     const box = h('div', { class: 'menu' });
     const mk = (ic, label, fn, danger) => { const b = h('button', { class: 'mi' + (danger ? ' danger' : '') }, icon(ic), h('span', {}, label)); b.onclick = () => { close(); fn(); }; box.append(b); };
-    box.append(h('div', { class: 'mh' }, `อัดเสียง ${fmtTime(this.elapsed())}`));
+    box.append(h('div', { class: 'mh' }, `อัดเสียง ${fmtTime(this.elapsed())}`), h('div', { class: 'mh', style: { fontWeight: 400, color: 'var(--muted)' } }, `ไมค์: ${micName(this.stream?._micLabel)}`));
     if (this.state === 'recording') mk('pause', 'หยุดชั่วคราว', () => this.pause()); else mk('play', 'อัดต่อ', () => this.resume());
     mk('stop', 'หยุดและบันทึกเสียง', () => this.stop(), true);
     const close = popover(btn, box, ed.popOpts());
@@ -277,7 +310,7 @@ export class AudioRecorder {
     try { this.wake = await navigator.wakeLock?.request('screen'); } catch { }
     this.tick = setInterval(() => { const m = this.app.editor?.micBtn?.querySelector('.mt'); if (m) m.textContent = fmtTime(this.elapsed()); }, 300);
     this.syncButton();
-    toast('เริ่มอัดเสียงแล้ว · แตะปุ่มไมค์เพื่อหยุด', 2200);
+    toast(`เริ่มอัดเสียงแล้ว · ไมค์: ${micName(stream._micLabel)} · แตะปุ่มไมค์เพื่อหยุด`, 3000);
   }
   pause() { if (this.state !== 'recording') return; try { this.mr.pause(); } catch { } this.state = 'paused'; this.app.timeline?.pause(); this.pauseAt = performance.now(); this.syncButton(); }
   resume() { if (this.state !== 'paused') return; try { this.mr.resume(); } catch { } this.pausedTotal += performance.now() - this.pauseAt; this.state = 'recording'; this.app.timeline?.resume(); this.syncButton(); }
