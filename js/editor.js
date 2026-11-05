@@ -64,6 +64,7 @@ export class Editor {
 
   // ---------- DOM ----------
   build() {
+    this.hooks = {}; // lesson replay capture: dirty(page) / view() / frame()
     this.el = h('div', { class: 'ed' });
     this.tb = h('div', { class: 'tb' });
     this.stage = h('div', { class: 'stage' });
@@ -676,7 +677,7 @@ export class Editor {
     this.vwT = setTimeout(() => { const cur = this.currentPage(); if (!cur || !this.mounted) return; prefs.views = prefs.views || {}; const V = prefs.views; V[this.nb.id] = { z: this.z, ox: this.ox, oy: this.oy, fit: this.fitMode, cur: cur.id, W: this.W, cols: this.cols, t: Date.now() };
       const ks = Object.keys(V); if (ks.length > 40) for (const k of ks.sort((a, b) => (V[a].t || 0) - (V[b].t || 0)).slice(0, ks.length - 40)) delete V[k]; savePrefs(); }, 600);
   }
-  viewChanged() { this.rememberView(); this.need.main = true; this.need.ui = true; this.need.live = true; this.lastViewChange = performance.now(); this.updatePageNo(); if (this.txEd) this.txPos(); if (this.thumbList) { clearTimeout(this.thC); this.thC = setTimeout(() => this.markThumbCur(), 120); } }
+  viewChanged() { this.rememberView(); this.hooks?.view?.(); this.need.main = true; this.need.ui = true; this.need.live = true; this.lastViewChange = performance.now(); this.updatePageNo(); if (this.txEd) this.txPos(); if (this.thumbList) { clearTimeout(this.thC); this.thC = setTimeout(() => this.markThumbCur(), 120); } }
   toWorld(sx, sy) { return [(sx - this.ox) / this.z, (sy - this.oy) / this.z]; }
   pageAt(wx, wy, slack = 0) {
     for (const p of this.pages) { const r = this.rects.get(p.id); if (wx >= r.x - slack && wx <= r.x + r.w + slack && wy >= r.y - slack && wy <= r.y + r.h + slack) return p; }
@@ -733,6 +734,7 @@ export class Editor {
     if (this.laser.length || this.laserDirty) this.redrawLaser();
     this.app.broadcast?.frame?.(this);
     this.app.recorder?.frame?.(this);
+    this.hooks?.frame?.();
     this.raf = requestAnimationFrame(this.frame);
   }
   desk() { return getComputedStyle(document.documentElement).getPropertyValue('--desk').trim() || '#E9E6DF'; }
@@ -1283,7 +1285,7 @@ export class Editor {
     const s = this.liveStroke(false);
     this.live = null; this.need.live = true;
     if (!s) return;
-    s.id = uid(); s.bb = null; s.ts = Date.now();
+    s.id = uid(); s.bb = null; s.ts = Date.now(); this.lastCommitT0 = L.t0;
     if (!s.shape && s.pts.length === STRIDE) { const p = Array.from(s.pts); s.pts = Float32Array.from(p.concat([p[0] + 0.05, p[1] + 0.05, p[2], p[3]])); }
     // Goodnotes-style scribble to erase: a back-and-forth scratch over ink removes what it touches
     if (prefs.scribbleErase && L.kind !== 'hl' && !s.shape && this.scribbleErase(L.page, s)) return;
@@ -2354,7 +2356,7 @@ export class Editor {
   }
 
   // ---------- persistence ----------
-  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
+  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.hooks?.dirty?.(p); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
   saveNb() { this.nbDirty = true; this.scheduleSave(); }
   scheduleSave() { clearTimeout(this.saveT); this.saveT = setTimeout(() => this.flush(), 700); }
   async flush() {

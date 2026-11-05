@@ -7,6 +7,7 @@ import { Library } from './library.js';
 import { Editor } from './editor.js';
 import { Recorder, AudioRecorder, openRecordings, canRecord, pickMime, uploadPendingRecordings } from './recorder.js';
 import { Picker } from './picker.js';
+import { Timeline } from './lesson.js';
 import { STRIDE } from './render.js';
 import { buildBackup, openNotebookFile, saveNotebookFile } from './files.js';
 import { importPdf } from './pdfdoc.js';
@@ -15,7 +16,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope } from './sync.js';
 
-export const VERSION = '1.9.34';
+export const VERSION = '1.9.35';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -26,6 +27,7 @@ class App {
     this.timer = new Timer(this);
     this.broadcast = new Broadcast(this);
     this.picker = new Picker(this);
+    this.timeline = new Timeline(this);
     this.caps = { pressure: false, tilt: false, hover: false, twist: false, coalesced: 'getCoalescedEvents' in PointerEvent.prototype, predicted: 'getPredictedEvents' in PointerEvent.prototype };
     window.addEventListener('pointermove', (e) => this.noteCaps(e), { passive: true, capture: true });
     window.addEventListener('pointerdown', (e) => this.noteCaps(e), { passive: true, capture: true });

@@ -264,13 +264,14 @@ export class AudioRecorder {
     mr.ondataavailable = (e) => { if (e.data && e.data.size) { this.bytes += e.data.size; this.writes.push(db.addChunk(this.recId, this.seq++, e.data).catch(console.error)); } };
     mr.start(3000);
     this.state = 'recording'; this.t0 = performance.now(); this.pausedTotal = 0;
+    try { this.app.timeline?.start(ed, this.recId); } catch (e) { console.warn('timeline', e); }
     try { this.wake = await navigator.wakeLock?.request('screen'); } catch { }
     this.tick = setInterval(() => { const m = this.app.editor?.micBtn?.querySelector('.mt'); if (m) m.textContent = fmtTime(this.elapsed()); }, 300);
     this.syncButton();
     toast('เริ่มอัดเสียงแล้ว · แตะปุ่มไมค์เพื่อหยุด', 2200);
   }
-  pause() { if (this.state !== 'recording') return; try { this.mr.pause(); } catch { } this.state = 'paused'; this.pauseAt = performance.now(); this.syncButton(); }
-  resume() { if (this.state !== 'paused') return; try { this.mr.resume(); } catch { } this.pausedTotal += performance.now() - this.pauseAt; this.state = 'recording'; this.syncButton(); }
+  pause() { if (this.state !== 'recording') return; try { this.mr.pause(); } catch { } this.state = 'paused'; this.app.timeline?.pause(); this.pauseAt = performance.now(); this.syncButton(); }
+  resume() { if (this.state !== 'paused') return; try { this.mr.resume(); } catch { } this.pausedTotal += performance.now() - this.pauseAt; this.state = 'recording'; this.app.timeline?.resume(); this.syncButton(); }
   async stop() {
     if (this.state === 'idle') return;
     const dur = this.elapsed();
@@ -281,10 +282,11 @@ export class AudioRecorder {
     try { await this.wake?.release(); } catch { }
     this.state = 'idle'; this.syncButton();
     await Promise.all(this.writes);
-    Object.assign(this.meta, { duration: dur, size: this.bytes, done: true });
+    let lessonBytes = 0; try { lessonBytes = await this.app.timeline?.stop(); } catch (e) { console.warn('timeline stop', e); }
+    Object.assign(this.meta, { duration: dur, size: this.bytes, done: true, lesson: lessonBytes > 0 });
     await db.put('recs', this.meta);
     await maybeUpload(this.meta);
-    toast(`บันทึกเสียงแล้ว (${fmtTime(dur)}) · ฟังได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้`, 3500);
+    toast(`บันทึกเสียงแล้ว (${fmtTime(dur)}) · เล่นย้อนพร้อมลายมือได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้`, 3500);
   }
 }
 
@@ -383,10 +385,11 @@ export async function openRecordings(nb) {
         icon(m.kind === 'audio' ? 'mic' : 'film'),
         h('div', { class: 'meta' }, h('b', {}, m.name), h('div', {}, `${d.toLocaleDateString('th-TH')} ${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} · ${fmtTime(m.duration || 0)} · ${fmtBytes(m.size)}${m.done ? '' : ' · ไม่สมบูรณ์ (กู้คืนจากการอัดที่ค้าง)'}`)));
       const B = (ic, t, fn) => { const b = h('button', { class: 'btn sq', title: t }, icon(ic)); b.onclick = fn; return b; };
+      if (m.lesson) { const pb = h('button', { class: 'pill prim', style: { height: '38px', padding: '0 12px' } }, icon('play'), 'เล่นย้อน'); pb.onclick = async () => { const bz = busy('กำลังโหลดเสียง…'); let blob = null; try { blob = await recBlob(m); } catch { } finally { bz.done(); } (await import('./lesson.js')).openPlayer(m, blob); }; it.append(pb); it.querySelector('.meta div').append(' · มีลายมือ'); }
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
       else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
-        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } if (m.drive) { const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[m.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); scheduleSync(3000); } await db.deleteRec(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
+        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } if (m.drive) { const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[m.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); scheduleSync(3000); } await db.deleteRec(m.id); if (m.lesson) (await import('./lesson.js')).deleteLesson(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
       list.append(it);
     }
   };
