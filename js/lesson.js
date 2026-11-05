@@ -224,4 +224,5 @@ export async function exportVideo(meta, data, audioBlob, dur) {
   await db.put('recs', vmeta); await db.addChunk(vmeta.id, 0, blob);
   toast(`ได้วิดีโอ ${fmtBytes(blob.size)} แล้ว · อยู่ในคลิปที่อัดไว้`, 3000);
   showRecording(vmeta, true, blob);
+  try { (await import('./recorder.js')).scheduleBackgroundUpload(); } catch { }
 }

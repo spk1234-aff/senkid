@@ -118,6 +118,7 @@ export class Recorder {
     const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
     body.append(h('div', { style: { height: '6px' } }),
       row(audioOnly ? 'เก็บไฟล์เสียงใน Google Drive' : 'เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); if (v) uploadPendingRecordings(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
+      row('เวลาส่งขึ้น Drive', (() => { const sel = h('select', { class: 'sel' }, h('option', { value: 'bg' }, 'เบื้องหลัง หลังอัดเสร็จ'), h('option', { value: 'manual' }, 'กดส่งเองในคลิปที่อัดไว้')); sel.value = prefs.rec.uploadMode === 'manual' ? 'manual' : 'bg'; sel.onchange = () => { prefs.rec.uploadMode = sel.value; savePrefs(); }; return sel; })(), 'อัดเสร็จจะเก็บลงเครื่องก่อนเสมอ ใช้งานต่อได้ทันที · การส่งขึ้น Drive ทำเบื้องหลังไม่บังหน้าจอ'),
       ...(audioOnly ? [] : [row('เตือนเมื่ออัดนานเกิน 25 นาที', toggle(prefs.rec.warn25, v => { prefs.rec.warn25 = v; savePrefs(); }))]),
       ...(audioOnly ? [] : [row('รูปแบบไฟล์', h('span', { style: { color: 'var(--muted)' } }, mime ? (mime.includes('mp4') ? 'MP4' : 'WebM (เครื่องนี้ไม่รองรับ MP4)') : 'ค่าเริ่มต้นของเบราว์เซอร์')),
       row('ให้นาฬิกาจับเวลาติดไปในคลิป', toggle(this.app.timer.s.inClip, v => { this.app.timer.s.inClip = v; this.app.timer.save(); }))]));
@@ -327,12 +328,19 @@ export class AudioRecorder {
     let lessonBytes = 0; try { lessonBytes = await this.app.timeline?.stop(); } catch (e) { console.warn('timeline stop', e); }
     Object.assign(this.meta, { duration: dur, size: this.bytes, done: true, lesson: lessonBytes > 0 });
     await db.put('recs', this.meta);
-    await maybeUpload(this.meta);
-    toast(`บันทึกเสียงแล้ว (${fmtTime(dur)}) · เล่นย้อนพร้อมลายมือได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้`, 3500);
+    toast(`บันทึกเสียงลงเครื่องแล้ว (${fmtTime(dur)}) · เล่นย้อนพร้อมลายมือได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้`, 3500);
+    scheduleBackgroundUpload();
   }
 }
 
 // after recording: push to Drive and free the space on this device
+// recordings are always saved on the device first; Drive upload runs later in the background (or by hand), never blocking the teacher
+let bgTimer = null;
+export function scheduleBackgroundUpload(delay = 15000) {
+  if (prefs.rec.uploadMode === 'manual') return;
+  clearTimeout(bgTimer);
+  bgTimer = setTimeout(() => { bgTimer = null; uploadPendingRecordings(); }, delay);
+}
 export async function maybeUpload(meta, quiet) {
   if (!syncOn() || prefs.rec.toDrive === false || !meta.done || meta.drive) return null;
   if (quiet && !hasFileScope()) return null;
@@ -354,18 +362,19 @@ export async function maybeUpload(meta, quiet) {
 }
 // older clips still on this device: move them to Drive in the background, one at a time
 let pendingRun = null;
-export function uploadPendingRecordings() {
+export function uploadPendingRecordings(force) {
   if (pendingRun) return pendingRun;
   pendingRun = (async () => {
     if (!syncOn() || prefs.rec.toDrive === false || !hasFileScope() || !navigator.onLine) return;
+    if (prefs.rec.uploadMode === 'manual' && !force) return;
     const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive).sort((a, b) => a.created - b.created);
     let n = 0;
-    if (recs.length) toast(`กำลังย้ายคลิปเก่า ${recs.length} คลิปขึ้น Google Drive อยู่เบื้องหลัง…`, 4000);
+    if (recs.length) toast(`กำลังส่ง ${recs.length} ไฟล์ขึ้น Google Drive อยู่เบื้องหลัง · ใช้งานต่อได้ตามปกติ`, 3000);
     for (const m of recs) {
       if (!navigator.onLine) break;
       try { if (await maybeUpload(m, true)) { n++; m.drive && document.dispatchEvent(new CustomEvent('senkid:rec-moved')); } } catch (e) { if (e.auth) break; }
     }
-    if (n) toast(`ย้ายคลิปเก่าขึ้น Google Drive แล้ว ${n} คลิป · คืนพื้นที่ในเครื่อง`, 4000);
+    if (n) toast(`ส่งขึ้น Google Drive แล้ว ${n} ไฟล์ · คืนพื้นที่ในเครื่อง`, 3000);
   })().catch(e => console.warn('pending recs', e)).finally(() => { pendingRun = null; });
   return pendingRun;
 }
@@ -418,7 +427,7 @@ export async function openRecordings(nb) {
     if (pend && syncOn()) {
       if (!hasFileScope()) { const b = h('button', { class: 'pill prim', style: { height: '40px' } }, 'เชื่อมต่อใหม่'); b.onclick = () => signIn(); list.append(h('div', { class: 'bk-banner warn' }, h('div', {}, `มี ${pend} คลิปรอส่งขึ้น Google Drive · ต้องเชื่อมต่อ Google ใหม่ก่อนเพื่ออนุญาตเก็บคลิปใน Drive`), b)); }
       else if (prefs.rec.toDrive === false) list.append(h('div', { class: 'bk-banner' }, h('div', {}, `มี ${pend} คลิปเก็บอยู่ในเครื่อง · เปิด "เก็บคลิปใน Google Drive" ในตั้งค่าการอัดเพื่อย้ายขึ้นอัตโนมัติ`)));
-      else { const b = h('button', { class: 'pill prim', style: { height: '40px' } }, pendingRun ? 'กำลังส่ง…' : 'ส่งตอนนี้'); b.disabled = !!pendingRun; b.onclick = async () => { b.disabled = true; b.textContent = 'กำลังส่ง…'; await uploadPendingRecordings(); render(); }; list.append(h('div', { class: 'bk-banner' }, h('div', {}, pendingRun ? `กำลังย้าย ${pend} คลิปขึ้น Google Drive อยู่เบื้องหลัง…` : `มี ${pend} คลิปรอส่งขึ้น Google Drive`), b)); }
+      else { const b = h('button', { class: 'pill prim', style: { height: '40px' } }, pendingRun ? 'กำลังส่ง…' : 'ส่งตอนนี้'); b.disabled = !!pendingRun; b.onclick = async () => { b.disabled = true; b.textContent = 'กำลังส่ง…'; await uploadPendingRecordings(true); render(); }; list.append(h('div', { class: 'bk-banner' }, h('div', {}, pendingRun ? `กำลังส่ง ${pend} ไฟล์ขึ้น Google Drive อยู่เบื้องหลัง…` : prefs.rec.uploadMode === 'manual' ? `มี ${pend} ไฟล์อยู่ในเครื่อง · กดส่งเมื่อสะดวก` : `มี ${pend} ไฟล์รอส่งขึ้น Google Drive`), b)); }
     }
     if (!recs.length) { list.append(h('p', { style: { color: 'var(--muted)', textAlign: 'center', padding: '30px 0' } }, nb ? 'สมุดเล่มนี้ยังไม่มีเสียงที่อัดไว้ · แตะปุ่มไมค์บนแถบเครื่องมือเพื่อเริ่มอัด' : 'ยังไม่มีคลิปหรือเสียงที่อัดไว้')); return; }
     for (const m of recs) {
