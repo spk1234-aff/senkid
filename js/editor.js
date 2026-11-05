@@ -7,7 +7,7 @@ import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
-import { recognize, straighten, shapeHandles, moveHandle, shapeAs } from './shapes.js';
+import { recognize, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical } from './shapes.js';
 import * as db from './db.js';
 import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
 import { makeDraggable } from './ui.js';
@@ -184,7 +184,8 @@ export class Editor {
         { icon: 'ruler', label: this.ruler ? 'เก็บไม้บรรทัด' : 'ไม้บรรทัด', action: () => this.toggleRuler() },
         { icon: 'image', label: 'แทรกรูปภาพ', action: () => this.pickImage() },
         { icon: 'text', label: 'กล่องข้อความ', action: () => this.setTool('text') },
-        { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง', action: () => this.app.audioClick(this, b) },
+        { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง + ลายมือ', action: () => this.app.audioClick(this, b) },
+        { icon: 'play', label: 'บทเรียนที่อัดในเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
         { icon: 'pageplus', label: 'เพิ่มหน้า / แทรก PDF', action: () => this.addPageMenu(b) },
         ...(prefs.studentUI ? [] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'dice', label: 'สุ่มชื่อนักเรียน / จัดกลุ่ม', action: () => this.app.picker.open(b) }]),
       ], this.popOpts()), t === 'shapes' || t === 'text'));
@@ -507,12 +508,11 @@ export class Editor {
     if (prefs.studentUI) return menu(anchor, [
       { icon: 'upload', label: 'ส่งงานให้ครู', action: () => openExportDialog(this, { submit: true }) },
       { icon: 'pdf', label: 'ส่งออกเป็น PDF', action: () => openExportDialog(this) },
-      { icon: 'mic', label: 'เสียงที่อัดในสมุดเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
+      { icon: 'mic', label: 'บทเรียนที่อัดในเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
     ], this.popOpts());
     menu(anchor, [
       { icon: 'download', label: 'สำรองสมุดเล่มนี้ (.senkid.json)', action: async () => { await this.flush(); this.app.exportNotebooks([this.nb.id]); } },
-      { icon: 'film', label: 'คลิปและเสียงที่อัดไว้', action: () => this.app.openRecordings() },
-      { icon: 'mic', label: 'เสียงที่อัดในสมุดเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
+      { icon: 'mic', label: 'บทเรียนที่อัดในเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
       { icon: 'pdf', label: 'ส่งออกเป็น PDF', action: () => openExportDialog(this) },
       { icon: 'share', label: 'ส่งหน้านี้ให้นักเรียน (PDF)', action: () => this.shareToStudents('page') },
       { icon: 'share', label: 'ส่งหน้าที่เขียนวันนี้ให้นักเรียน (PDF)', action: () => this.shareToStudents('today') },
@@ -612,7 +612,8 @@ export class Editor {
     mi('pageplus', 'เพิ่มหน้า / แทรก PDF', () => this.addPageMenu(anchor));
     if (prefs.studentUI) mi('upload', 'ส่งงานให้ครู', () => openExportDialog(this, { submit: true }));
     if (!prefs.studentUI) mi('screen', 'หน้าจอนักเรียน', () => this.app.studentMenu(anchor));
-    if (!prefs.studentUI) mi('film', 'คลิปที่อัดไว้', () => this.app.openRecordings());
+    mi('mic', 'บทเรียนที่อัดในเล่มนี้', () => this.app.openRecordings(this.nb.id));
+    if (!prefs.studentUI) mi('film', 'คลิปที่อัดไว้ (ทุกเล่ม)', () => this.app.openRecordings());
     if (!prefs.studentUI) mi('download', 'สำรองสมุดเล่มนี้', async () => { await this.flush(); this.app.exportNotebooks([this.nb.id]); });
     mi('gear', 'ตั้งค่าทั้งหมด', () => this.app.openSettings());
     mi('help', 'วิธีใช้', () => this.app.openHelp());
@@ -989,7 +990,9 @@ export class Editor {
     const upto = Math.max(4 * STRIDE, Math.min(L.pts.length, (L.holdIdx || L.pts.length) + STRIDE));
     const xy = []; for (let i = 0; i < upto; i += STRIDE) xy.push(L.pts[i], L.pts[i + 1]);
     let sh = recognize(xy);
-    if (sh && !sh.closed && !sh.radical && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh; // (a square-root sign keeps its three straight segments)
+    // a stroke shaped down-up-right is a square-root sign even when it misses the strict match: never flatten it into a line
+    if ((!sh || (!sh.closed && !sh.radical)) && looksLikeRadical(xy)) sh = shapeAs(xy, 'radical') || sh;
+    else if (sh && !sh.closed && !sh.radical && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh; // (a square-root sign keeps its three straight segments)
     if (sh) { L.shape = sh; L.rawXY = xy; L.rawPts = Array.from(L.pts.slice(0, upto)); this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
   }
   // after hold-to-shape on an open stroke: chips to switch line / arc / curve / hand-drawn
@@ -1009,14 +1012,14 @@ export class Editor {
       for (const b of bar.querySelectorAll('button')) b.classList.toggle('on', b.dataset.k === kind);
       clearTimeout(this.saT); this.saT = setTimeout(() => this.hideShapeAlt(), 2000);
     };
-    const k0 = s.shape.k === 'arrow' ? 'line' : s.shape.k === 'curve' ? 'quad' : s.shape.k;
-    for (const [k, l] of [['line', 'เส้นตรง'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
+    const k0 = s.shape.radical ? 'radical' : s.shape.k === 'arrow' ? 'line' : s.shape.k === 'curve' ? 'quad' : s.shape.k;
+    for (const [k, l] of [['line', 'เส้นตรง'], ['radical', '√ รูด'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
       const b = h('button', { class: 'chip' + (k === k0 ? ' on' : ''), 'data-k': k }, l); b.onclick = () => set(k); bar.append(b);
     }
     // place near the end of the stroke
     const r = this.rects.get(page.id), ex = xy[xy.length - 2], ey = xy[xy.length - 1];
     const sx = this.ox + (r.x + ex) * this.z, sy = this.oy + (r.y + ey) * this.z;
-    bar.style.left = Math.max(8, Math.min(this.W - 380, sx - 150)) + 'px'; bar.style.top = Math.max(60, Math.min(this.H - 60, sy + 26)) + 'px';
+    bar.style.left = Math.max(8, Math.min(this.W - 460, sx - 180)) + 'px'; bar.style.top = Math.max(60, Math.min(this.H - 60, sy + 26)) + 'px';
     this.stage.append(bar); this.shapeAltEl = bar;
     this.saT = setTimeout(() => this.hideShapeAlt(), 2000);
   }
@@ -1366,8 +1369,8 @@ export class Editor {
     const closed = sel.s.shape.closed || sel.s.shape.k === 'ellipse';
     if (!closed) {
       bar.append(h('div', { class: 'brk' }), sec('รูปแบบ'));
-      const k0 = sel.s.shape.k === 'arrow' ? 'line' : sel.s.shape.k === 'curve' ? 'quad' : sel.s.shape.k;
-      for (const [k, l] of [['line', 'เส้นตรง'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
+      const k0 = sel.s.shape.radical ? 'radical' : sel.s.shape.k === 'arrow' ? 'line' : sel.s.shape.k === 'curve' ? 'quad' : sel.s.shape.k;
+      for (const [k, l] of [['line', 'เส้นตรง'], ['radical', '√ รูด'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
         const b = h('button', { class: 'chip' + (k === k0 ? ' on' : '') }, l);
         b.onclick = () => {
           const cur = this.selStroke(); if (!cur) return; const st = cur.s;

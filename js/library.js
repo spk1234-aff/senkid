@@ -136,6 +136,7 @@ export class Library {
       const nw = h('div', { class: 'nb new' }, h('div', { class: 'cover' }, icon('plus'), 'สมุดใหม่'));
       nw.onclick = () => this.newNotebook(); g.append(nw);
     }
+    const cards = new Map();
     for (const n of l) {
       const cover = h('div', { class: 'cover', style: { background: PAPERS[n.paper || 'cream']?.fill } }, h('div', { class: 'spine', style: { background: n.cover || '#2F5BEA' } }));
       if (n.thumb) cover.append(h('img', { src: n.thumb, alt: '', loading: 'lazy' }));
@@ -146,7 +147,12 @@ export class Library {
       card.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!this.dragging) this.cardMenu(more, n); });
       this.armDrag(card, n);
       g.append(card);
+      cards.set(n.id, cover);
     }
+    // small badge on covers that have recorded lessons → opens that notebook's list
+    import('./recorder.js').then(({ recordingCounts }) => recordingCounts()).then(cnt => {
+      for (const [id, cover] of cards) { const c = cnt[id]; if (!c || !cover.isConnected) continue; const b = h('button', { class: 'recbadge', title: 'บทเรียนที่อัดในเล่มนี้' }, icon('mic'), String(c)); b.onclick = (e) => { e.stopPropagation(); this.app.openRecordings(id); }; cover.append(b); }
+    }).catch(() => { });
     if (!l.length && !this.q && this.folder !== '*' && this.folder !== '~recent') g.append(h('div', { class: 'empty' }, 'โฟลเดอร์นี้ยังว่าง · กด "สมุดใหม่" หรือเปิด PDF เข้ามาในโฟลเดอร์นี้ได้เลย'));
     if (!l.length && this.q) g.append(h('div', { class: 'empty' }, 'ไม่พบสมุดที่ชื่อมีคำว่า "' + this.q + '"'));
   }

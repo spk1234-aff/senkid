@@ -718,3 +718,7 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .devcard{display:flex;align-items:center;gap:12px;justify-content:flex-end;max-width:78%}
 .devcard span{font-size:19px;line-height:1.25}
 .devcard img{width:64px;height:64px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 3px #fff,0 0 0 5px var(--acc);flex:none}
+
+/* recorded-lesson badge on library covers */
+.nb .cover .recbadge{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;gap:4px;height:30px;padding:0 10px 0 7px;border-radius:15px;border:0;background:rgba(32,34,39,.82);color:#fff;font-size:17px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.nb .cover .recbadge svg{width:16px;height:16px}

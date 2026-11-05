@@ -17,7 +17,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.43';
+export const VERSION = '1.9.44';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -126,7 +126,7 @@ class App {
   }
   recorderClick(ed, btn) { if (this.audio.active) { toast('หยุดอัดเสียงก่อน แล้วจึงอัดคลิป'); return; } this.recorder.click(ed, btn); }
   recorderSettings(ed, btn) { if (!this.recorder.active && !this.audio.active) this.recorder.settings(ed, btn, true); }
-  openRecordings(nb) { openRecordings(nb); }
+  openRecordings(nb) { openRecordings(nb, this); }
   studentMenu(anchor) { if (this.editor) studentMenu(this, anchor, this.editor); }
   audioClick(ed, btn) {
     if (this.recorder.active) { toast('กำลังอัดคลิปอยู่ เสียงจะอยู่ในคลิปแล้ว'); return; }

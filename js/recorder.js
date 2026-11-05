@@ -418,9 +418,15 @@ export async function showRecording(meta, fresh, blob) {
   ], { width: 760, onClose: () => URL.revokeObjectURL(url) });
 }
 
-export async function openRecordings(nb) {
-  const recs = (await db.getAll('recs')).filter(r => !nb || (r.nb === nb && r.kind === 'audio')).sort((a, b) => b.created - a.created);
+export async function recordingCounts() {
+  const c = {}; for (const r of await db.getAll('recs')) if (r.nb) c[r.nb] = (c[r.nb] || 0) + 1; return c;
+}
+export async function openRecordings(nb, app) {
+  const recs = (await db.getAll('recs')).filter(r => !nb || r.nb === nb).sort((a, b) => b.created - a.created);
+  const nbRec = nb ? await db.get('notebooks', nb) : null;
+  const pageNo = (m) => { const i = nbRec?.pages?.indexOf(m.page); return i >= 0 ? i + 1 : 0; };
   const list = h('div', { class: 'reclist' });
+  let dlg = null;
   const render = () => {
     list.innerHTML = '';
     const pend = recs.filter(r => r.done && !r.drive).length;
@@ -429,12 +435,14 @@ export async function openRecordings(nb) {
       else if (prefs.rec.toDrive === false) list.append(h('div', { class: 'bk-banner' }, h('div', {}, `มี ${pend} คลิปเก็บอยู่ในเครื่อง · เปิด "เก็บคลิปใน Google Drive" ในตั้งค่าการอัดเพื่อย้ายขึ้นอัตโนมัติ`)));
       else { const b = h('button', { class: 'pill prim', style: { height: '40px' } }, pendingRun ? 'กำลังส่ง…' : 'ส่งตอนนี้'); b.disabled = !!pendingRun; b.onclick = async () => { b.disabled = true; b.textContent = 'กำลังส่ง…'; await uploadPendingRecordings(true); render(); }; list.append(h('div', { class: 'bk-banner' }, h('div', {}, pendingRun ? `กำลังส่ง ${pend} ไฟล์ขึ้น Google Drive อยู่เบื้องหลัง…` : prefs.rec.uploadMode === 'manual' ? `มี ${pend} ไฟล์อยู่ในเครื่อง · กดส่งเมื่อสะดวก` : `มี ${pend} ไฟล์รอส่งขึ้น Google Drive`), b)); }
     }
-    if (!recs.length) { list.append(h('p', { style: { color: 'var(--muted)', textAlign: 'center', padding: '30px 0' } }, nb ? 'สมุดเล่มนี้ยังไม่มีเสียงที่อัดไว้ · แตะปุ่มไมค์บนแถบเครื่องมือเพื่อเริ่มอัด' : 'ยังไม่มีคลิปหรือเสียงที่อัดไว้')); return; }
+    if (!recs.length) { list.append(h('p', { style: { color: 'var(--muted)', textAlign: 'center', padding: '30px 0' } }, nb ? 'สมุดเล่มนี้ยังไม่มีบทเรียนที่อัดไว้ · แตะปุ่มไมค์บนแถบเครื่องมือเพื่ออัดเสียง + ลายมือ' : 'ยังไม่มีคลิปหรือเสียงที่อัดไว้')); return; }
     for (const m of recs) {
       const d = new Date(m.created);
       const it = h('div', { class: 'item' },
         icon(m.kind === 'audio' ? 'mic' : 'film'),
         h('div', { class: 'meta' }, h('b', {}, m.name), h('div', {}, `${d.toLocaleDateString('th-TH')} ${d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} · ${fmtTime(m.duration || 0)} · ${fmtBytes(m.size)}${m.done ? '' : ' · ไม่สมบูรณ์ (กู้คืนจากการอัดที่ค้าง)'}`)));
+      const pn = pageNo(m);
+      if (pn) { const pb = h('button', { class: 'chip', style: { height: '32px', padding: '0 10px', fontSize: '18px' }, title: 'ไปหน้าที่เริ่มอัด' }, `หน้า ${pn}`); pb.onclick = () => { const ed = app?.editor; if (ed && ed.nb?.id === nb) { ed.scrollToPage(m.page); ed.need && (ed.need.main = ed.need.ui = true); dlg?.close(); } }; it.querySelector('.meta div').append(' ', pb); }
       const B = (ic, t, fn) => { const b = h('button', { class: 'btn sq', title: t }, icon(ic)); b.onclick = fn; return b; };
       if (m.lesson) { const pb = h('button', { class: 'pill prim', style: { height: '38px', padding: '0 12px' } }, icon('play'), 'เล่นย้อน'); pb.onclick = async () => { const bz = busy('กำลังโหลดเสียง…'); let blob = null; try { blob = await recBlob(m); } catch { } finally { bz.done(); } (await import('./lesson.js')).openPlayer(m, blob); }; it.append(pb); it.querySelector('.meta div').append(' · มีลายมือ'); }
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
@@ -445,5 +453,5 @@ export async function openRecordings(nb) {
     }
   };
   render(); document.addEventListener('senkid:rec-moved', render);
-  dialog(nb ? 'เสียงที่อัดในสมุดเล่มนี้' : 'คลิปและเสียงที่อัดไว้', list, [], { width: 720 });
+  dlg = dialog(nb ? `บทเรียนที่อัดในเล่ม "${nbRec?.name || ''}"` : 'คลิปและเสียงที่อัดไว้ (ทุกเล่ม)', list, [], { width: 720 });
 }

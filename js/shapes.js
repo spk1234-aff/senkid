@@ -162,25 +162,47 @@ function quadFrom(P) {
   return { k: 'quad', closed: false, pts: [s[0], s[1], best[0], best[1], e[0], e[1]] };
 }
 // a hand-drawn square-root sign (optional little hook, short stroke down, long stroke up, long bar to the right)
-// → straight segments, bar perfectly horizontal. Distinct enough to be applied without the hold.
-export function recognizeRadical(p) {
+// → straight segments, bar perfectly horizontal.
+// strict=false ("looks like a radical") is used to protect such strokes from being turned into a straight line
+// when the strict match fails; force=true builds the sign from the stroke's turning points no matter what.
+export function recognizeRadical(p, { strict = true, force = false } = {}) {
   if (p.length < 8) return null;
-  const L = pathLen(p); if (L < 30) return null;
+  const L = pathLen(p); if (L < 24) return null;
   const P = []; for (let i = 0; i < p.length; i += 2) P.push([p[i], p[i + 1]]);
-  let V = rdp(P, Math.max(2, 0.035 * L));
-  if (V.length < 4 || V.length > 5) return null;
-  if (V.length === 5) { const hook = Math.hypot(V[1][0] - V[0][0], V[1][1] - V[0][1]); if (hook > 0.2 * L) return null; }
+  let V = rdp(P, Math.max(1.5, (strict ? 0.025 : 0.012) * L));
+  // merge tiny segments at the ends (pen landing / lift-off flicks) and in the middle
+  const minSeg = (strict ? 0.025 : 0.012) * L;
+  for (let i = V.length - 2; i >= 1 && V.length > 4; i--) { if (Math.hypot(V[i][0] - V[i - 1][0], V[i][1] - V[i - 1][1]) < minSeg) V.splice(i, 1); }
+  if (V.length > 2 && Math.hypot(V[V.length - 1][0] - V[V.length - 2][0], V[V.length - 1][1] - V[V.length - 2][1]) < Math.max(minSeg, 0.07 * L)) V.splice(V.length - 1, 1); // pen lift-off flick
+  if (V.length > 2 && Math.hypot(V[1][0] - V[0][0], V[1][1] - V[0][1]) < minSeg) V.splice(1, 1);
+  if (!force && (V.length < 4 || V.length > 5)) return null;
+  if (force) { // build down / up / bar from the stroke's geometry: vertex = lowest point, then the climb ends where the stroke reaches the top band
+    let lo = 0; for (let i = 1; i < P.length; i++) if (P[i][1] > P[lo][1]) lo = i;
+    let yTop = Infinity; for (let i = lo; i < P.length; i++) yTop = Math.min(yTop, P[i][1]);
+    const tol = Math.max(3, 0.08 * (P[lo][1] - yTop));
+    let top = lo; while (top < P.length - 1 && P[top][1] > yTop + tol) top++;
+    let ys = []; for (let i = top; i < P.length; i++) ys.push(P[i][1]); ys.sort((x, y) => x - y); const yBar = ys[ys.length >> 1];
+    const a = P[0], b = P[lo], c = P[top], d = P[P.length - 1];
+    if (top === lo || P[lo][1] - yTop < 6) return null;
+    return { k: 'poly', closed: false, pts: [a[0], a[1], b[0], b[1], c[0], yBar, Math.max(d[0], c[0] + 8), yBar], radical: true };
+  }
+  if (V.length === 5) { const hook = Math.hypot(V[1][0] - V[0][0], V[1][1] - V[0][1]); if (!force && hook > 0.25 * L) return null; }
+  if (V.length > 5) V = [V[0], ...V.slice(-4)];
   const [a, b, c, d] = V.slice(-4);
   const A = [b[0] - a[0], b[1] - a[1]], B = [c[0] - b[0], c[1] - b[1]], C = [d[0] - c[0], d[1] - c[1]];
   const lA = Math.hypot(...A), lB = Math.hypot(...B), lC = Math.hypot(...C);
-  if (!(A[1] > 0.5 * lA && lA > 0.06 * L)) return null;           // short stroke going down
-  if (!(B[1] < -0.6 * lB && lB > 1.2 * lA && B[0] >= -0.3 * lB)) return null; // long stroke going up (to the right or straight up)
-  if (!(C[0] > 0.9 * lC && Math.abs(C[1]) < 0.18 * lC && lC > 0.25 * L)) return null; // bar to the right, nearly level
-  if (c[1] > b[1]) return null; // bar must sit at the top
+  if (!force) {
+    const downMin = strict ? 0.03 : 0.015, upRatio = strict ? 1.1 : 0.8, barLevel = strict ? 0.36 : 0.6, barMin = strict ? 0.2 : 0.12;
+    if (!(A[1] > 0.4 * lA && lA > downMin * L)) return null;           // short stroke going down
+    if (!(B[1] < -0.5 * lB && lB > upRatio * lA && B[0] >= -0.35 * lB)) return null; // long stroke going up (to the right or straight up)
+    if (!(C[0] > 0.75 * lC && Math.abs(C[1]) < barLevel * lC && lC > barMin * L)) return null; // bar to the right, roughly level (≤ ~20° when strict)
+    if (c[1] > b[1]) return null; // bar must sit at the top
+  }
   const out = V.length === 5 ? [V[0][0], V[0][1]] : [];
-  out.push(a[0], a[1], b[0], b[1], c[0], c[1], d[0], c[1]); // bar snapped horizontal
+  out.push(a[0], a[1], b[0], b[1], c[0], c[1], Math.max(d[0], c[0] + 8), c[1]); // bar snapped horizontal
   return { k: 'poly', closed: false, pts: out, radical: true };
 }
+export function looksLikeRadical(p) { return !!recognizeRadical(p, { strict: false }); }
 export function recognize(p) {
   if (p.length < 8) return null;
   p = trimRest(p);
@@ -336,6 +358,7 @@ export function moveHandle(orig, id, x, y) {
 
 // force a specific open shape (used by the "change to…" chips after hold-to-shape)
 export function shapeAs(p, kind) {
+  if (kind === 'radical') return recognizeRadical(p, { force: true });
   p = trimRest(p);
   const R = resample(p, 96); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
   if (P.length < 3) return null;
