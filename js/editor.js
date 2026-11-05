@@ -7,7 +7,7 @@ import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
-import { recognize, recognizeRadical, straighten, shapeHandles, moveHandle, shapeAs } from './shapes.js';
+import { recognize, straighten, shapeHandles, moveHandle, shapeAs } from './shapes.js';
 import * as db from './db.js';
 import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
 import { makeDraggable } from './ui.js';
@@ -982,7 +982,7 @@ export class Editor {
     const upto = Math.max(4 * STRIDE, Math.min(L.pts.length, (L.holdIdx || L.pts.length) + STRIDE));
     const xy = []; for (let i = 0; i < upto; i += STRIDE) xy.push(L.pts[i], L.pts[i + 1]);
     let sh = recognize(xy);
-    if (sh && !sh.closed && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh;
+    if (sh && !sh.closed && !sh.radical && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh; // (a square-root sign keeps its three straight segments)
     if (sh) { L.shape = sh; L.rawXY = xy; L.rawPts = Array.from(L.pts.slice(0, upto)); this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
   }
   // after hold-to-shape on an open stroke: chips to switch line / arc / curve / hand-drawn
@@ -1280,8 +1280,6 @@ export class Editor {
     this.live = null; this.need.live = true;
     if (!s) return;
     s.id = uid(); s.bb = null; s.ts = Date.now();
-    // a square-root sign straightens itself, no hold needed
-    if (!s.shape && prefs.shapeRecog && L.kind !== 'hl' && s.pts.length >= 8 * STRIDE) { const xy = []; for (let i = 0; i < s.pts.length; i += STRIDE) xy.push(s.pts[i], s.pts[i + 1]); const rad = recognizeRadical(xy); if (rad) { s.shape = rad; L.rawPts = Array.from(s.pts); L.rawXY = xy; } }
     if (!s.shape && s.pts.length === STRIDE) { const p = Array.from(s.pts); s.pts = Float32Array.from(p.concat([p[0] + 0.05, p[1] + 0.05, p[2], p[3]])); }
     // Goodnotes-style scribble to erase: a back-and-forth scratch over ink removes what it touches
     if (prefs.scribbleErase && L.kind !== 'hl' && !s.shape && this.scribbleErase(L.page, s)) return;
