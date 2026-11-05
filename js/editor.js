@@ -602,6 +602,9 @@ export class Editor {
     const m = h('div', { class: 'menu', style: { padding: '6px 0 0', minWidth: 0 } });
     const mi = (ic, label, fn) => { const b = h('button', { class: 'mi' }, icon(ic), h('span', {}, label)); b.onclick = () => { close(); fn(); }; m.append(b); };
     mi('fit', 'พอดีหน้าจอ', () => this.fit());
+    { const cur = this.currentPage(); const marked = !!this.nb.marks?.[cur?.id]; mi('star', marked ? 'ถอนที่คั่นหน้านี้' : 'ปักที่คั่นหน้านี้', () => this.toggleMark(cur.id)); }
+    if (this.nb.lastInk && this.pageMap.has(this.nb.lastInk)) mi('pen', `ไปหน้าที่เขียนล่าสุด (หน้า ${this.nb.pages.indexOf(this.nb.lastInk) + 1})`, () => this.scrollToPage(this.nb.lastInk));
+    mi('star', 'ที่คั่นหน้า / สารบัญ', () => { this.toggleThumbs(true); this.thumbTab = 'marks'; this.renderThumbs(); });
     mi('pdf', 'ส่งออกเป็น PDF', () => openExportDialog(this));
     mi('pageplus', 'เพิ่มหน้า / แทรก PDF', () => this.addPageMenu(anchor));
     if (prefs.studentUI) mi('upload', 'ส่งงานให้ครู', () => openExportDialog(this, { submit: true }));
@@ -2218,13 +2221,18 @@ export class Editor {
     const list = h('div', { class: 'list' });
     this.thumbList = list;
     const cur = this.currentPage();
+    // tabs: pages / bookmarks / contents
+    const tab = this.thumbTab || 'pages';
+    const tabs = h('div', { class: 'thtabs' }, ...[['pages', 'หน้า'], ['marks', 'ที่คั่น'], ['toc', 'สารบัญ']].map(([id, lab]) => { const b = h('button', { class: id === tab ? 'on' : '' }, lab); b.onclick = () => { this.thumbTab = id; this.renderThumbs(); }; return b; }));
+    t.append(tabs);
+    if (tab !== 'pages') { this.renderJumpList(list, tab); t.append(list); return; }
     this.thumbIO?.disconnect();
     this.thumbIO = new IntersectionObserver((ents) => { for (const en of ents) { en.target._vis = en.isIntersecting; if (en.isIntersecting) this.drawThumb(en.target); } }, { root: list, rootMargin: '300px 0px' });
     this.nb.pages.forEach((pid, i) => {
       const p = this.pageMap.get(pid); if (!p) return;
       const P = dims(p); const w = 128 * (P.w > P.h ? 1 : Math.min(1, P.w / PAGE.P.w)), hh = w * P.h / P.w;
       const cv = h('canvas');
-      const th = h('div', { class: 'th' + (cur && cur.id === pid ? ' cur' : ''), 'data-pid': pid }, h('div', { class: 'pg', style: { width: w + 'px', height: hh + 'px' } }, cv), h('span', { class: 'no' }, String(i + 1)));
+      const th = h('div', { class: 'th' + (cur && cur.id === pid ? ' cur' : '') + (this.nb.marks?.[pid] ? ' marked' : ''), 'data-pid': pid }, h('div', { class: 'pg', style: { width: w + 'px', height: hh + 'px' } }, cv), h('span', { class: 'no' }, String(i + 1)), this.nb.marks?.[pid] ? h('span', { class: 'mk' }, icon('star')) : '');
       th._w = w;
       th.onclick = () => { this.scrollToPage(pid); this.markThumbCur(true); if (prefs.toolbarHidden && !this.peek) setTimeout(() => this.toggleThumbs(false), 120); };
       list.append(th);
@@ -2240,11 +2248,58 @@ export class Editor {
     const acts = h('div', { class: 'acts' }, add,
       B('up', 'เลื่อนหน้าขึ้น', () => this.movePage(this.currentPage().id, -1)),
       B('down', 'เลื่อนหน้าลง', () => this.movePage(this.currentPage().id, 1)),
+      B('star', this.nb.marks?.[cur?.id] ? 'ถอนที่คั่น' : 'ปักที่คั่นหน้านี้', () => this.toggleMark(this.currentPage().id)),
       B('copy', 'ทำสำเนาหน้า', () => this.duplicatePage(this.currentPage().id)),
       B('trash', 'ลบหน้า', () => this.deletePage(this.currentPage().id)));
     t.append(list, acts);
     if (keep != null) list.scrollTop = keep;
     else requestAnimationFrame(() => { const c = $('.th.cur', list); if (c) c.scrollIntoView({ block: 'center' }); });
+  }
+  toggleMark(pid) {
+    if (!pid) return; this.nb.marks ||= {};
+    if (this.nb.marks[pid]) { delete this.nb.marks[pid]; toast('ถอนที่คั่นแล้ว', 900); }
+    else { this.nb.marks[pid] = { t: Date.now() }; toast('ปักที่คั่นหน้า ' + (this.nb.pages.indexOf(pid) + 1) + ' แล้ว · ดูได้ที่ภาพย่อหน้า > ที่คั่น', 1800); }
+    this.saveNb(); if (this.thumbs.classList.contains('open')) this.renderThumbs(); this.buildDock?.();
+  }
+  // bookmarks / table of contents list inside the thumbnail panel
+  renderJumpList(list, tab) {
+    const row = (pid, title, sub, extra) => { const i = this.nb.pages.indexOf(pid); if (i < 0) return null; const r = h('button', { class: 'jump' + (this.currentPage()?.id === pid ? ' cur' : '') }, h('b', {}, String(i + 1)), h('div', {}, h('div', { class: 'tt' }, title), sub ? h('div', { class: 'sub' }, sub) : ''), extra || ''); r.onclick = () => { this.scrollToPage(pid); this.markThumbCur(true); if (prefs.toolbarHidden && !this.peek) setTimeout(() => this.toggleThumbs(false), 120); }; return r; };
+    if (tab === 'marks') {
+      const ids = Object.keys(this.nb.marks || {}).filter(pid => this.pageMap.has(pid)).sort((a, b) => this.nb.pages.indexOf(a) - this.nb.pages.indexOf(b));
+      if (this.nb.lastInk && this.pageMap.has(this.nb.lastInk)) list.append(row(this.nb.lastInk, 'หน้าที่เขียนล่าสุด', new Date(this.editedAt?.get(this.nb.lastInk) || this.nb.updated || 0).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })));
+      if (!ids.length) list.append(h('p', { class: 'hint' }, 'ยังไม่มีที่คั่น · กด ★ ด้านล่าง หรือเมนู ⋯ > ปักที่คั่นหน้านี้'));
+      for (const pid of ids) { const m = this.nb.marks[pid]; const x = h('button', { class: 'x', title: 'ถอน' }, '×'); x.onclick = (e) => { e.stopPropagation(); this.toggleMark(pid); }; const r = row(pid, m.label || ('หน้า ' + (this.nb.pages.indexOf(pid) + 1)), m.label ? 'หน้า ' + (this.nb.pages.indexOf(pid) + 1) : '', x); if (r) { r.oncontextmenu = (e) => e.preventDefault(); onLongPress(r, async () => { const v = await ask('ชื่อที่คั่น', { value: m.label || '' }); if (v != null) { m.label = v.trim(); this.saveNb(); this.renderThumbs(); } }); list.append(r); } }
+      return;
+    }
+    // contents: from the PDF's own outline, else headings found in the page text (built once per notebook)
+    if (!this.nb.toc) { list.append(h('p', { class: 'hint' }, 'กำลังอ่านหัวข้อจาก PDF…')); this.buildToc().then(() => { if (this.thumbTab === 'toc') this.renderThumbs(); }); return; }
+    if (!this.nb.toc.length) { list.append(h('p', { class: 'hint' }, 'ไม่พบหัวข้อในสมุดเล่มนี้ (ใช้ได้กับสมุดที่มาจาก PDF ที่มีหัวข้อ/ข้อ)')); return; }
+    for (const e of this.nb.toc) { const r = row(e.pid, e.text, e.lvl > 0 ? '' : ''); if (r) { if (e.lvl) r.style.paddingLeft = (12 + 14 * e.lvl) + 'px'; list.append(r); } }
+  }
+  async buildToc() {
+    const out = []; const { getDoc } = await import('./pdfdoc.js');
+    const pdfIds = [...new Set(this.pages.filter(p => p.pdf?.id).map(p => p.pdf.id))];
+    for (const pdfId of pdfIds) {
+      let doc; try { doc = await getDoc(pdfId); } catch { continue; }
+      const pageOf = (n) => this.pages.find(p => p.pdf?.id === pdfId && p.pdf.n === n)?.id;
+      let outline = null; try { outline = await doc.getOutline(); } catch { }
+      if (outline && outline.length) {
+        const walk = async (items, lvl) => { for (const it of items) { try { const dest = typeof it.dest === 'string' ? await doc.getDestination(it.dest) : it.dest; if (dest) { const idx = await doc.getPageIndex(dest[0]); const pid = pageOf(idx + 1); if (pid) out.push({ pid, text: it.title, lvl }); } } catch { } if (it.items?.length && lvl < 2) await walk(it.items, lvl + 1); } };
+        await walk(outline, 0);
+      } else {
+        // headings in the text: เรื่อง… / บทที่… / หน่วย… / แบบฝึก… / ใบงาน… / ตอนที่…
+        const re = /^(เรื่อง|บทที่|หน่วยที่|หน่วยการเรียนรู้|แบบฝึกทักษะ|แบบฝึกหัด|ใบงาน|ใบความรู้|ตอนที่|กิจกรรม|สรุป|แบบทดสอบ)\s*[\w\d฀-๿.\-–:()]*/;
+        const seen = new Set();
+        for (let n = 1; n <= doc.numPages; n++) {
+          const pid = pageOf(n); if (!pid) continue;
+          try { const pg = await doc.getPage(n), tc = await pg.getTextContent(); const lines = []; let cur = ''; let lastY = null;
+            for (const it of tc.items) { const y = it.transform?.[5]; if (lastY != null && Math.abs(y - lastY) > 3) { lines.push(cur); cur = ''; } cur += it.str; lastY = y; } lines.push(cur);
+            for (const ln of lines.slice(0, 12)) { const t = ln.trim().replace(/\s+/g, ' ').replace(/([\u0E31\u0E34-\u0E3A\u0E40-\u0E44\u0E47-\u0E4E])\s+(?=[\u0E00-\u0E7F])/g, '$1').replace(/([\u0E00-\u0E7F])\s+(?=[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E])/g, '$1'); if (t.length > 3 && t.length < 90 && re.test(t) && !seen.has(t)) { seen.add(t); out.push({ pid, text: t, lvl: 0 }); break; } }
+          } catch { }
+        }
+      }
+    }
+    this.nb.toc = out; this.saveNb();
   }
   thumbKey(p) { return p.strokes.length + ':' + p.bg + p.size + this.paper + ':' + (p._ver || 0); }
   drawThumb(th) {
@@ -2298,7 +2353,7 @@ export class Editor {
   }
 
   // ---------- persistence ----------
-  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
+  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
   saveNb() { this.nbDirty = true; this.scheduleSave(); }
   scheduleSave() { clearTimeout(this.saveT); this.saveT = setTimeout(() => this.flush(), 700); }
   async flush() {

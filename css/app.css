@@ -659,3 +659,18 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .tvpill.mini span{display:none}.tvpill.mini{padding:6px}
 .tvpill.hidden{opacity:0;transform:translateY(6px)}
 @keyframes tvblink{50%{opacity:.3}}
+
+/* thumbnail panel: tabs, bookmarks, contents */
+.thtabs{display:flex;gap:4px;padding:8px 8px 0}
+.thtabs button{flex:1;height:36px;border:0;border-radius:10px;background:transparent;color:var(--muted);font:inherit;font-size:19px}
+.thtabs button.on{background:var(--acc-soft);color:var(--acc);font-weight:700}
+.thumbs .th.marked .mk{position:absolute;top:2px;right:8px;width:22px;height:22px;color:#F5B83D;filter:drop-shadow(0 1px 1px rgba(0,0,0,.4))}
+.thumbs .th{position:relative}
+.thumbs .jump{display:flex;gap:10px;align-items:center;width:calc(100% - 16px);margin:3px 8px;padding:8px 10px;border:0;border-radius:12px;background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.thumbs .jump.cur{background:var(--acc-soft)}
+.thumbs .jump b{flex:none;min-width:34px;height:34px;border-radius:10px;background:var(--ui);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--muted)}
+.thumbs .jump>div{flex:1;min-width:0}
+.thumbs .jump .tt{font-size:20px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.thumbs .jump .sub{font-size:17px;color:var(--muted)}
+.thumbs .jump .x{flex:none;width:30px;height:30px;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:22px}
+.thumbs .hint{padding:16px 14px;color:var(--muted);font-size:19px;line-height:1.3}
