@@ -190,6 +190,21 @@ export function openPenPanel(anchor, ed, opts = {}) {
   }
   function refreshAll() { hlRow.style.display = hlStyle.style.display = isHl() ? '' : 'none'; loadColor(); refreshColorUI(false); refreshSize(); refreshFavs(); }
 
+  // pen sets: three slots that remember pen type + colour + size (tap = use, hold = save the current pen there)
+  const sets = h('div', { class: 'pensets' });
+  const drawSets = () => {
+    sets.innerHTML = '';
+    const L = (prefs.penSets ||= [null, null, null]);
+    L.forEach((st, i) => {
+      const b = h('button', { class: 'ps' + (st ? '' : ' empty'), title: st ? `${PEN_LABEL[st.type] || st.type} · ${st.size}` : 'กดค้างเพื่อเก็บปากกาปัจจุบัน' },
+        st ? h('i', { style: { background: st.color, width: Math.min(26, 8 + st.size * 2.2) + 'px', height: Math.min(26, 8 + st.size * 2.2) + 'px' } }) : h('span', {}, '+'), h('small', {}, st ? (PEN_LABEL[st.type] || '') : 'เก็บ'));
+      b.onclick = () => { if (!st) return toast('กดค้างเพื่อเก็บปากกาปัจจุบันไว้ที่ช่องนี้', 1500); if (st.type === 'hl') { prefs.hl.color = st.color; prefs.hl.size = st.size; prefs.hl.alpha = st.alpha; ed.setTool('hl'); } else { prefs.penType = st.type; prefs.penColor = st.color; prefs.penAlpha = st.alpha ?? 1; prefs.pens[st.type].size = st.size; ed.setTool('pen'); } savePrefs(); ed.buildToolbar(); refreshAll(); };
+      onLongPress(b, () => { const c = ed.cur(); L[i] = isHl() ? { type: 'hl', color: prefs.hl.color, size: prefs.hl.size, alpha: prefs.hl.alpha } : { type: prefs.penType, color: prefs.penColor, size: c.cfg.size, alpha: prefs.penAlpha }; savePrefs(); drawSets(); toast('เก็บเซ็ตปากกา ' + (i + 1) + ' แล้ว', 1200); });
+      sets.append(b);
+    });
+  };
+  drawSets();
+  box.append(h('div', { class: 'lbl', style: { gridColumn: '1 / -1' } }, 'เซ็ตปากกา (แตะใช้ · กดค้างเก็บ)'), sets);
   close = popover(anchor, box, { ...opts, onClose: () => ed.buildToolbar() });
   drawWheel(); refreshAll();
   requestAnimationFrame(refreshPreview);

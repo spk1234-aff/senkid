@@ -14,9 +14,9 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
-import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope } from './sync.js';
+import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.35';
+export const VERSION = '1.9.36';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -246,6 +246,7 @@ class App {
         row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => openRecordings(); return b; })())),
       h('div', { class: 'sec-t' }, 'ความช่วยเหลือ'),
       card(
+        row('ตรวจความพร้อมก่อนสอน', (() => { const b = h('button', { class: 'pill prim', style: { height: '42px' } }, icon('check'), 'ตรวจ'); b.onclick = () => this.healthCheck(); return b; })(), 'เช็ก Google · ซิงก์ · พื้นที่ · ไมค์ · ทีวี ในหน้าเดียว'),
         row('วิธีติดตั้งและใช้งาน', (() => { const b = h('button', { class: 'btn sq' }, icon('chev')); b.onclick = () => this.openHelp(); return b; })()),
         row('ดูหน้าแนะนำอีกครั้ง', (() => { const b = h('button', { class: 'btn sq' }, icon('chev')); b.onclick = () => this.onboarding(); return b; })()),
         row('เวอร์ชัน', h('span', { style: { color: 'var(--muted)' } }, VERSION + ' · ทำงานออฟไลน์ได้')),
@@ -255,6 +256,36 @@ class App {
     this.sheet('ตั้งค่า', h('div', { class: 'cols' }, left, right));
   }
 
+  // one page that says whether everything is ready for class, with a fix button beside each problem
+  async healthCheck() {
+    const items = [];
+    const it = (ok, title, sub, fix) => items.push({ ok, title, sub, fix });
+    // app version
+    it(true, 'เส้นคิด ' + VERSION, this.updating ? 'กำลังอัปเดต' : 'อัปเดตล่าสุดเมื่อเปิดแอป', null);
+    // Google / sync
+    const tok = tokenOk(), on = connected();
+    if (!on) it('warn', 'ยังไม่ได้เปิดซิงก์ Google Drive', 'สมุดอยู่ในเครื่องนี้เท่านั้น', { label: 'ตั้งค่า', fn: () => this.openSettings() });
+    else if (!tok) it(false, 'การเชื่อม Google หมดอายุ', 'ซิงก์และคลิปขึ้น Drive หยุดทำงาน', { label: 'เชื่อมต่อใหม่', fn: async () => { await this.editor?.flush?.(); signIn(); } });
+    else { const ago = sync.lastSync ? Math.round((Date.now() - sync.lastSync) / 60000) : null; it(ago != null && ago < 180 ? true : 'warn', 'Google Drive: ' + (sync.email || 'เชื่อมต่อแล้ว'), ago == null ? 'ยังไม่เคยซิงก์' : `ซิงก์ล่าสุด ${ago < 1 ? 'เมื่อสักครู่' : ago + ' นาทีที่แล้ว'}` + (sync.error ? ' · ' + sync.error : ''), { label: 'ซิงก์ตอนนี้', fn: () => syncNow('manual') }); }
+    // storage
+    try { const e = await navigator.storage?.estimate?.(); if (e) { const free = (e.quota - e.usage) / 1048576; it(free > 500 ? true : free > 150 ? 'warn' : false, `พื้นที่: ใช้ ${fmtBytes(e.usage)} จาก ${fmtBytes(e.quota)}`, free < 500 ? 'เหลือน้อย · ย้ายคลิปขึ้น Drive หรือลบคลิปเก่า' : 'เพียงพอ', free < 500 ? { label: 'คลิป', fn: () => openRecordings() } : null); } } catch { }
+    // persistent storage (iPad may evict otherwise)
+    try { const p = await navigator.storage?.persisted?.(); if (p != null) it(p ? true : 'warn', p ? 'ข้อมูลถูกตั้งเป็นถาวรแล้ว' : 'ข้อมูลยังไม่ได้ตั้งเป็นถาวร', p ? 'ระบบจะไม่ลบข้อมูลแอปเอง' : 'iPad อาจเคลียร์ข้อมูลเมื่อพื้นที่เต็ม', p ? null : { label: 'ตั้งถาวร', fn: async () => { const ok = await navigator.storage.persist(); toast(ok ? 'ตั้งเป็นถาวรแล้ว' : 'ระบบไม่อนุญาต (ใช้จากไอคอนบนหน้าโฮมจะได้สิทธิ์นี้)', 2500); } }); } catch { }
+    // microphone
+    try { const st = await navigator.permissions?.query?.({ name: 'microphone' }); if (st) it(st.state === 'granted' ? true : st.state === 'denied' ? false : 'warn', 'ไมโครโฟน: ' + ({ granted: 'อนุญาตแล้ว', denied: 'ถูกปฏิเสธ', prompt: 'จะถามเมื่อกดอัด' }[st.state] || st.state), st.state === 'denied' ? 'เปิดได้ที่ การตั้งค่า iPad > Safari > ไมโครโฟน' : '', null); } catch { it('warn', 'ไมโครโฟน: จะถามเมื่อกดอัด', '', null); }
+    // TV window
+    const b = this.broadcast; const paired = prefs.pairedAt && Date.now() - prefs.pairedAt < 12 * 3600e3;
+    it(b?.rtc?.open || b?.connected ? true : paired ? 'warn' : 'warn', b?.rtc?.open ? 'ทีวี (จอที่สอง): เชื่อมต่ออยู่' : b?.connected ? 'หน้าจอนักเรียน: เชื่อมต่ออยู่' : paired ? 'ทีวี: ยังไม่ได้ต่อ · จะต่อเองเมื่อหน้าต่างบนทีวีเปิดอยู่' : 'ทีวี: ยังไม่ได้ตั้งค่าวันนี้', '', this.editor && !b?.rtc?.open ? { label: 'ต่อทีวี', fn: () => this.studentMenu(document.querySelector('.tb .btn') || document.body) } : null);
+    // pending clips
+    try { const recs = await db.getAll('recs'); const pend = recs.filter(r => r.done && !r.drive).length; if (pend) it('warn', `คลิป ${pend} รายการยังอยู่ในเครื่อง`, 'จะส่งขึ้น Drive เองเมื่อเชื่อม Google และมีเน็ต', { label: 'ดูคลิป', fn: () => openRecordings() }); } catch { }
+    // online
+    it(navigator.onLine ? true : 'warn', navigator.onLine ? 'อินเทอร์เน็ต: ต่ออยู่' : 'อินเทอร์เน็ต: ออฟไลน์', navigator.onLine ? '' : 'สอนได้ปกติ · ซิงก์และทีวี(จอสอง)จะทำเมื่อมีเน็ต', null);
+    const list = h('div', { class: 'hc' }, ...items.map(x => h('div', { class: 'hc-row ' + (x.ok === true ? 'ok' : x.ok === 'warn' ? 'warn' : 'bad') }, h('i', {}, x.ok === true ? '✓' : x.ok === 'warn' ? '!' : '✕'), h('div', {}, h('b', {}, x.title), x.sub ? h('div', { class: 'sub' }, x.sub) : ''), x.fix ? (() => { const bb = h('button', { class: 'pill sec', style: { height: '38px', flex: 'none' } }, x.fix.label); bb.onclick = () => { close(); x.fix.fn(); }; return bb; })() : '')));
+    const bad = items.filter(x => x.ok === false).length, warn = items.filter(x => x.ok === 'warn').length;
+    const head = h('div', { class: 'hc-head ' + (bad ? 'bad' : warn ? 'warn' : 'ok') }, bad ? `พบ ${bad} เรื่องต้องแก้ก่อนสอน` : warn ? `พร้อมสอน · มี ${warn} ข้อควรรู้` : 'พร้อมสอน ทุกอย่างเรียบร้อย');
+    const dg = dialog('ตรวจความพร้อมก่อนสอน', h('div', {}, head, list), [{ label: 'ตรวจอีกครั้ง', action: () => { setTimeout(() => this.healthCheck(), 50); } }, { label: 'ปิด', cls: 'prim' }], { width: 600 });
+    const close = () => dg?.close?.();
+  }
   openHelp() {
     const sec = (t, ...items) => h('div', {}, h('h3', {}, t), h('ol', {}, ...items.map(i => h('li', { html: i }))));
     const guide = h('a', { class: 'pill prim', href: new URL('help/student.html', location.href).href, target: '_blank', rel: 'noopener', style: { textDecoration: 'none', justifyContent: 'center', width: '100%', marginBottom: '14px' } }, icon('help'), 'เปิดคู่มือฉบับเต็มสำหรับนักเรียน (มีรูปประกอบ)');

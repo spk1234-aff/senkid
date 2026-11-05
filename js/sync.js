@@ -293,6 +293,7 @@ async function doSync(reason) {
       } catch (e) { if (e.auth) throw e; console.warn('sync prefs', e); }
     } finally { db.setQuiet(false); }
     sync.lastSync = Date.now(); prefs.sync.last = sync.lastSync; savePrefs();
+    weeklyBackup(app).catch(e => console.warn('weekly backup', e));
     setState('idle', { error: pdfFailMsg, progress: '' });
     if (pdfFails.length && reason === 'manual') toast('สมุดซิงก์แล้ว แต่ส่ง PDF ไม่ได้ — ' + pdfFails.join(' · '), 7000, 'warn');
     if (pulled) {
@@ -365,6 +366,31 @@ export function statusText() {
 }
 
 // ---------- recordings → a visible Drive folder "เส้นคิด/คลิป" (needs the drive.file permission) ----------
+// once a week, after a successful sync: one file with every notebook, into เส้นคิด/สำรอง on Drive (last 4 kept)
+let backingUp = false;
+async function weeklyBackup(app) {
+  if (backingUp || !hasFileScope() || !navigator.onLine) return;
+  const last = prefs.sync.lastFull || 0; if (Date.now() - last < 7 * 86400e3) return;
+  const ed = app?.editor; if (ed && Date.now() - (ed.lastInput || 0) < 120e3) return; // not while teaching
+  backingUp = true;
+  try {
+    const { buildBackup } = await import('./files.js');
+    const ids = (await db.getAll('notebooks')).map(n => n.id); if (!ids.length) return;
+    const out = await buildBackup(ids, null);
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    const name = `senkid-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.senkid.json`;
+    const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
+    const folder = await folderId('สำรอง', await folderId('เส้นคิด', 'root'));
+    const r0 = await gfetch(`${UP}/files?uploadType=resumable&fields=id`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/json', 'X-Upload-Content-Length': String(blob.size) }, body: JSON.stringify({ name, parents: [folder] }) });
+    const loc = r0.headers.get('Location'); if (!loc) throw new Error('no location');
+    const tok = readToken(); const r = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok.t }, body: blob }); if (!r.ok) throw await driveError(r, 'backup');
+    // keep the newest 4
+    const q = new URLSearchParams({ q: `'${folder}' in parents and trashed = false`, fields: 'files(id,name,createdTime)', orderBy: 'createdTime desc', pageSize: '50' });
+    const j = await (await gfetch(`${API}/files?${q}`)).json(); for (const f of (j.files || []).slice(4)) await remove(f.id);
+    prefs.sync.lastFull = Date.now(); savePrefs();
+    console.log('weekly backup', name, blob.size);
+  } finally { backingUp = false; }
+}
 export function hasFileScope() { const t = readToken(); return !!t && (!t.scope || /drive\.file/.test(t.scope)); }
 async function folderId(name, parent) {
   const q = new URLSearchParams({ q: `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parent}' in parents`, fields: 'files(id)' });

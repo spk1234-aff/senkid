@@ -701,3 +701,15 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .lplayer .lp-bar{flex:1;accent-color:var(--acc);height:6px}
 .lplayer .lp-t{font-variant-numeric:tabular-nums;font-size:19px;color:#C9CDD5;white-space:nowrap}
 .lplayer .seg{background:#2A2D35}.lplayer .seg button{color:#C9CDD5}.lplayer .seg button.on{background:#3A3D45;color:#fff}
+
+.pensets{display:flex;gap:8px;grid-column:1 / -1}
+.pensets .ps{flex:1;height:52px;border:1px solid var(--line);border-radius:14px;background:var(--ui);display:flex;align-items:center;justify-content:center;gap:8px;font:inherit;color:var(--text)}
+.pensets .ps i{display:block;border-radius:50%}.pensets .ps small{font-size:17px;color:var(--muted)}
+.pensets .ps.empty{border-style:dashed;color:var(--muted)}.pensets .ps.empty span{font-size:24px}
+/* health check */
+.hc-head{padding:12px 16px;border-radius:14px;font-weight:700;font-size:22px;margin-bottom:10px}
+.hc-head.ok{background:#E3F6EA;color:#176B3A}.hc-head.warn{background:#FFF4DB;color:#5A4300}.hc-head.bad{background:#FDE8E8;color:#7A1F1F}
+.hc-row{display:flex;align-items:center;gap:12px;padding:10px 6px;border-bottom:1px solid var(--line)}
+.hc-row i{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-style:normal;font-weight:700;color:#fff}
+.hc-row.ok i{background:#1E9E5A}.hc-row.warn i{background:#F5B83D}.hc-row.bad i{background:#E5484D}
+.hc-row>div{flex:1;min-width:0}.hc-row b{font-size:21px}.hc-row .sub{font-size:18px;color:var(--muted)}
