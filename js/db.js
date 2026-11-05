@@ -19,7 +19,14 @@ export function openDB() {
       if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'k' });
       if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks', { keyPath: ['rec', 'seq'] }).createIndex('rec', 'rec');
     };
-    r.onsuccess = () => res(r.result);
+    r.onsuccess = () => {
+      const db = r.result;
+      // iPadOS closes idle connections (background, memory pressure) and a version change elsewhere closes them too:
+      // forget this handle so the next call opens a fresh one instead of failing with "connection is closing"
+      db.onclose = () => { if (dbp && dbp._db === db) dbp = null; };
+      db.onversionchange = () => { try { db.close(); } catch { } if (dbp && dbp._db === db) dbp = null; };
+      dbp._db = db; res(db);
+    };
     r.onerror = () => rej(r.error);
     r.onblocked = () => rej(new Error('blocked'));
   });
@@ -27,7 +34,13 @@ export function openDB() {
 }
 
 function req(r) { return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
-async function tx(stores, mode = 'readonly') { const db = await openDB(); return db.transaction(stores, mode); }
+async function tx(stores, mode = 'readonly') {
+  for (let tries = 0; ; tries++) {
+    const db = await openDB();
+    try { return db.transaction(stores, mode); }
+    catch (e) { if (tries >= 2 || !(e && (e.name === 'InvalidStateError' || /closing/i.test(e.message || '')))) throw e; dbp = null; await new Promise(r => setTimeout(r, 150)); }
+  }
+}
 function done(t) { return new Promise((res, rej) => { t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error || new Error('abort')); }); }
 
 export async function getAll(store) { const t = await tx([store]); return req(t.objectStore(store).getAll()); }

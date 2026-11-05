@@ -17,7 +17,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.37';
+export const VERSION = '1.9.38';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
