@@ -649,3 +649,13 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .ctxbar .vsep{align-self:center}
 /* up to 13-inch iPad: the pen chip shows its icon only, so the whole row still fits on one line */
 @media (max-width:1420px){.ctxbar .chip.main span{display:none}.ctxbar .chip.main{padding-right:4px}}
+
+/* TV link status pill */
+.tvpill{position:absolute;right:calc(12px + var(--safe-r));bottom:calc(10px + var(--safe-b));z-index:7;display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(32,34,39,.9);color:#fff;font-size:18px;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none;transition:opacity .3s,transform .3s}
+.tvpill i{width:10px;height:10px;border-radius:50%;background:#9aa;flex:none}
+.tvpill[data-st=wait] i{background:#F5B83D;animation:tvblink 1s infinite}
+.tvpill[data-st=on] i{background:#3DDC84}
+.tvpill[data-st=off] i{background:#E5484D}
+.tvpill.mini span{display:none}.tvpill.mini{padding:6px}
+.tvpill.hidden{opacity:0;transform:translateY(6px)}
+@keyframes tvblink{50%{opacity:.3}}

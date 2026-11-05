@@ -12,7 +12,7 @@ export class Broadcast {
     this.mode = prefs.studentMode || 'follow';
     try { this.ch = new BroadcastChannel('senkid-live'); } catch { this.ch = null; }
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
-    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; toast('เชื่อมหน้าต่าง Safari แล้ว', 1800); } else if (this.rtcWas) toast('หน้าต่าง Safari หลุดการเชื่อมต่อ', 2500, 'warn'); this.rtcWas = v; this.app.editor?.buildToolbar(); } });
+    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.rtcWas = v; this.app.editor?.buildToolbar(); } });
     app.timer.onChange((st) => this.post({ type: 'timer', st }));
     // once a Safari window has been paired, keep it paired by itself: after a break, an app switch or a restart of the app,
     // publish a fresh code quietly and the window on the TV (which keeps listening) answers — no button needed
@@ -78,15 +78,26 @@ export class Broadcast {
 
 let studentWin = null;
 let pairing = false;
+// small status pill (bottom-right of the page area) so the teacher always knows what the TV link is doing
+let tvPill = null, tvHideT = null;
+export function setTv(state, text) {
+  const stage = document.querySelector('.stage'); if (!stage) return;
+  if (!tvPill || !tvPill.isConnected) { tvPill = h('div', { class: 'tvpill' }, h('i'), h('span')); stage.append(tvPill); }
+  clearTimeout(tvHideT);
+  tvPill.dataset.st = state; tvPill.querySelector('span').textContent = text; tvPill.classList.remove('hidden');
+  if (state === 'on') tvHideT = setTimeout(() => tvPill.classList.add('mini'), 6000); else tvPill.classList.remove('mini');
+  if (state === 'off') tvHideT = setTimeout(() => tvPill.classList.add('hidden'), 4000);
+}
 async function startPairing(b, openSafari = true, quiet = false) {
   if (pairing) return; pairing = true;
   const bz = quiet ? { done() {} } : busy('กำลังเตรียมจับคู่กับ Safari…');
+  setTv('wait', quiet ? 'กำลังเชื่อมจอสอง (ทีวี)…' : 'กำลังจับคู่กับ Safari…');
   try {
     await b.app.editor?.flush?.(); // iPadOS may suspend or restart this app while Safari is in front: nothing may be left unsaved
     const url = new URL('student.html#pair', location.href).href;
     const p = teacherPair(b.rtc, { timeoutMs: quiet ? 40e3 : 180e3, onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else if (!quiet) toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
     const ok = await p;
-    if (ok) { prefs.pairedAt = Date.now(); savePrefs(); }
+    if (ok) { prefs.pairedAt = Date.now(); savePrefs(); } else if (!b.rtc.open) setTv(quiet ? 'off' : 'off', quiet ? 'ยังไม่พบหน้าต่างทีวี · จะลองใหม่เอง' : 'จับคู่ไม่สำเร็จ');
     if (!ok && !quiet) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
   } catch (e) { console.warn('pair', e); if (!quiet) toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
   finally { bz.done(); pairing = false; }
