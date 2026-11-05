@@ -115,7 +115,7 @@ export class Recorder {
   async start(ed, res, mime) {
     // microphone
     let audio = null;
-    try { audio = await navigator.mediaDevices.getUserMedia({ audio: prefs.rec.mic ? { deviceId: { exact: prefs.rec.mic }, echoCancellation: true, noiseSuppression: true } : { echoCancellation: true, noiseSuppression: true } }); }
+    try { audio = await openMic(); }
     catch (e) {
       if (!(await confirmBox('ใช้ไมค์ไม่ได้', 'อัดคลิปแบบไม่มีเสียงต่อไหม? (ตรวจการอนุญาตไมค์ใน การตั้งค่า > Safari > ไมโครโฟน)', { ok: 'อัดแบบไม่มีเสียง' }))) return;
     }
@@ -222,6 +222,15 @@ export class Recorder {
   }
 }
 
+// the chosen microphone is a preference, not a requirement: iPadOS renews device ids, so a stale id must not stop the recording
+async function openMic() {
+  const base = { echoCancellation: true, noiseSuppression: true };
+  if (prefs.rec.mic) {
+    try { return await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: prefs.rec.mic } } }); }
+    catch (e) { if (!/constraint|NotFound|Overconstrained/i.test(e.name + ' ' + e.message)) throw e; prefs.rec.mic = ''; savePrefs(); }
+  }
+  return navigator.mediaDevices.getUserMedia({ audio: base });
+}
 export function pickAudioMime() {
   if (typeof MediaRecorder === 'undefined') return null;
   for (const m of ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch { } }
@@ -253,7 +262,7 @@ export class AudioRecorder {
   async start(ed) {
     if (typeof MediaRecorder === 'undefined') { toast('เบราว์เซอร์นี้อัดเสียงไม่ได้', 3000, 'warn'); return; }
     let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: prefs.rec.mic ? { deviceId: { exact: prefs.rec.mic }, echoCancellation: true, noiseSuppression: true } : { echoCancellation: true, noiseSuppression: true } }); }
+    try { stream = await openMic(); }
     catch (e) { toast('เปิดไมค์ไม่ได้: ' + (e.message || e.name) + ' (ตรวจการอนุญาตไมค์ในการตั้งค่า Safari)', 4000, 'warn'); return; }
     const mime = pickAudioMime();
     let mr; try { mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : undefined); } catch { mr = new MediaRecorder(stream); }
