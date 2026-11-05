@@ -185,7 +185,7 @@ export class Editor {
         { icon: 'text', label: 'กล่องข้อความ', action: () => this.setTool('text') },
         { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง', action: () => this.app.audioClick(this, b) },
         { icon: 'pageplus', label: 'เพิ่มหน้า / แทรก PDF', action: () => this.addPageMenu(b) },
-        ...(prefs.studentUI ? [] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'rec', label: this.app.recorder?.active ? 'หยุดอัดคลิป' : 'อัดคลิป', action: () => this.app.recorderClick(this, b) }]),
+        ...(prefs.studentUI ? [] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'dice', label: 'สุ่มชื่อนักเรียน / จัดกลุ่ม', action: () => this.app.picker.open(b) }, { icon: 'rec', label: this.app.recorder?.active ? 'หยุดอัดคลิป' : 'อัดคลิป', action: () => this.app.recorderClick(this, b) }]),
       ], this.popOpts()), t === 'shapes' || t === 'text'));
       if (prefs.studentUI) for (const el of dock.querySelectorAll('button')) if (/^ม่านบัง/.test(el.title)) el.remove();
       // options for the current tool
@@ -307,7 +307,7 @@ export class Editor {
     // student mode: hide the teacher-only tools (projector, recording, timer, curtain)
     if (prefs.studentUI) for (const el of this.tb.querySelectorAll('button')) {
       const t = el.title || el.getAttribute('aria-label') || '';
-      if (/^(หน้าจอนักเรียน|นาฬิกาจับเวลา|อัดคลิป|ม่านบังคำตอบ)/.test(t) || el.classList.contains('recbtn')) el.remove(); // students may still record audio
+      if (/^(หน้าจอนักเรียน|นาฬิกาจับเวลา|อัดคลิป|ม่านบังคำตอบ|สุ่มชื่อ)/.test(t) || el.classList.contains('recbtn')) el.remove(); // students may still record audio
     }
   }
   buildToolbar0() {
@@ -404,6 +404,7 @@ export class Editor {
     this.micBtn = B('mic', 'อัดเสียง', (b) => this.app.audioClick(this, b));
     const right = h('div', { class: 'side r' },
       B('timer', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b), this.app.timer.visible),
+      B('dice', 'สุ่มชื่อนักเรียน / จัดกลุ่ม', (b) => this.app.picker.open(b), !!this.app.picker?.el?.isConnected),
       B('screen', 'หน้าจอนักเรียน / นำเสนอ', (b) => this.app.studentMenu(b), this.app.broadcast?.connected),
       this.micBtn, this.recBtn,
       B('pageplus', 'เพิ่มหน้า', (b) => this.addPageMenu(b)),

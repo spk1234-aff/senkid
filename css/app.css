@@ -674,3 +674,18 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .thumbs .jump .sub{font-size:17px;color:var(--muted)}
 .thumbs .jump .x{flex:none;width:30px;height:30px;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:22px}
 .thumbs .hint{padding:16px 14px;color:var(--muted);font-size:19px;line-height:1.3}
+
+/* random picker card */
+.pickcard{position:absolute;left:50%;top:120px;transform:translateX(-50%);z-index:7;width:min(520px,calc(100% - 24px));background:var(--bar);border:1px solid var(--line);border-radius:22px;box-shadow:0 14px 40px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;touch-action:none}
+.pickcard.dragging{transform:none}.pickcard[style*="left"]{transform:none}
+.pickcard .pk-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.pickcard .pk-head .cgrip{width:16px;height:36px;display:flex;flex-direction:row;align-items:center;gap:3px;cursor:grab}.pickcard .pk-head .cgrip i{display:block;width:2.5px;height:22px;border-radius:2px;background:var(--muted)}
+.pickcard .pk-head b{font-size:22px}.pickcard .pk-cls{color:var(--muted);font-size:18px}.pickcard .grow{flex:1}
+.pickcard .pk-body{min-height:150px;display:flex;align-items:center;justify-content:center;padding:14px}
+.pickcard .pk-idle{color:var(--muted);font-size:24px}
+.pickcard .pk-big{font-size:54px;font-weight:700;text-align:center;line-height:1.1}
+.pickcard .pk-big.spin{opacity:.75}.pickcard .pk-big.win{color:var(--acc);animation:pkpop .5s ease-out}
+@keyframes pkpop{0%{transform:scale(.6);opacity:.3}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+.pickcard .pk-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;width:100%}
+.pickcard .pk-g{background:var(--ui);border-radius:14px;padding:8px 12px;font-size:20px;line-height:1.3}.pickcard .pk-g b{display:block;color:var(--acc);margin-bottom:2px}
+.pickcard .pk-ctl{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}.pickcard .pk-ctl .pill{flex:1;height:44px}.pickcard .pk-ctl .pill.ghost{flex:none;width:48px}

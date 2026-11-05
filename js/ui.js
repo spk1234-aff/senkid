@@ -102,6 +102,7 @@ const P = {
   help: '<circle cx="12" cy="12" r="9.5" fill="currentColor" stroke="none"/><path d="M9.3 9.5 a2.7 2.7 0 1 1 3.8 2.5 c-.8.3-1.1 1-1.1 1.8 V14.3" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.8"/><circle cx="12" cy="17.3" r="1.1" fill="var(--ico-in,#fff)" stroke="none"/>',
   fit: '<path d="M4 9 V4 H9 M20 9 V4 H15 M4 15 V20 H9 M20 15 V20 H15" stroke-width="2.4"/>',
   star: '<path d="M12 2.8 l2.8 6 6.5.8 -4.8 4.5 1.3 6.5 -5.8-3.3 -5.8 3.3 1.3-6.5 -4.8-4.5 6.5-.8 Z" fill="currentColor" stroke="none"/>',
+  dice: '<rect x="3" y="3" width="18" height="18" rx="4.5" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="16" cy="8" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="8" cy="16" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="16" cy="16" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/>',
   pdf: '<path d="M6 2.5 H14.5 L19.5 7.5 V20 a1.5 1.5 0 0 1-1.5 1.5 H7.5 A1.5 1.5 0 0 1 6 20 Z" fill="currentColor" stroke="none"/><path d="M14.5 2.5 V7.5 H19.5" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.5"/><path d="M8.6 17 V11.5 h2 a1.6 1.6 0 0 1 0 3.2 h-2 M13.2 17 V11.5 h1.4 a2.75 2.75 0 0 1 0 5.5 Z" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.4"/>',
   rec: '<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>',
 };

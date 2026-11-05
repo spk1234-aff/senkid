@@ -30,6 +30,7 @@ const onMsg = (m) => {
   else if (m.type === 'timer') timer(m.st);
   else if (m.type === 'tools') { tools = m; dirty = true; calcShow(m.calc); }
   else if (m.type === 'ui') mirrorApply(m);
+  else if (m.type === 'pick') pickShow(m);
 };
 ch.onmessage = (e) => onMsg(e.data);
 ch.postMessage({ type: 'hello' });
@@ -73,6 +74,16 @@ function mirrorLayout() {
   mirror.style.transform = `translate(${(innerWidth - mW * mScale) / 2}px,${(innerHeight - mH * mScale) / 2}px) scale(${mScale})`;
   const d = Math.min(3, devicePixelRatio || 1) * mScale, sw = mStage.clientWidth, sh = mStage.clientHeight;
   cv.width = Math.max(1, Math.round(sw * d)); cv.height = Math.max(1, Math.round(sh * d));
+}
+// random-name picker overlay (big, on the TV)
+let pickEl = null, pickT = null;
+function pickShow(m) {
+  if (m.off) { pickEl?.remove(); pickEl = null; return; }
+  if (!pickEl) { pickEl = document.createElement('div'); pickEl.id = 'pick'; document.body.append(pickEl); }
+  clearTimeout(pickT);
+  if (m.groups) { pickEl.className = 'groups'; pickEl.innerHTML = m.groups.map((g, i) => `<div class="g"><b>กลุ่ม ${i + 1}</b>${g.map(x => `<div>${x.replace(/</g, '&lt;')}</div>`).join('')}</div>`).join(''); }
+  else { pickEl.className = m.done ? 'one win' : 'one'; pickEl.textContent = (m.names || []).join(' '); }
+  if (m.done) pickT = setTimeout(() => { pickEl?.remove(); pickEl = null; }, m.groups ? 120e3 : 15e3);
 }
 function transform() {
   if (mirror && mStage) { // exactly the teacher's viewport

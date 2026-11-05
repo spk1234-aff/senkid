@@ -23,6 +23,13 @@ canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
 #mirror canvas{position:absolute;inset:0;width:100%;height:100%}
 #mirror .mlayer{position:absolute;inset:0;pointer-events:none}
 #mirror .tvpill{display:none}
+#pick{position:fixed;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;background:rgba(10,11,14,.72);color:#fff;font-weight:700;pointer-events:none}
+#pick.one{font-size:16vh;text-shadow:0 6px 30px rgba(0,0,0,.5)}
+#pick.win{color:#FFD86B;animation:pkpop .5s ease-out}
+@keyframes pkpop{0%{transform:scale(.6);opacity:.3}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+#pick.groups{flex-wrap:wrap;align-content:center;gap:2vh;padding:4vh;font-weight:400}
+#pick .g{background:rgba(32,34,39,.95);border-radius:2vh;padding:1.6vh 2.4vh;min-width:18vw;font-size:3.4vh;line-height:1.35}
+#pick .g b{display:block;color:#7CC7FF;font-size:3.8vh;margin-bottom:.6vh}
 #ov{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(32,34,39,.94);border-radius:18px;padding:10px 14px;display:none;gap:10px;align-items:center;font-size:22px}
 #ov button{font:inherit;font-size:22px;border:0;border-radius:12px;padding:8px 18px;background:#2F5BEA;color:#fff;cursor:pointer}
 #guide{position:fixed;inset:0;z-index:8;background:rgba(11,12,15,.96);display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:30px;text-align:left}
