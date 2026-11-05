@@ -14,6 +14,16 @@ export class Broadcast {
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
     this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; toast('เชื่อมหน้าต่าง Safari แล้ว', 1800); } else if (this.rtcWas) toast('หน้าต่าง Safari หลุดการเชื่อมต่อ', 2500, 'warn'); this.rtcWas = v; this.app.editor?.buildToolbar(); } });
     app.timer.onChange((st) => this.post({ type: 'timer', st }));
+    // once a Safari window has been paired, keep it paired by itself: after a break, an app switch or a restart of the app,
+    // publish a fresh code quietly and the window on the TV (which keeps listening) answers — no button needed
+    const tryAuto = () => {
+      if (this.rtc.open || pairing || document.visibilityState !== 'visible' || !navigator.onLine) return;
+      const t = prefs.pairedAt || 0; if (Date.now() - t > 12 * 3600e3) return; // only on a day a TV window was set up
+      if (Date.now() - (this.autoAt || 0) < 45e3) return; this.autoAt = Date.now();
+      import('./pair.js').then(m => { if (!m.canPair()) return; startPairing(this, false, true); });
+    };
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(tryAuto, 1500); });
+    setInterval(tryAuto, 20e3); setTimeout(tryAuto, 4000);
   }
   get connected() { return performance.now() - this.lastAlive < 4500; }
   post(m) { if (!this.connected) return; try { this.ch && this.ch.postMessage(m); } catch (e) { console.warn(e); } if (this.rtc.open) this.rtc.send(m); }
@@ -68,16 +78,17 @@ export class Broadcast {
 
 let studentWin = null;
 let pairing = false;
-async function startPairing(b, openSafari = true) {
+async function startPairing(b, openSafari = true, quiet = false) {
   if (pairing) return; pairing = true;
-  const bz = busy('กำลังเตรียมจับคู่กับ Safari…');
+  const bz = quiet ? { done() {} } : busy('กำลังเตรียมจับคู่กับ Safari…');
   try {
     await b.app.editor?.flush?.(); // iPadOS may suspend or restart this app while Safari is in front: nothing may be left unsaved
     const url = new URL('student.html#pair', location.href).href;
-    const p = teacherPair(b.rtc, { onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
+    const p = teacherPair(b.rtc, { timeoutMs: quiet ? 40e3 : 180e3, onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else if (!quiet) toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
     const ok = await p;
-    if (!ok) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
-  } catch (e) { console.warn('pair', e); toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
+    if (ok) { prefs.pairedAt = Date.now(); savePrefs(); }
+    if (!ok && !quiet) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
+  } catch (e) { console.warn('pair', e); if (!quiet) toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
   finally { bz.done(); pairing = false; }
 }
 export const isHomeApp = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches;

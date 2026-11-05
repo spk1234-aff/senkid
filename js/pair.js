@@ -78,7 +78,7 @@ export class RtcLink {
   close() { try { this.dc?.close(); } catch { } try { this.pc?.close(); } catch { } this.dc = this.pc = null; this._setOpen(false); }
 }
 
-function iceDone(pc, ms = 2500) {
+function iceDone(pc, ms = 1200) {
   return new Promise(res => { if (pc.iceGatheringState === 'complete') return res(); const t = setTimeout(res, ms); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); } }; });
 }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -97,7 +97,7 @@ export async function teacherPair(link, { onStatus, timeoutMs = 180e3 } = {}) {
   onStatus?.('offer');
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs && link.pc === pc) {
-    await sleep(1500);
+    await sleep(900);
     if (document.visibilityState === 'hidden') continue; // iPad pauses us in the background anyway
     let j = null; try { j = await readPair(); } catch (e) { console.warn('pair poll', e); continue; }
     if (j && j.t === t && j.ans) { await pc.setRemoteDescription({ type: 'answer', sdp: j.ans }); onStatus?.('answered'); return true; }
@@ -120,7 +120,7 @@ export async function studentPair(link, { onStatus, timeoutMs = 180e3, skipBefor
       return j.t;
     }
     onStatus?.('waiting');
-    await sleep(1500);
+    await sleep(900);
   }
   return false;
 }
