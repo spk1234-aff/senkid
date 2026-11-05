@@ -1,6 +1,6 @@
 // เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // Export pages to PDF with vector ink (pdf-lib, offline). PDF-backed pages keep their original vector content.
-import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy } from './ui.js';
+import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy, nobr } from './ui.js';
 import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo } from './render.js';
 import { pdfBytes } from './pdfdoc.js';
 import { prefs } from './prefs.js';
@@ -152,7 +152,7 @@ export function openExportDialog(ed, { submit = false } = {}) {
   });
   body.append(grid, h('div', { class: 'xp-range' }, ranges), info);
   body.append(h('div', { class: 'row' }, h('span', {}, 'รวมพื้นกระดาษ (เส้น/ตาราง/จุด)'), toggle(true, v => withBg = v)));
-  body.append(h('div', { class: 'xp-credit' }, 'ทุกหน้าจะมีบรรทัดเล็กที่มุมล่าง: ' + CREDIT));
+  body.append(h('div', { class: 'xp-credit' }, 'ทุกหน้าจะมีบรรทัดเล็กที่มุมล่าง: ' + nobr(CREDIT)));
   const bar = h('div', { style: { height: '10px', borderRadius: '5px', background: 'var(--line)', marginTop: '10px', overflow: 'hidden', display: 'none' } }, h('div', { style: { width: '0%', height: '100%', background: 'var(--acc)', transition: 'width .2s' } }));
   const prog = h('div', { style: { fontSize: '19px', color: 'var(--muted)', marginTop: '4px' } });
   body.append(bar, prog);

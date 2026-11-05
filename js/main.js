@@ -1,6 +1,6 @@
 // เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // App shell: routing between library and editor, settings, help, onboarding, backup
-import { h, icon, toast, dialog, seg, toggle, downloadBlob, pickFile, fmtBytes, uid, logoMark, brandWord, busy, shareFileDialog, $ } from './ui.js';
+import { h, icon, toast, dialog, seg, toggle, downloadBlob, pickFile, fmtBytes, uid, logoMark, brandWord, busy, shareFileDialog, $, nobr } from './ui.js';
 import { prefs, savePrefs, applyTheme } from './prefs.js';
 import * as db from './db.js';
 import { Library } from './library.js';
@@ -17,7 +17,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.41';
+export const VERSION = '1.9.42';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -254,7 +254,7 @@ class App {
         row('ดูหน้าแนะนำอีกครั้ง', (() => { const b = h('button', { class: 'btn sq' }, icon('chev')); b.onclick = () => this.onboarding(); return b; })()),
         row('เวอร์ชัน', h('span', { style: { color: 'var(--muted)' } }, VERSION + ' · ทำงานออฟไลน์ได้')),
         row('ตรวจหาอัปเดต', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'อัปเดต'); b.onclick = () => this.checkUpdate(b); return b; })()),
-        row('ผู้พัฒนา', h('div', { class: 'devcard' }, h('img', { src: 'img/dev.jpg', alt: DEV.name, width: 64, height: 64 }), h('span', { style: { color: 'var(--muted)', textAlign: 'right' } }, DEV.name, h('br'), h('small', {}, DEV.org)))))
+        row('ผู้พัฒนา', h('div', { class: 'devcard' }, h('img', { src: 'img/dev.jpg', alt: DEV.name, width: 64, height: 64 }), h('span', { style: { color: 'var(--muted)', textAlign: 'right' } }, nobr(DEV.name), h('br'), h('small', {}, nobr(DEV.org))))))
     );
     this.sheet('ตั้งค่า', h('div', { class: 'cols' }, left, right));
   }

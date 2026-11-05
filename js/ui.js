@@ -250,6 +250,10 @@ export function fmtBytes(b) {
   if (b >= 1e6) return Math.round(b / 1e6) + ' MB';
   return Math.max(1, Math.round(b / 1e3)) + ' KB';
 }
+// Thai has no spaces, so browsers break lines by dictionary and can split a proper noun ("โซ่พิสัย / พิทยาคม").
+// nobr() glues every grapheme of a name with WORD JOINER (U+2060); spaces stay breakable, so wrapping happens between names only.
+const CLUSTER = /\P{M}\p{M}*/gu;
+export function nobr(s) { return String(s).split(' ').map(w => (w.match(CLUSTER) || [w]).join('\u2060')).join(' '); }
 export function fmtTime(ms) {
   const s = Math.floor(ms / 1000), m = Math.floor(s / 60), hh = Math.floor(m / 60);
   const p = (n) => String(n).padStart(2, '0');
