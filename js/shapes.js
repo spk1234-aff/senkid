@@ -161,10 +161,31 @@ function quadFrom(P) {
   for (const q of P) { const d = Math.abs((e[0] - s[0]) * (q[1] - s[1]) - (e[1] - s[1]) * (q[0] - s[0])) / L; if (d > bd) { bd = d; best = q; } }
   return { k: 'quad', closed: false, pts: [s[0], s[1], best[0], best[1], e[0], e[1]] };
 }
+// a hand-drawn square-root sign (optional little hook, short stroke down, long stroke up, long bar to the right)
+// → straight segments, bar perfectly horizontal. Distinct enough to be applied without the hold.
+export function recognizeRadical(p) {
+  if (p.length < 8) return null;
+  const L = pathLen(p); if (L < 30) return null;
+  const P = []; for (let i = 0; i < p.length; i += 2) P.push([p[i], p[i + 1]]);
+  let V = rdp(P, Math.max(2, 0.035 * L));
+  if (V.length < 4 || V.length > 5) return null;
+  if (V.length === 5) { const hook = Math.hypot(V[1][0] - V[0][0], V[1][1] - V[0][1]); if (hook > 0.2 * L) return null; }
+  const [a, b, c, d] = V.slice(-4);
+  const A = [b[0] - a[0], b[1] - a[1]], B = [c[0] - b[0], c[1] - b[1]], C = [d[0] - c[0], d[1] - c[1]];
+  const lA = Math.hypot(...A), lB = Math.hypot(...B), lC = Math.hypot(...C);
+  if (!(A[1] > 0.5 * lA && lA > 0.06 * L)) return null;           // short stroke going down
+  if (!(B[1] < -0.6 * lB && lB > 1.2 * lA && B[0] >= -0.3 * lB)) return null; // long stroke going up (to the right or straight up)
+  if (!(C[0] > 0.9 * lC && Math.abs(C[1]) < 0.18 * lC && lC > 0.25 * L)) return null; // bar to the right, nearly level
+  if (c[1] > b[1]) return null; // bar must sit at the top
+  const out = V.length === 5 ? [V[0][0], V[0][1]] : [];
+  out.push(a[0], a[1], b[0], b[1], c[0], c[1], d[0], c[1]); // bar snapped horizontal
+  return { k: 'poly', closed: false, pts: out, radical: true };
+}
 export function recognize(p) {
   if (p.length < 8) return null;
   p = trimRest(p);
   const L = pathLen(p); if (L < 14) return null;
+  const rad = recognizeRadical(p); if (rad) return rad;
   const R = resample(p, 96); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
   const s = P[0], e = P[P.length - 1];
   const chord = Math.hypot(e[0] - s[0], e[1] - s[1]);
