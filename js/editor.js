@@ -253,6 +253,13 @@ export class Editor {
     });
   }
   // the floating tool row (pen types / colours / sizes) can be dragged anywhere too; drop it back near the top centre to re-dock
+  // wrap each run of buttons between separators in a group, so a narrow screen wraps the row by group (pen types / line styles / sizes / colours) instead of splitting mid-way
+  groupCtx(bar) {
+    const kids = [...bar.children]; let run = [];
+    const flush = () => { if (run.length > 1 || (run.length === 1 && !run[0].classList.contains('grp'))) { const g = h('div', { class: 'grp' }); bar.insertBefore(g, run[0]); for (const k of run) g.append(k); } run = []; };
+    for (const k of kids) { if (k.classList.contains('vsep') || k.classList.contains('cgrip')) { flush(); continue; } if (k.classList.contains('grp') && run.length === 0) continue; run.push(k); }
+    flush();
+  }
   armCtxDrag(bar) {
     const grip = h('div', { class: 'dgrip cgrip', title: 'ลากเพื่อย้ายแถบ' }, h('i'), h('i'));
     bar.prepend(grip);
@@ -269,7 +276,7 @@ export class Editor {
         const bw = bar.offsetWidth, bh = bar.offsetHeight;
         prefs.ctxXY = { side, x: Math.max(0, Math.min(1, (x - dx - sr.left) / Math.max(1, W - bw))), y: Math.max(0, Math.min(1, (y - dy - sr.top) / Math.max(1, H - bh))) }; this.placeCtx(bar);
       },
-      onEnd: () => { const W = this.stage.clientWidth, cx = bar.offsetLeft + bar.offsetWidth / 2; if (prefs.ctxXY && Math.abs(cx - W / 2) < 60 && bar.offsetTop < 40) { prefs.ctxXY = null; this.placeCtx(bar); toast('แถบกลับที่เดิมแล้ว', 900); } savePrefs(); },
+      onEnd: () => { const W = this.stage.clientWidth, cx = bar.offsetLeft + bar.offsetWidth / 2; if (prefs.ctxXY && Math.abs(cx - (W / 2 + 62)) < 70 && bar.offsetTop < 40) { prefs.ctxXY = null; this.placeCtx(bar); toast('แถบกลับที่เดิมแล้ว', 900); } savePrefs(); },
     });
     this.placeCtx(bar);
   }
@@ -488,7 +495,7 @@ export class Editor {
       const eb = h('button', { class: 'sw cm-open', title: 'แก้ไข / เรียงสี', 'aria-label': 'แก้ไขสี' }, icon('edit')); eb.onclick = () => openColorManager(eb, this, {}); bar.append(eb);
     }
     if (prefs.toolbarHidden && !this.peek) bar.classList.add('hidden');
-    this.stage.append(cap, bar); this.armCtxDrag(bar);
+    this.groupCtx(bar); this.stage.append(cap, bar); this.armCtxDrag(bar);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
     this.app.timer.attach(this);
