@@ -185,6 +185,7 @@ export class Editor {
         { icon: 'text', label: 'กล่องข้อความ', action: () => this.setTool('text') },
         { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง', action: () => this.app.audioClick(this, b) },
         { icon: 'pageplus', label: 'เพิ่มหน้า / แทรก PDF', action: () => this.addPageMenu(b) },
+        ...(prefs.studentUI ? [] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'rec', label: this.app.recorder?.active ? 'หยุดอัดคลิป' : 'อัดคลิป', action: () => this.app.recorderClick(this, b) }]),
       ], this.popOpts()), t === 'shapes' || t === 'text'));
       if (prefs.studentUI) for (const el of dock.querySelectorAll('button')) if (/^ม่านบัง/.test(el.title)) el.remove();
       // options for the current tool
