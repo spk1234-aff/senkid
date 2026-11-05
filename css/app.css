@@ -713,3 +713,8 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 .hc-row i{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-style:normal;font-weight:700;color:#fff}
 .hc-row.ok i{background:#1E9E5A}.hc-row.warn i{background:#F5B83D}.hc-row.bad i{background:#E5484D}
 .hc-row>div{flex:1;min-width:0}.hc-row b{font-size:21px}.hc-row .sub{font-size:18px;color:var(--muted)}
+
+/* developer credit in settings */
+.devcard{display:flex;align-items:center;gap:12px;justify-content:flex-end;max-width:78%}
+.devcard span{font-size:19px;line-height:1.25}
+.devcard img{width:64px;height:64px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 3px #fff,0 0 0 5px var(--acc);flex:none}
