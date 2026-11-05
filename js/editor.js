@@ -516,6 +516,7 @@ export class Editor {
       { icon: 'pdf', label: 'ส่งออกเป็น PDF', action: () => openExportDialog(this) },
       { icon: 'share', label: 'ส่งหน้านี้ให้นักเรียน (PDF)', action: () => this.shareToStudents('page') },
       { icon: 'share', label: 'ส่งหน้าที่เขียนวันนี้ให้นักเรียน (PDF)', action: () => this.shareToStudents('today') },
+      { icon: 'lib', label: 'แชร์ใบงานด้วย QR (ให้นักเรียนสแกน)', action: async () => (await import('./worksheet.js')).shareWorksheet(this.app, anchor) },
     ], this.popOpts());
   }
   // one tap after class: PDF → share sheet (LINE, Google Classroom, AirDrop…)

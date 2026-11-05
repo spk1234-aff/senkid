@@ -31,6 +31,7 @@ const onMsg = (m) => {
   else if (m.type === 'tools') { tools = m; dirty = true; calcShow(m.calc); }
   else if (m.type === 'ui') mirrorApply(m);
   else if (m.type === 'pick') pickShow(m);
+  else if (m.type === 'qr') { let q = document.getElementById('qrov'); if (!m.url) { q?.remove(); return; } if (!q) { q = document.createElement('div'); q.id = 'qrov'; document.body.append(q); } q.innerHTML = `<img src="${m.url}"><div class="n">${String(m.name || '').replace(/</g, '&lt;')}</div><div class="l">สแกนด้วยกล้อง iPad → เปิดใน Safari</div>`; }
 };
 ch.onmessage = (e) => onMsg(e.data);
 ch.postMessage({ type: 'hello' });

@@ -399,9 +399,18 @@ async function folderId(name, parent) {
   const r = await gfetch(`${API}/files?fields=id`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] }) });
   return (await r.json()).id;
 }
-export async function uploadRecording(blob, name, onProgress) {
+// Google API key for reading files the teacher shared by link (worksheets opened by students, no sign-in)
+export const DEFAULT_API_KEY = '';
+export const driveApiKey = () => prefs.driveApiKey || DEFAULT_API_KEY;
+// put a file in เส้นคิด/<folder> and share it by link (anyone with the link can read)
+export async function driveShareFile(blob, name, folder, onProgress) {
+  const r = await uploadRecording(blob, name, onProgress, folder);
+  await gfetch(`${API}/files/${r.id}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) });
+  return r.id;
+}
+export async function uploadRecording(blob, name, onProgress, folder = 'คลิป') {
   if (!connected() || !readToken()) throw Object.assign(new Error('auth'), { auth: true });
-  const root = await folderId('เส้นคิด', 'root'), dir = await folderId('คลิป', root);
+  const root = await folderId('เส้นคิด', 'root'), dir = await folderId(folder, root);
   onProgress?.('กำลังอัปโหลด…');
   const r0 = await gfetch(`${UP}/files?uploadType=resumable&fields=id,webViewLink`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': blob.type || 'application/octet-stream', 'X-Upload-Content-Length': String(blob.size) }, body: JSON.stringify({ name, parents: [dir] }) });
   const loc = r0.headers.get('Location'); if (!loc) throw new Error('resumable: no location');

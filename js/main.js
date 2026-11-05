@@ -8,6 +8,7 @@ import { Editor } from './editor.js';
 import { Recorder, AudioRecorder, openRecordings, canRecord, pickMime, uploadPendingRecordings } from './recorder.js';
 import { Picker } from './picker.js';
 import { Timeline } from './lesson.js';
+import { handleWorksheetHash } from './worksheet.js';
 import { STRIDE } from './render.js';
 import { buildBackup, openNotebookFile, saveNotebookFile } from './files.js';
 import { importPdf } from './pdfdoc.js';
@@ -16,7 +17,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.36';
+export const VERSION = '1.9.37';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -53,6 +54,8 @@ class App {
     if (!prefs.onboarded) this.onboarding();
     initSync(this).catch(e => console.warn('sync init', e)).finally(() => { setTimeout(uploadPendingRecordings, 8000); window.addEventListener('online', () => setTimeout(uploadPendingRecordings, 3000)); });
     if (location.hash === '#from-app') this.receiveFromApp();
+    if (/[#&]ws=/.test(location.hash)) handleWorksheetHash(this).catch(e => console.warn('worksheet', e));
+    addEventListener('hashchange', () => { if (/[#&]ws=/.test(location.hash)) handleWorksheetHash(this).catch(() => { }); });
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
       const had = !!navigator.serviceWorker.controller, t0 = performance.now();
       navigator.serviceWorker.register('sw.js').then((reg) => {
