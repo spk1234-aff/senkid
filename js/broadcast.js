@@ -72,6 +72,7 @@ async function startPairing(b, openSafari = true) {
   if (pairing) return; pairing = true;
   const bz = busy('กำลังเตรียมจับคู่กับ Safari…');
   try {
+    await b.app.editor?.flush?.(); // iPadOS may suspend or restart this app while Safari is in front: nothing may be left unsaved
     const url = new URL('student.html#pair', location.href).href;
     const p = teacherPair(b.rtc, { onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
     const ok = await p;

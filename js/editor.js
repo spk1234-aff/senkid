@@ -111,6 +111,9 @@ export class Editor {
   mount(parent) {
     parent.append(this.el); this.resize(); this.fit();
     if (this.nb.lastPage && this.nb.pages.includes(this.nb.lastPage) && this.nb.lastPage !== this.nb.pages[0]) this.scrollToPage(this.nb.lastPage);
+    // come back exactly where the teacher left off (zoom and position), e.g. after iPadOS restarted the app in the background
+    const V = prefs.views?.[this.nb.id];
+    if (V && V.cur && this.rects.get(V.cur) && Math.abs(V.W - this.W) < 2 && V.cols === this.cols) { this.z = V.z; this.ox = V.ox; this.oy = V.oy; this.fitMode = !!V.fit; this.clampView(); this.viewChanged(); }
     this.mounted = true;
     this.initFileLink();
   }
@@ -656,7 +659,12 @@ export class Editor {
     if (ch <= this.H) this.oy = Math.max(8, Math.min(this.oy, this.H - ch - 8));
     else this.oy = Math.min(this.H * 0.35, Math.max(this.H * 0.65 - ch, this.oy));
   }
-  viewChanged() { this.need.main = true; this.need.ui = true; this.need.live = true; this.lastViewChange = performance.now(); this.updatePageNo(); if (this.txEd) this.txPos(); if (this.thumbList) { clearTimeout(this.thC); this.thC = setTimeout(() => this.markThumbCur(), 120); } }
+  rememberView() {
+    clearTimeout(this.vwT);
+    this.vwT = setTimeout(() => { const cur = this.currentPage(); if (!cur || !this.mounted) return; prefs.views = prefs.views || {}; const V = prefs.views; V[this.nb.id] = { z: this.z, ox: this.ox, oy: this.oy, fit: this.fitMode, cur: cur.id, W: this.W, cols: this.cols, t: Date.now() };
+      const ks = Object.keys(V); if (ks.length > 40) for (const k of ks.sort((a, b) => (V[a].t || 0) - (V[b].t || 0)).slice(0, ks.length - 40)) delete V[k]; savePrefs(); }, 600);
+  }
+  viewChanged() { this.rememberView(); this.need.main = true; this.need.ui = true; this.need.live = true; this.lastViewChange = performance.now(); this.updatePageNo(); if (this.txEd) this.txPos(); if (this.thumbList) { clearTimeout(this.thC); this.thC = setTimeout(() => this.markThumbCur(), 120); } }
   toWorld(sx, sy) { return [(sx - this.ox) / this.z, (sy - this.oy) / this.z]; }
   pageAt(wx, wy, slack = 0) {
     for (const p of this.pages) { const r = this.rects.get(p.id); if (wx >= r.x - slack && wx <= r.x + r.w + slack && wy >= r.y - slack && wy <= r.y + r.h + slack) return p; }

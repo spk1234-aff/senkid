@@ -14,7 +14,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope } from './sync.js';
 
-export const VERSION = '1.9.24';
+export const VERSION = '1.9.25';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -62,7 +62,7 @@ class App {
         if (!had || shown || this.updating) return; shown = true;
         // just opened the app and haven't written yet → update by itself, no button needed
         const untouched = !(this.editor && this.editor.undoStack?.length) && !this.editor?.live && !this.recorder?.active && !this.audio?.active;
-        if (performance.now() - t0 < 20000 && untouched && !document.querySelector('.dialog')) {
+        if (performance.now() - t0 < 20000 && untouched && !this.editor && !document.querySelector('.dialog')) { // only while still on the home screen: never pull a notebook out from under the teacher
           busy('กำลังอัปเดตเส้นคิดเป็นรุ่นใหม่…', 'สมุดทั้งหมดยังอยู่ครบ');
           await this.editor?.flush?.(); location.reload(); return;
         }
