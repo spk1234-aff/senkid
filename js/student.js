@@ -9,10 +9,11 @@ const wait = document.getElementById('wait'), tm = document.getElementById('tm')
 const ch = new BroadcastChannel('senkid-live');
 let rtc = null; const send = (m) => { try { ch.postMessage(m); } catch { } if (rtc?.open) rtc.send(m); };
 const pages = new Map();
+let mirror = null, mStage = null, mScale = 1, mW = 0, mH = 0;
 let tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
 
-function size() { const d = Math.min(3, devicePixelRatio || 1); cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d); dirty = true; }
-addEventListener('resize', size); size();
+function size() { if (mirror) return; const d = Math.min(3, devicePixelRatio || 1); cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d); dirty = true; }
+addEventListener('resize', () => { size(); mirrorLayout(); }); size();
 setPdfReadyHook(() => dirty = true); setImageReadyHook(() => dirty = true);
 
 const onMsg = (m) => {
@@ -28,6 +29,7 @@ const onMsg = (m) => {
   else if (m.type === 'laser') { laser = m.pts || []; laserHead = !!m.head; laserOpt = m.opt || laserOpt; dirty = true; }
   else if (m.type === 'timer') timer(m.st);
   else if (m.type === 'tools') { tools = m; dirty = true; calcShow(m.calc); }
+  else if (m.type === 'ui') mirrorApply(m);
 };
 ch.onmessage = (e) => onMsg(e.data);
 ch.postMessage({ type: 'hello' });
@@ -53,20 +55,44 @@ if (location.hash.includes('pair')) (async () => {
   } catch (e) { console.warn(e); msg('จับคู่ไม่สำเร็จ: ' + (e.message || e)); }
 })();
 
+// ---- mirror of the teacher's whole screen (toolbars + menus as HTML, paper drawn in the stage area) ----
+function mirrorApply(m) {
+  if (!m.on) { if (mirror) { mirror.remove(); mirror = null; mStage = null; document.body.prepend(cv); size(); } return; }
+  if (!mirror) { mirror = document.createElement('div'); mirror.id = 'mirror'; document.body.append(mirror); }
+  if (m.theme) document.documentElement.dataset.theme = m.theme; else delete document.documentElement.dataset.theme;
+  mW = m.W; mH = m.H;
+  mirror.innerHTML = `<div class="${m.edClass}">${m.tb}<div class="stage"></div></div><div class="mlayer">${m.layer}</div><div class="mlayer" id="toasts">${m.toasts}</div>`;
+  mStage = mirror.querySelector('.stage'); mStage.append(cv); mStage.insertAdjacentHTML('beforeend', m.stageUI);
+  for (const el of mirror.querySelectorAll('.scrim')) el.style.pointerEvents = 'none';
+  mirrorLayout(); dirty = true;
+}
+function mirrorLayout() {
+  if (!mirror) return;
+  mScale = Math.min(innerWidth / mW, innerHeight / mH);
+  mirror.style.width = mW + 'px'; mirror.style.height = mH + 'px';
+  mirror.style.transform = `translate(${(innerWidth - mW * mScale) / 2}px,${(innerHeight - mH * mScale) / 2}px) scale(${mScale})`;
+  const d = Math.min(3, devicePixelRatio || 1) * mScale, sw = mStage.clientWidth, sh = mStage.clientHeight;
+  cv.width = Math.max(1, Math.round(sw * d)); cv.height = Math.max(1, Math.round(sh * d));
+}
 function transform() {
+  if (mirror && mStage) { // exactly the teacher's viewport
+    const W = mStage.clientWidth, H = mStage.clientHeight, [x0, y0, x1, y1] = view.world;
+    const z = W / (x1 - x0);
+    return { z, ox: -x0 * z, oy: -y0 * z, W, H };
+  }
   const W = innerWidth, H = innerHeight;
   let x0, y0, x1, y1;
   if (view.mode === 'page' && view.cur && view.rects[view.cur]) { const r = view.rects[view.cur]; x0 = r.x; y0 = r.y; x1 = r.x + r.w; y1 = r.y + r.h; }
   else[x0, y0, x1, y1] = view.world;
   const pad = view.mode === 'page' ? 12 : 0;
   const z = Math.min((W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0));
-  return { z, ox: (W - (x1 - x0) * z) / 2 - x0 * z, oy: (H - (y1 - y0) * z) / 2 - y0 * z };
+  return { z, ox: (W - (x1 - x0) * z) / 2 - x0 * z, oy: (H - (y1 - y0) * z) / 2 - y0 * z, W, H };
 }
 function frame() {
   requestAnimationFrame(frame);
   if (!dirty || !view) return; dirty = laser.length > 0;
-  const d = cv.width / innerWidth, T = transform();
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#0B0C0E'; ctx.fillRect(0, 0, cv.width, cv.height);
+  const T = transform(), d = cv.width / T.W;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = mirror ? (getComputedStyle(mirror).getPropertyValue('--desk').trim() || '#EDEAE2') : '#0B0C0E'; ctx.fillRect(0, 0, cv.width, cv.height);
   const dark = !!PAPERS[paper]?.dark;
   for (const id of view.vis) {
     const r = view.rects[id], p = pages.get(id); if (!r) continue;

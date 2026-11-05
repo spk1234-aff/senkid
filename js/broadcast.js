@@ -14,6 +14,7 @@ export class Broadcast {
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
     this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.rtcWas = v; this.app.editor?.buildToolbar(); } });
     app.timer.onChange((st) => this.post({ type: 'timer', st }));
+    this.armMirror();
     // once a Safari window has been paired, keep it paired by itself: after a break, an app switch or a restart of the app,
     // publish a fresh code quietly and the window on the TV (which keeps listening) answers — no button needed
     const tryAuto = () => {
@@ -32,7 +33,7 @@ export class Broadcast {
     if (m.type === 'alive' || m.type === 'hello') {
       const was = this.connected; this.lastAlive = performance.now();
       try { if (viaRtc) this.rtc.send({ type: 'ack' }); else this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
-      if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
+      if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.uiWas = false; setTimeout(() => this.sendUI(), 200); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
     } else if (m.type === 'need') {
       const ed = this.app.editor; if (!ed) return;
       for (const pid of m.pids || []) { const p = ed.pageMap.get(pid); if (p) this.post({ type: 'page', nb: ed.nb.id, page: serializePage(p) }); }
@@ -44,6 +45,27 @@ export class Broadcast {
     this.post({ type: 'timer', st: this.app.timer.state() });
   }
   reset() { this.lastView = null; if (this.connected) this.sendMeta(); }
+  // "ฉายทั้งหน้าจอ" on a second screen: the student page rebuilds the teacher's whole screen —
+  // toolbars, menus, dialogs are sent as HTML (same stylesheet over there); the paper is drawn in the same place.
+  mirrorOn() { return prefs.presentKind === 'screen' && this.connected && !!this.app.editor; }
+  uiSnapshot() {
+    const ed = this.app.editor; if (!ed) return null;
+    const stageUI = [...ed.stage.children].filter(el => el.tagName !== 'CANVAS').map(el => el.outerHTML).join('');
+    return { type: 'ui', on: true, W: innerWidth, H: innerHeight, theme: document.documentElement.dataset.theme || '', edClass: ed.el.className, tb: ed.tb.outerHTML, stageUI, layer: document.getElementById('layer')?.innerHTML || '', toasts: document.getElementById('toasts')?.innerHTML || '' };
+  }
+  armMirror() {
+    if (this.mo) return;
+    const kick = () => { if (!this.mirrorOn()) return; clearTimeout(this.uiT); this.uiT = setTimeout(() => this.sendUI(), 120); };
+    this.mo = new MutationObserver(kick); this.mo.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+    setInterval(() => { if (this.mirrorOn()) this.sendUI(); }, 2500);
+  }
+  sendUI() {
+    if (!this.mirrorOn()) { if (this.uiWas) { this.uiWas = false; this.post({ type: 'ui', on: false }); } return; }
+    const snap = this.uiSnapshot(); if (!snap) return;
+    const key = snap.tb.length + ':' + snap.stageUI.length + ':' + snap.layer.length + ':' + snap.toasts.length + ':' + snap.W + 'x' + snap.H;
+    if (key === this.uiKey && this.uiWas && snap.tb === this.uiTb) return;
+    this.uiKey = key; this.uiTb = snap.tb; this.uiWas = true; this.post(snap);
+  }
   pageChanged(p) {
     if (!this.connected) return;
     clearTimeout(this.pending.get(p.id));
@@ -73,7 +95,7 @@ export class Broadcast {
     if (ed.laser.length) { this.post({ type: 'laser', pts: ed.laserWorld(), head: !!ed.lasering, opt: prefs.laser }); this.hadLaser = true; }
     else if (this.hadLaser) { this.hadLaser = false; this.post({ type: 'laser', pts: [] }); }
   }
-  setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; this.lastTools = null; }
+  setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; this.lastTools = null; setTimeout(() => this.sendUI(), 50); }
 }
 
 let studentWin = null;
@@ -194,7 +216,7 @@ export function studentMenu(app, anchor, ed) {
   // Goodnotes-style: what the audience sees
   const kind = prefs.presentKind || (b.mode === 'page' ? 'page' : 'present');
   const kinds = [
-    ['screen', 'ฉายทั้งหน้าจอ', 'ผู้ชมจะเห็นสิ่งที่ผู้นำเสนอเห็น', 'screen'],
+    ['screen', 'ฉายทั้งหน้าจอ', 'ผู้ชมเห็นเหมือนจอครู รวมเครื่องมือและเมนู', 'screen'],
     ['present', 'ฉายหน้านำเสนอ', 'ผู้ชมจะไม่เห็นคำสั่งใช้งาน', 'hide'],
     ['page', 'ฉายเฉพาะหน้า', 'ผู้ชมจะไม่เห็นคำสั่งใช้งานและการซูม', 'pages'],
   ];
@@ -204,7 +226,7 @@ export function studentMenu(app, anchor, ed) {
     r.onclick = () => {
       prefs.presentKind = id; savePrefs(); close();
       b.setMode(id === 'page' ? 'page' : 'follow');
-      if (id === 'screen') { if (prefs.toolbarHidden) ed.exitPresent(); toast('ฉายทั้งหน้าจอ · ผู้ชมเห็นเหมือนจอครู', 2200); return; }
+      if (id === 'screen') { if (prefs.toolbarHidden) ed.exitPresent(); toast(b.connected ? 'ฉายทั้งหน้าจอ · ทีวีเห็นเครื่องมือและเมนูเหมือนจอครู' : 'ฉายทั้งหน้าจอ · ผู้ชมเห็นเหมือนจอครู', 2200); b.sendUI(); return; }
       if (b.connected) { toast(id === 'page' ? 'จอนักเรียนแสดงทั้งหน้าเสมอ ไม่ซูมตามครู' : 'จอนักเรียนซูม/เลื่อนตามครู ไม่เห็นเครื่องมือ', 2600); return; }
       // mirroring: the TV shows the iPad screen, so hide the tools here
       if (id === 'page') ed.fit();
