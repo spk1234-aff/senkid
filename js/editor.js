@@ -7,7 +7,7 @@ import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
-import { recognize, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical, recognizeBracket } from './shapes.js';
+import { recognize, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical, recognizeBracket, recognizeChevron } from './shapes.js';
 import * as db from './db.js';
 import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
 import { makeDraggable } from './ui.js';
@@ -838,6 +838,15 @@ export class Editor {
       ctx.setLineDash([6, 5]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(47,91,234,.7)'; ctx.stroke(); ctx.setLineDash([]);
       for (const hd of shapeHandles(s.shape)) {
         const [x, y] = toS(hd.x, hd.y);
+        if (hd.id === 'rot') { // rotation knob: a small ring joined to the end by a thin dashed leash, with the angle while dragging
+          const [ex, ey] = toS(s.shape.pts[2], s.shape.pts[3]);
+          ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(x, y); ctx.setLineDash([3, 3]); ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(47,91,234,.6)'; ctx.stroke(); ctx.setLineDash([]);
+          ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = '#2F5BEA'; ctx.fill();
+          ctx.beginPath(); ctx.arc(x, y, 3.2, -Math.PI * 0.2, Math.PI * 1.3); ctx.lineWidth = 1.6; ctx.strokeStyle = '#fff'; ctx.stroke();
+          const dragging = this.drag && this.drag.hid === 'rot';
+          if (dragging || this.showDeg) { const t = hd.deg + '°'; ctx.font = '600 14px -apple-system, system-ui, sans-serif'; const w = ctx.measureText(t).width + 12; ctx.fillStyle = '#2F5BEA'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x + 10, y - 11, w, 22, 6) : ctx.rect(x + 10, y - 11, w, 22); ctx.fill(); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(t, x + 16, y); }
+          continue;
+        }
         ctx.beginPath();
         if (hd.id === 'move') { ctx.rect(x - 6, y - 6, 12, 12); } else ctx.arc(x, y, 5.5, 0, Math.PI * 2);
         ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#2F5BEA'; ctx.stroke();
@@ -994,9 +1003,45 @@ export class Editor {
     let sh = recognize(xy);
     // a stroke shaped down-up-right is a square-root sign even when it misses the strict match: never flatten it into a line
     if ((!sh || (!sh.closed && !sh.radical)) && looksLikeRadical(xy)) sh = shapeAs(xy, 'radical') || sh;
-    else if (!sh || (!sh.closed && !sh.radical && sh.k !== 'ellipse')) { const br = recognizeBracket(xy); if (br) sh = br; }
-    else if (sh && !sh.closed && !sh.radical && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh; // (a square-root sign keeps its three straight segments)
+    else if (!sh || (!sh.closed && !sh.radical && sh.k !== 'ellipse')) { const br = recognizeBracket(xy) || recognizeChevron(xy); if (br) sh = br; }
+    if (sh && !sh.closed && !sh.radical && !sh.chevron && sh.k !== 'bracket' && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh; // (a square-root sign keeps its three straight segments)
+    if (sh) sh = this.tidyWithPrevious(L, sh);
     if (sh) { L.shape = sh; L.rawXY = xy; L.rawPts = Array.from(L.pts.slice(0, upto)); this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
+  }
+  // a second short stroke held right after another: line under a line → "=" (parallel, same length, aligned);
+  // line under a chevron → "≥ / ≤" (straight across, as wide as the chevron, centred under it)
+  tidyWithPrevious(L, sh) {
+    if (!sh || sh.k !== 'line' || sh.pts.length !== 4) return sh;
+    const prev = L.page?.strokes?.[L.page.strokes.length - 1]; if (!prev || !prev.shape || (Date.now() - (prev.ts || 0) > 30e3)) return sh;
+    const [x0, y0, x1, y1] = sh.pts, len = Math.hypot(x1 - x0, y1 - y0), mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    const ps = prev.shape;
+    if (ps.k === 'line' && ps.pts.length === 4) {
+      const [a0, b0, a1, b1] = ps.pts, pl = Math.hypot(a1 - a0, b1 - b0), pmx = (a0 + a1) / 2, pmy = (b0 + b1) / 2;
+      if (!pl || len < 0.5 * pl || len > 2 * pl) return sh;
+      const ux = (a1 - a0) / pl, uy = (b1 - b0) / pl, dx = mx - pmx, dy = my - pmy;
+      const along = dx * ux + dy * uy, across = -dx * uy + dy * ux;
+      const ang = Math.abs(Math.atan2(y1 - y0, x1 - x0) - Math.atan2(b1 - b0, a1 - a0)) % Math.PI;
+      if (Math.min(ang, Math.PI - ang) > 25 * Math.PI / 180) return sh;
+      if (Math.abs(across) < 0.12 * pl || Math.abs(across) > 1.2 * pl || Math.abs(along) > 0.6 * pl) return sh;
+      const nx = -uy, ny = ux, off = across; // same length and direction as the first line, shifted straight across
+      const sx = a0 + nx * off, sy = b0 + ny * off, ex = a1 + nx * off, ey = b1 + ny * off;
+      const flip = (x1 - x0) * ux + (y1 - y0) * uy < 0;
+      return { k: 'line', closed: false, pts: flip ? [ex, ey, sx, sy] : [sx, sy, ex, ey], tidy: 'equals' };
+    }
+    if (ps.chevron && ps.pts.length === 6) {
+      // ">" : chord a–b is the open side, the axis runs from the chord's midpoint to the vertex; the bar of ≥ lies along the axis, offset sideways
+      const [ax, ay, vx, vy, bx, by] = ps.pts, cmx = (ax + bx) / 2, cmy = (ay + by) / 2, hgt = Math.hypot(bx - ax, by - ay);
+      const ux = vx - cmx, uy = vy - cmy, ul = Math.hypot(ux, uy) || 1, axx = ux / ul, axy = uy / ul;
+      if (!hgt || len < 0.4 * ul || len > 2.5 * ul) return sh;
+      const dx = mx - cmx, dy = my - cmy, along = dx * axx + dy * axy, across = -dx * axy + dy * axx;
+      if (Math.abs(across) < 0.35 * hgt || Math.abs(across) > 1.8 * hgt || along < -0.4 * ul || along > 1.4 * ul) return sh;
+      const nx = -axy, ny = axx, cx = cmx + axx * ul / 2 + nx * across, cy = cmy + axy * ul / 2 + ny * across;
+      const dirx = axx, diry = axy, wdt = ul * 1.05;
+      const p0 = [cx - dirx * wdt / 2, cy - diry * wdt / 2], p1 = [cx + dirx * wdt / 2, cy + diry * wdt / 2];
+      const flip = (x1 - x0) * dirx + (y1 - y0) * diry < 0;
+      return { k: 'line', closed: false, pts: flip ? [p1[0], p1[1], p0[0], p0[1]] : [p0[0], p0[1], p1[0], p1[1]], tidy: 'geq' };
+    }
+    return sh;
   }
   // after hold-to-shape on an open stroke: chips to switch line / arc / curve / hand-drawn
   showShapeAlt(page, s, xy, rawPts) {

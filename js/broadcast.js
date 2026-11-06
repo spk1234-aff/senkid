@@ -12,7 +12,7 @@ export class Broadcast {
     this.mode = prefs.studentMode || 'follow';
     try { this.ch = new BroadcastChannel('senkid-live'); } catch { this.ch = null; }
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
-    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) { setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.autoAt = 0; } this.rtcWas = v; this.app.editor?.buildToolbar(); } });
+    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) { setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.autoAt = 0; this.dropped = true; } this.rtcWas = v; this.app.editor?.buildToolbar(); } });
     app.timer.onChange((st) => this.post({ type: 'timer', st }));
     this.armMirror();
     // once a Safari window has been paired, keep it paired by itself: after a break, an app switch or a restart of the app,
@@ -142,14 +142,14 @@ export function setTv(state, text) {
 async function startPairing(b, openSafari = true, quiet = false) {
   if (pairing) return; pairing = true;
   const bz = quiet ? { done() {} } : busy('กำลังเตรียมจับคู่กับ Safari…');
-  setTv('wait', quiet ? 'กำลังเชื่อมจอสอง (ทีวี)…' : 'กำลังจับคู่กับ Safari…');
+  if (!quiet) setTv('wait', 'กำลังจับคู่กับ Safari…');
   try {
     await b.app.editor?.flush?.(); // iPadOS may suspend or restart this app while Safari is in front: nothing may be left unsaved
     let tokq = ''; try { const t = JSON.parse(localStorage.getItem('senkid.gtoken') || 'null'); if (t && t.exp > Date.now()) tokq = '&tok=' + encodeURIComponent(JSON.stringify(t)); } catch { }
     const url = new URL('student.html#pair' + tokq, location.href).href;
     const p = teacherPair(b.rtc, { timeoutMs: quiet ? 40e3 : 180e3, onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else if (!quiet) toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
     const ok = await p;
-    if (ok) { prefs.pairedAt = Date.now(); savePrefs(); b.autoFail = 0; } else { b.autoFail = (b.autoFail || 0) + 1; } if (!ok && !b.rtc.open) setTv(quiet ? 'off' : 'off', quiet ? 'ยังไม่พบหน้าต่างทีวี · จะลองใหม่เอง' : 'จับคู่ไม่สำเร็จ');
+    if (ok) { prefs.pairedAt = Date.now(); savePrefs(); b.autoFail = 0; } else { b.autoFail = (b.autoFail || 0) + 1; } if (!ok && !b.rtc.open) { if (!quiet) setTv('off', 'จับคู่ไม่สำเร็จ'); else if (b.rtcWas || b.dropped) setTv('off', 'ทีวียังไม่กลับมา · จะลองต่อใหม่เองเงียบ ๆ'); }
     if (!ok && !quiet) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
   } catch (e) { console.warn('pair', e); if (!quiet) toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
   finally { bz.done(); pairing = false; }
@@ -277,6 +277,12 @@ export function studentMenu(app, anchor, ed) {
         } else body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี', open));
       }
       if (on && studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; body.append(x); }
+      if (on || (prefs.pairedAt && Date.now() - prefs.pairedAt < 12 * 3600e3)) {
+        // stop using the TV: drop the link and stop the quiet re-pair attempts until the teacher connects again
+        const stop = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px', color: 'var(--danger, #c0392b)' } }, icon('close'), on ? 'เลิกใช้ทีวี (ตัดการเชื่อม)' : 'เลิกใช้ทีวี (หยุดต่ออัตโนมัติ)');
+        stop.onclick = () => { close(); prefs.pairedAt = 0; savePrefs(); b.dropped = false; b.rtcWas = false; try { b.rtc.close?.(); } catch { } setTv('off', 'เลิกใช้ทีวีแล้ว'); toast('เลิกใช้ทีวีแล้ว · กด "เชื่อมทีวี" เมื่อจะใช้อีก', 2500); };
+        body.append(stop);
+      }
       const link = new URL('student.html', location.href).href;
       const cp = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '2px', fontSize: '18px' } }, 'คัดลอกลิงก์หน้าจอนักเรียน (เปิดบนคอมพิวเตอร์)');
       cp.onclick = async () => { try { await navigator.clipboard.writeText(link); toast('คัดลอกลิงก์แล้ว'); } catch { toast(link, 5000); } };

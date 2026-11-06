@@ -16,9 +16,11 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
-import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
+import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, connected, hasFileScope, tokenOk, busyNow } from './sync.js';
+// renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
+const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.50';
+export const VERSION = '1.9.51';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -275,7 +277,7 @@ class App {
     // Google / sync
     const tok = tokenOk(), on = connected();
     if (!on) it('warn', 'ยังไม่ได้เปิดซิงก์ Google Drive', 'สมุดอยู่ในเครื่องนี้เท่านั้น', { label: 'ตั้งค่า', fn: () => this.openSettings() });
-    else if (!tok) it(false, 'การเชื่อม Google หมดอายุ', 'ซิงก์และคลิปขึ้น Drive หยุดทำงาน', { label: 'เชื่อมต่อใหม่', fn: async () => { await this.editor?.flush?.(); signIn(); } });
+    else if (!tok) it('warn', 'การเชื่อม Google หมดอายุ (ต่อให้เองเมื่อว่าง)', 'ระหว่างนี้ทุกอย่างเก็บในเครื่อง ซิงก์ตามหลังได้ · ถ้าจะต่อเดี๋ยวนี้ กดปุ่มนี้ก่อนเริ่มสอน', { label: 'เชื่อมต่อใหม่', fn: async () => { await this.editor?.flush?.(); signIn(); } });
     else { const ago = sync.lastSync ? Math.round((Date.now() - sync.lastSync) / 60000) : null; it(ago != null && ago < 180 ? true : 'warn', 'Google Drive: ' + (sync.email || 'เชื่อมต่อแล้ว'), ago == null ? 'ยังไม่เคยซิงก์' : `ซิงก์ล่าสุด ${ago < 1 ? 'เมื่อสักครู่' : ago + ' นาทีที่แล้ว'}` + (sync.error ? ' · ' + sync.error : ''), { label: 'ซิงก์ตอนนี้', fn: () => syncNow('manual') }); }
     // storage
     try { const e = await navigator.storage?.estimate?.(); if (e) { const free = (e.quota - e.usage) / 1048576; it(free > 500 ? true : free > 150 ? 'warn' : false, `พื้นที่: ใช้ ${fmtBytes(e.usage)} จาก ${fmtBytes(e.quota)}`, free < 500 ? 'เหลือน้อย · ย้ายคลิปขึ้น Drive หรือลบคลิปเก่า' : 'เพียงพอ', free < 500 ? { label: 'คลิป', fn: () => openRecordings() } : null); } } catch { }
@@ -323,6 +325,9 @@ class App {
         'ต้องการไฟล์วิดีโอ: ในเครื่องเล่นกด <b>ส่งออกเป็นวิดีโอ</b> เลือกความละเอียด ได้ MP4 ไปอยู่ใน "คลิปที่อัดไว้" (ใช้เวลาเท่าความยาวจริง)',
         'เปิดดูได้ที่เมนู ⋯ > <b>บทเรียนที่อัดในเล่มนี้</b> (หรือป้ายไมค์บนปกสมุดในห้องสมุด) · อัดเสร็จจะเก็บลงเครื่องก่อน แล้วส่งขึ้น Google Drive เบื้องหลัง',
         'กดค้างปุ่มไมค์เพื่อเลือกไมโครโฟน (รองรับไมค์แยก จำชื่อไมค์ไว้ให้) และเปิด<b>กล้องครู</b>: ภาพครูวงกลมเล็ก ๆ ที่มุมกระดาน ลากย้ายได้ จะติดไปในการเล่นย้อนและวิดีโอที่ส่งออก (ไม่ฉายขึ้นทีวี)'),
+      sec('การเชื่อม Google หมดอายุ',
+        'Google ให้สิทธิ์ครั้งละ 1 ชั่วโมง แอปจะต่อให้เอง<b>เงียบ ๆ เฉพาะตอนว่าง</b> (ไม่เขียน 3 นาที ไม่อัด ไม่ได้ต่อทีวี) และ<b>ไม่มีทางเด้งหน้าระหว่างอัดหรือสอน</b> · ระหว่างที่ยังไม่ได้ต่อ ทุกเส้นเก็บในเครื่องและซิงก์ตามหลัง ไม่มีอะไรหาย',
+        'ถ้าอยากให้ต่อเดี๋ยวนี้: ตั้งค่า > ซิงก์ผ่าน Google Drive > เชื่อมต่อใหม่ (ทำก่อนเริ่มสอน) · แอปจะกลับมาที่เล่มและหน้าเดิมเอง'),
       sec('ล็อกโหมดนักเรียน',
         'โหมดครูเปิดได้<b>เฉพาะเครื่องที่เชื่อม Google Drive ด้วยบัญชีครู</b> เครื่องอื่นทุกเครื่องเป็นโหมดนักเรียนโดยอัตโนมัติ สลับไม่ได้ (เครื่องใหม่ของครู: ตั้งค่า > เชื่อม Google Drive ด้วยบัญชีครู แล้วโหมดครูจะเปิดให้เอง)',
         'ตั้งค่า > สำหรับห้องเรียน > <b>ตั้ง PIN ครู</b> แล้วบนเครื่องของนักเรียนกด <b>ล็อกเครื่องนี้</b> (ใส่ PIN ครั้งเดียว) เครื่องนั้นจะอยู่ในโหมดนักเรียนตลอด สลับกลับได้เฉพาะคนที่รู้ PIN และกลับเป็นนักเรียนเองเมื่อเปิดแอปใหม่',

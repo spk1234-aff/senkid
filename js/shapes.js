@@ -255,6 +255,28 @@ export function bracketPts(sh, steps = 48) {
   bend(Q(1 - rt, s1), Q(1, s1), Q(1, 0));
   return out;
 }
+
+// ---- chevrons: > < ∧ ∨ drawn as one stroke with a single sharp corner → two equal arms, symmetric about the axis ----
+export function recognizeChevron(p) {
+  if (p.length < 8) return null;
+  const R = resample(trimRest(p), 64); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
+  const L = pathLen(R); if (L < 30) return null;
+  const V = rdp(P, Math.max(2, 0.05 * L));
+  if (V.length !== 3) return null;
+  const [a, v, b] = V, la = Math.hypot(a[0] - v[0], a[1] - v[1]), lb = Math.hypot(b[0] - v[0], b[1] - v[1]);
+  if (la < 0.3 * lb || lb < 0.3 * la) return null;
+  const ang = Math.acos(Math.max(-1, Math.min(1, ((a[0] - v[0]) * (b[0] - v[0]) + (a[1] - v[1]) * (b[1] - v[1])) / (la * lb)))) * 180 / Math.PI;
+  if (ang < 20 || ang > 135) return null;
+  // symmetric chevron: axis from the midpoint of the ends to the vertex, equal arms, same opening angle
+  const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], ax = v[0] - m[0], ay = v[1] - m[1], al = Math.hypot(ax, ay) || 1, ux = ax / al, uy = ay / al;
+  const arm = (la + lb) / 2, half = ang / 2 * Math.PI / 180;
+  const back = Math.cos(half) * arm, side = Math.sin(half) * arm; // distance back along the axis, and sideways
+  const nx = -uy, ny = ux;
+  const A = [v[0] - ux * back + nx * side, v[1] - uy * back + ny * side], B = [v[0] - ux * back - nx * side, v[1] - uy * back - ny * side];
+  // keep the end the pen started on first
+  const first = Math.hypot(A[0] - a[0], A[1] - a[1]) <= Math.hypot(B[0] - a[0], B[1] - a[1]) ? [A, B] : [B, A];
+  return { k: 'poly', closed: false, pts: [first[0][0], first[0][1], v[0], v[1], first[1][0], first[1][1]], chevron: true };
+}
 export function recognize(p) {
   if (p.length < 8) return null;
   p = trimRest(p);
@@ -388,6 +410,10 @@ export function shapeHandles(sh) {
   }
   const hs = [];
   for (let i = 0; i < sh.pts.length; i += 2) hs.push({ id: i / 2, x: sh.pts[i], y: sh.pts[i + 1] });
+  if (!sh.closed && sh.pts.length === 4 && !sh.radical) { // a straight line / arrow: a rotation knob a little beyond the far end, pivot = the first point
+    const [ax, ay, bx, by] = sh.pts, L = Math.hypot(bx - ax, by - ay) || 1;
+    hs.push({ id: 'rot', x: bx + (bx - ax) / L * 40, y: by + (by - ay) / L * 40, deg: Math.round(Math.atan2(-(by - ay), bx - ax) * 180 / Math.PI) });
+  }
   let cx = 0, cy = 0; const n = sh.pts.length / 2; for (let i = 0; i < sh.pts.length; i += 2) { cx += sh.pts[i]; cy += sh.pts[i + 1]; }
   hs.push({ id: 'move', x: cx / n, y: cy / n });
   return hs;
@@ -421,6 +447,13 @@ export function moveHandle(orig, id, x, y, { lock = true } = {}) {
     if (id === n - 1) { const cx = sh.pts[(n - 2) * 2], cy = sh.pts[(n - 2) * 2 + 1]; sh.pts[id * 2] = Math.max(cx + 8, x); sh.pts[id * 2 + 1] = cy; return sh; }
     if (id === 0) { const q = proj(sh.pts[2], sh.pts[3], sh.pts[0] - sh.pts[2], sh.pts[1] - sh.pts[3], x, y); sh.pts[0] = q[0]; sh.pts[1] = q[1]; return sh; }
   }
+  if (id === 'rot' && !sh.closed && sh.pts.length === 4) { // rotate about the first point; length unchanged; snaps to every 15° (and to the start angle)
+    const [ax, ay, bx, by] = orig.pts, L = Math.hypot(bx - ax, by - ay) || 1;
+    let a = Math.atan2(y - ay, x - ax);
+    const deg = a * 180 / Math.PI, snap = Math.round(deg / 15) * 15;
+    if (Math.abs(deg - snap) < 4) a = snap * Math.PI / 180;
+    sh.pts = [ax, ay, ax + Math.cos(a) * L, ay + Math.sin(a) * L]; return sh;
+  }
   if (!sh.closed && sh.pts.length === 4 && lock) { // a straight line / arrow: the end slides along the line itself (length changes, direction and width don't)
     const o = id === 0 ? 1 : 0, ox = sh.pts[o * 2], oy = sh.pts[o * 2 + 1];
     const q = proj(ox, oy, orig.pts[id * 2] - ox, orig.pts[id * 2 + 1] - oy, x, y);
@@ -438,6 +471,7 @@ export function moveHandle(orig, id, x, y, { lock = true } = {}) {
 export function shapeAs(p, kind) {
   if (kind === 'radical') return recognizeRadical(p, { force: true });
   if (kind === 'paren' || kind === 'square' || kind === 'brace') return recognizeBracket(p, { force: kind });
+  if (kind === 'chevron') return recognizeChevron(p);
   p = trimRest(p);
   const R = resample(p, 96); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
   if (P.length < 3) return null;

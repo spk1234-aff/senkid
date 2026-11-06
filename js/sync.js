@@ -26,13 +26,31 @@ function clientId() { return prefs.sync?.clientId || DEFAULT_CLIENT_ID; }
 export function connected() { return !!prefs.sync?.on; }
 export function tokenOk() { return !!readToken(); }
 
+// Renewing the Google token means a full round trip to accounts.google.com and back (the page reloads), so it must
+// never happen while the teacher is in the middle of something: writing, recording, or teaching on the TV link.
+export function busyNow(app = sync.app, { manual = false } = {}) {
+  const ed = app?.editor;
+  if (app?.recorder?.active || app?.audio?.active) return 'กำลังอัดอยู่';
+  if (app?.broadcast?.connected) return 'ทีวีเชื่อมอยู่';
+  if (ed?.live) return 'กำลังเขียน';
+  if (manual) return ''; // the teacher asked for it: only recording / the TV link stand in the way
+  if (ed && (ed.dirty?.size || Date.now() - (ed.lastInput || 0) < 3 * 60e3)) return 'กำลังเขียน';
+  if (document.querySelector('.dialog, .sheet, .lplayer')) return 'มีหน้าต่างเปิดอยู่';
+  return '';
+}
+const SILENT_KEY = 'senkid.silentTry';
+function silentInfo() { try { return JSON.parse(localStorage.getItem(SILENT_KEY) || '{"t":0,"fails":0}'); } catch { return { t: 0, fails: 0 }; } }
+function silentAllowed() { const i = silentInfo(); const wait = i.fails >= 3 ? 30 * 60e3 : 5 * 60e3; return Date.now() - i.t > wait; }
+function noteSilent(ok) { const i = silentInfo(); localStorage.setItem(SILENT_KEY, JSON.stringify({ t: Date.now(), fails: ok ? 0 : i.fails + 1 })); }
+// what the teacher wants once the app is free: a renewal they asked for while busy
+let wantAuth = false;
 // top-level redirect to Google (works in Safari and in the home-screen app; no popups)
 export function signIn({ silent = false } = {}) {
   const id = clientId(); if (!id) { toast('ยังไม่ได้ตั้งค่า Client ID ของ Google (ตั้งค่า > ซิงก์)', 4000, 'warn'); return; }
   const state = Math.random().toString(36).slice(2);
   sessionStorage.setItem('senkid.oauth', JSON.stringify({ state, silent, back: location.pathname + location.search }));
   const q = new URLSearchParams({ client_id: id, redirect_uri: appUrl(), response_type: 'token', scope: SCOPES, include_granted_scopes: 'true', state });
-  if (silent) { q.set('prompt', 'none'); if (prefs.sync?.email) q.set('login_hint', prefs.sync.email); }
+  if (silent) { q.set('prompt', 'none'); if (prefs.sync?.email) q.set('login_hint', prefs.sync.email); noteSilent(false); /* counted as a failure until the token comes back */ }
   else q.set('prompt', 'select_account');
   location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + q;
 }
@@ -46,7 +64,7 @@ export async function handleRedirect() {
   if (!pending || h.get('state') !== pending.state) return false;
   if (h.get('error')) { if (!pending.silent) toast('เชื่อมต่อ Google ไม่สำเร็จ: ' + h.get('error'), 4000, 'warn'); setState('auth', { error: h.get('error') }); return true; }
   const tok = { t: h.get('access_token'), exp: Date.now() + (+h.get('expires_in') || 3600) * 1000, scope: h.get('scope') || '' };
-  localStorage.setItem(TOKEN_KEY, JSON.stringify(tok));
+  localStorage.setItem(TOKEN_KEY, JSON.stringify(tok)); noteSilent(true);
   prefs.sync = { ...(prefs.sync || {}), on: true }; savePrefs();
   try { const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tok.t } }); if (r.ok) { const u = await r.json(); prefs.sync.email = u.email || ''; savePrefs(); } } catch { }
   setState('idle', { email: prefs.sync.email });
@@ -320,9 +338,9 @@ async function doSync(reason) {
     return true;
   } catch (e) {
     console.warn('sync', e);
-    if (e.auth) setState('auth', { error: 'ต้องเชื่อมต่อ Google ใหม่' });
+    if (e.auth) setState('auth', { error: 'ซิงก์พักไว้ · จะต่อ Google ให้เองเมื่อว่าง' });
     else setState('error', { error: e.message || String(e) });
-    if (reason === 'manual') toast('ซิงก์ไม่สำเร็จ: ' + (e.auth ? 'ต้องเชื่อมต่อ Google ใหม่' : e.message), 4000, 'warn');
+    if (reason === 'manual') toast('ซิงก์ไม่สำเร็จ: ' + (e.auth ? 'การเชื่อม Google หมดอายุ · จะต่อให้เองเมื่อว่าง หรือกด "เชื่อมต่อใหม่" ในตั้งค่า' : e.message), 4000, 'warn');
     return false;
   }
 }
@@ -336,18 +354,20 @@ export async function initSync(app) {
   if (!readToken()) {
     // token lasts an hour: refresh silently once per launch (Google answers at once when still signed in)
     const tried = sessionStorage.getItem('senkid.silent') === '1';
-    if (!tried && !got && navigator.onLine) { sessionStorage.setItem('senkid.silent', '1'); await app.editor?.flush?.(); signIn({ silent: true }); return; }
-    setState('auth'); return;
+    if (!tried && !got && navigator.onLine && silentAllowed()) { sessionStorage.setItem('senkid.silent', '1'); await app.editor?.flush?.(); signIn({ silent: true }); return; }
+    setState('auth');
   }
   sessionStorage.removeItem('senkid.silent');
   setState('idle');
   // the connection lapsing must never go unnoticed again: a bar stays up until it is reconnected
   let authBar = null;
   sync.on((st) => {
-    if (st.state === 'auth' && !authBar) {
+    // while the token is lapsed the app keeps saving locally and renews quietly when free; only a long gap gets a bar
+    const longGap = Date.now() - (prefs.sync?.last || 0) > 6 * 3600e3;
+    if (st.state === 'auth' && !authBar && longGap) {
       const b = document.createElement('button'); b.className = 'pill prim'; b.style.cssText = 'height:40px;margin-left:10px;pointer-events:auto'; b.textContent = 'เชื่อมต่อใหม่';
-      b.onclick = async () => { await app.editor?.flush?.(); signIn(); };
-      authBar = document.createElement('div'); authBar.className = 'toast keep updbar warn'; authBar.append('การซิงก์หยุดทำงาน · การเชื่อม Google หมดอายุ', b); document.getElementById('toasts').append(authBar);
+      b.onclick = async () => { const why = busyNow(app, { manual: true }); if (why) { wantAuth = true; toast(`${why} · จะต่อ Google ให้เองเมื่อว่าง (ไม่ต้องทำอะไร)`, 3500); return; } await app.editor?.flush?.(); signIn(); };
+      authBar = document.createElement('div'); authBar.className = 'toast keep updbar warn'; authBar.append('ไม่ได้ซิงก์มานานแล้ว · การเชื่อม Google หมดอายุ', b); document.getElementById('toasts').append(authBar);
     } else if (st.state !== 'auth' && authBar) { authBar.remove(); authBar = null; }
   });
   db.onChange(() => scheduleSync(6000));
@@ -357,9 +377,12 @@ export async function initSync(app) {
   setInterval(() => {
     if (!connected() || document.visibilityState !== 'visible' || !navigator.onLine) return;
     const t = readToken(); const ed = app.editor;
-    const soon = !t || (t.exp - Date.now() < 8 * 60e3);
-    const idle = Date.now() - (ed?.lastInput || 0) > 3 * 60e3 && !ed?.dirty?.size && !ed?.live && !app.recorder?.active && !app.audio?.active && !document.querySelector('.dialog');
-    if (soon && idle && sessionStorage.getItem('senkid.silent') !== '1') { sessionStorage.setItem('senkid.silent', '1'); (async () => { await ed?.flush?.(); signIn({ silent: true }); })(); }
+    const soon = !t || (t.exp - Date.now() < 15 * 60e3);
+    if (!soon && !wantAuth) return;
+    if (busyNow(app)) return; // never interrupt writing / recording / the TV link
+    if (wantAuth) { wantAuth = false; (async () => { await ed?.flush?.(); signIn(); })(); return; }
+    if (!silentAllowed()) return; // retried every 5 min while idle, every 30 min after 3 misses
+    (async () => { await ed?.flush?.(); signIn({ silent: true }); })();
   }, 30 * 1000);
   scheduleSync(1200);
 }
@@ -368,7 +391,7 @@ export function statusText() {
   switch (sync.state) {
     case 'off': return 'ยังไม่ได้เชื่อม Google Drive';
     case 'syncing': return sync.progress || 'กำลังซิงก์…';
-    case 'auth': return 'ต้องเชื่อมต่อ Google ใหม่';
+    case 'auth': return 'ซิงก์พักไว้ · จะต่อ Google ให้เองเมื่อว่าง';
     case 'error': return 'ซิงก์ไม่สำเร็จ · แตะเพื่อลองใหม่';
     default: return sync.error ? sync.error : hm ? `ซิงก์แล้ว ${hm}` : 'พร้อมซิงก์';
   }
