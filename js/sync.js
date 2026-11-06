@@ -50,10 +50,11 @@ export async function handleRedirect() {
   prefs.sync = { ...(prefs.sync || {}), on: true }; savePrefs();
   try { const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tok.t } }); if (r.ok) { const u = await r.json(); prefs.sync.email = u.email || ''; savePrefs(); } } catch { }
   setState('idle', { email: prefs.sync.email });
+  try { (await import('./lock.js')).afterSignIn(sync.app); } catch { }
   if (!pending.silent) toast('เชื่อม Google Drive แล้ว · สมุดจะซิงก์อัตโนมัติ', 3000);
   return true;
 }
-export function disconnect() { localStorage.removeItem(TOKEN_KEY); prefs.sync = { ...(prefs.sync || {}), on: false }; savePrefs(); setState('off'); }
+export function disconnect() { localStorage.removeItem(TOKEN_KEY); prefs.sync = { ...(prefs.sync || {}), on: false }; savePrefs(); setState('off'); import('./lock.js').then(m => { if (m.enforceAccountRule()) { toast('ตัดการเชื่อม Google แล้ว · เครื่องนี้กลับเป็นโหมดนักเรียน', 3500); sync.app?.library?.render?.(); } }).catch(() => { }); }
 
 // ---------- Drive helpers ----------
 async function gfetch(url, opt = {}, retry = true) {

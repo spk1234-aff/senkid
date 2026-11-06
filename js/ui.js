@@ -105,6 +105,8 @@ const P = {
   dice: '<rect x="3" y="3" width="18" height="18" rx="4.5" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="16" cy="8" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="8" cy="16" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/><circle cx="16" cy="16" r="1.7" fill="var(--ico-in,#fff)" stroke="none"/>',
   pdf: '<path d="M6 2.5 H14.5 L19.5 7.5 V20 a1.5 1.5 0 0 1-1.5 1.5 H7.5 A1.5 1.5 0 0 1 6 20 Z" fill="currentColor" stroke="none"/><path d="M14.5 2.5 V7.5 H19.5" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.5"/><path d="M8.6 17 V11.5 h2 a1.6 1.6 0 0 1 0 3.2 h-2 M13.2 17 V11.5 h1.4 a2.75 2.75 0 0 1 0 5.5 Z" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.4"/>',
   rec: '<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
+  qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 14h2M14 18h2M18 18h2v2"/>',
 };
 export const icon = (n, cls = 'i') => {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -202,7 +204,8 @@ export function confirmBox(title, text, { ok = 'ตกลง', danger = false } 
 
 export function toggle(on, onChange) {
   const t = h('button', { class: 'tog' + (on ? ' on' : ''), role: 'switch', 'aria-checked': on ? 'true' : 'false' });
-  t.addEventListener('click', () => { const v = !t.classList.contains('on'); t.classList.toggle('on', v); t.setAttribute('aria-checked', v); onChange(v); });
+  t.set = (v) => { t.classList.toggle('on', v); t.setAttribute('aria-checked', v); };
+  t.addEventListener('click', () => { const v = !t.classList.contains('on'); t.set(v); onChange(v, t); });
   return t;
 }
 

@@ -598,7 +598,7 @@ export class Editor {
     box.append(h('div', { class: 'lbl' }, 'ธีม'));
     box.append(seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, (v) => { prefs.theme = v; savePrefs(); applyTheme(); this.need.main = true; }));
     box.append(h('div', { style: { height: '6px' } }));
-    box.append(row('ใช้งานแบบ', seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', (v) => { prefs.studentUI = v === 's'; savePrefs(); this.buildToolbar(); }), 'โหมดนักเรียนซ่อนปุ่มฉายจอ อัดคลิป จับเวลา และม่าน'));
+    box.append(row('ใช้งานแบบ', seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', async (v) => { if (v === 't' && !(await (await import('./lock.js')).requireTeacher())) { this.buildToolbar(); return; } prefs.studentUI = v === 's'; savePrefs(); this.buildToolbar(); }), 'โหมดนักเรียนซ่อนปุ่มฉายจอ อัดคลิป จับเวลา และม่าน'));
     box.append(row('เขียนด้วยนิ้ว', toggle(prefs.fingerDraw, (v) => { prefs.fingerDraw = v; savePrefs(); }), 'ปิดไว้: นิ้วใช้เลื่อนและซูม'));
     box.append(row('แปลงเป็นรูปทรงอัตโนมัติ', toggle(prefs.shapeRecog, (v) => { prefs.shapeRecog = v; savePrefs(); this.buildToolbar(); }), 'ขีดแล้วกดค้างไว้ 0.5 วินาที'));
     box.append(row('ขีดฆ่าเพื่อลบ', toggle(prefs.scribbleErase, (v) => { prefs.scribbleErase = v; savePrefs(); }), 'ขีดไปมาซ้ำ ๆ ทับเส้นที่ต้องการลบ'));

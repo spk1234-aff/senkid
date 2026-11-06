@@ -1,6 +1,7 @@
 // Notebook library: folders, search, create, rename, move, duplicate, delete
 import { h, icon, menu, dialog, ask, confirmBox, toast, seg, fmtDate, uid, brandWord, logoMark, pickFile, busy } from './ui.js';
 import { prefs, savePrefs } from './prefs.js';
+import { requireTeacher, setUnlocked } from './lock.js';
 import { sync, syncNow, signIn, statusText, connected } from './sync.js';
 import { PAPERS } from './render.js';
 import * as db from './db.js';
@@ -50,7 +51,7 @@ export class Library {
     const st = h('button', { class: 'fold' }, icon('gear'), 'ตั้งค่า'); st.onclick = () => this.app.openSettings();
     const hp = h('button', { class: 'fold' }, icon('help'), 'วิธีใช้'); hp.onclick = () => this.app.openHelp();
     const mode = h('div', { class: 'modesw' }, h('div', { class: 'lbl' }, 'ใช้งานแบบ'),
-      seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', v => { prefs.studentUI = v === 's'; savePrefs(); toast(prefs.studentUI ? 'โหมดนักเรียน: ซ่อนเครื่องมือฉายจอ อัดคลิป จับเวลา และม่าน' : 'โหมดครู: แสดงเครื่องมือครบ', 2200); }));
+      seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', async (v) => { if (v === 't' && !(await requireTeacher())) { this.render(); return; } prefs.studentUI = v === 's'; if (v === 's') setUnlocked(false); savePrefs(); this.render(); toast(prefs.studentUI ? 'โหมดนักเรียน: ซ่อนเครื่องมือฉายจอ อัดเสียง จับเวลา และม่าน' : 'โหมดครู: แสดงเครื่องมือครบ', 2200); }));
     const sp = h('button', { class: 'fold syncpill' }, icon('cloud'), h('span', {}, ''));
     const paint = () => { sp.lastChild.textContent = statusText(); sp.classList.toggle('spin', sync.state === 'syncing'); sp.classList.toggle('warn', sync.state === 'auth' || sync.state === 'error'); };
     sp.onclick = () => { if (!connected()) this.app.openSettings(); else if (sync.state === 'auth') signIn(); else syncNow('manual'); };
@@ -72,7 +73,7 @@ export class Library {
       { icon: 'film', label: 'คลิปที่อัดไว้', action: () => this.app.openRecordings() },
       '-',
       { icon: 'gear', label: 'ตั้งค่า', action: () => this.app.openSettings() },
-      { icon: 'user', label: prefs.studentUI ? 'เปลี่ยนเป็นโหมดครู' : 'เปลี่ยนเป็นโหมดนักเรียน', action: () => { prefs.studentUI = !prefs.studentUI; savePrefs(); this.render(); toast(prefs.studentUI ? 'โหมดนักเรียน' : 'โหมดครู', 1500); } },
+      { icon: 'user', label: prefs.studentUI ? 'เปลี่ยนเป็นโหมดครู' : 'เปลี่ยนเป็นโหมดนักเรียน', action: async () => { if (prefs.studentUI && !(await requireTeacher())) return; prefs.studentUI = !prefs.studentUI; if (prefs.studentUI) setUnlocked(false); savePrefs(); this.render(); } },
       { icon: 'help', label: 'วิธีใช้', action: () => this.app.openHelp() },
     ]);
     const titleEl = h('div', { class: 'title' });

@@ -9,6 +9,7 @@ import { Recorder, AudioRecorder, openRecordings, canRecord, pickMime, uploadPen
 import { Picker } from './picker.js';
 import { Timeline } from './lesson.js';
 import { handleWorksheetHash } from './worksheet.js';
+import { applyStartup as applyLock, requireTeacher, setUnlocked, hasPin, studentOnly, managePin, showStudentLink, lockThisDevice, accountRule, isTeacherDevice } from './lock.js';
 import { STRIDE } from './render.js';
 import { buildBackup, openNotebookFile, saveNotebookFile } from './files.js';
 import { importPdf } from './pdfdoc.js';
@@ -17,7 +18,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.45';
+export const VERSION = '1.9.46';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -54,6 +55,7 @@ class App {
     if (!prefs.onboarded) this.onboarding();
     initSync(this).catch(e => console.warn('sync init', e)).finally(() => { setTimeout(uploadPendingRecordings, 8000); window.addEventListener('online', () => setTimeout(uploadPendingRecordings, 3000)); });
     if (location.hash === '#from-app') this.receiveFromApp();
+    applyLock();
     if (/[#&]ws=/.test(location.hash)) handleWorksheetHash(this).catch(e => console.warn('worksheet', e));
     addEventListener('hashchange', () => { if (/[#&]ws=/.test(location.hash)) handleWorksheetHash(this).catch(() => { }); });
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
@@ -213,7 +215,7 @@ class App {
       card(
         row('ธีม', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
         row('ฟอนต์ของแอป', (() => { const cur = UI_FONTS.find(f => f[0] === (prefs.uiFont || 'sarabun')) || UI_FONTS[0]; const b = h('button', { class: 'pill sec', style: { height: '42px', fontFamily: familyOf(cur[0]) } }, cur[1], icon('down')); b.onclick = () => this.fontPicker(b); return b; })(), 'ปุ่มและเมนู · ข้อความบนกระดาษไม่เปลี่ยน'),
-        row('โหมดนักเรียน', toggle(!!prefs.studentUI, v => { prefs.studentUI = v; savePrefs(); refreshEd(); }), 'ซ่อนเครื่องมือของครู (ฉายจอ อัดเสียง จับเวลา ม่าน) ให้แถบเรียบง่าย'),
+        row('โหมดนักเรียน', toggle(!!prefs.studentUI, async (v, t) => { if (!v && !(await requireTeacher())) { t?.set?.(true); prefs.studentUI = true; savePrefs(); return; } prefs.studentUI = v; if (v) setUnlocked(false); savePrefs(); refreshEd(); }), (accountRule() && !isTeacherDevice() ? 'เครื่องนี้เป็นเครื่องนักเรียน · โหมดครูเปิดได้เฉพาะเครื่องที่เชื่อม Google ด้วยบัญชีครู' : 'ซ่อนเครื่องมือของครู (ฉายจอ อัดเสียง จับเวลา ม่าน) ให้แถบเรียบง่าย')),
                 row('ตำแหน่งแถบเครื่องมือ', seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, v => { prefs.toolbarPos = v; savePrefs(); refreshEd(); })),
         row('แสดง 2 หน้าคู่เมื่อจอแนวนอน', toggle(prefs.twoPage, v => { prefs.twoPage = v; savePrefs(); this.editor?.relayout(true); })),
         row('ซ่อนแถบเครื่องมือ', toggle(prefs.toolbarHidden, v => { prefs.toolbarHidden = v; savePrefs(); refreshEd(); }))),
@@ -238,8 +240,13 @@ class App {
       card(
         row('โหมดประหยัด', toggle(prefs.economy, v => { prefs.economy = v; savePrefs(); applyTheme(); this.editor?.resize(); }), 'ลดความละเอียดจอและเอฟเฟกต์ สำหรับเครื่องสเปกต่ำ'),
         row('ความละเอียดคลิปเริ่มต้น', seg([['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K']], prefs.rec.res, v => { prefs.rec.res = v; savePrefs(); }))),
-      h('div', { class: 'sec-t' }, 'ซิงก์ผ่าน Google Drive'),
-      this.syncCard(),
+      ...(prefs.studentUI && (hasPin() || studentOnly()) && !accountRule() ? [] : [h('div', { class: 'sec-t' }, 'ซิงก์ผ่าน Google Drive'), this.syncCard()]),
+      ...(prefs.studentUI ? [] : [h('div', { class: 'sec-t' }, 'สำหรับห้องเรียน'),
+        card(
+          row('PIN ครู', h('button', { class: 'pill sec', onclick: async (e) => { if (await managePin()) { document.querySelector('.sheet .top button')?.click(); this.openSettings(); } } }, icon('lock'), hasPin() ? 'เปลี่ยน / ลบ PIN' : 'ตั้ง PIN'), hasPin() ? 'ตั้งแล้ว · การออกจากโหมดนักเรียนบนเครื่องนี้ต้องใส่ PIN' : 'เมื่อตั้งแล้ว การเปลี่ยนจากโหมดนักเรียนกลับเป็นโหมดครูต้องใส่ PIN (ต่อเครื่อง ไม่ซิงค์)'),
+          row('ล็อกเครื่องนี้เป็นโหมดนักเรียน', h('button', { class: 'pill prim', onclick: () => lockThisDevice(this) }, icon('lock'), 'ล็อกเครื่องนี้'), 'สำหรับแอปที่นักเรียนติดตั้งไว้แล้ว: ใส่ PIN ครูครั้งเดียว เครื่องนี้จะอยู่ในโหมดนักเรียนตลอด สลับกลับได้เฉพาะคนที่รู้ PIN'),
+          row('ลิงก์ติดตั้งสำหรับนักเรียน', h('button', { class: 'pill sec', onclick: () => showStudentLink() }, icon('qr'), 'แสดง QR / ลิงก์'), 'แอปที่เพิ่มจากลิงก์นี้เปิดเป็นโหมดนักเรียนเสมอ ไม่มีปุ่มสลับและไม่มีซิงค์ Google · ครูปลดล็อกชั่วคราวได้ด้วย PIN'),
+          ...(studentOnly() ? [row('เครื่องนี้ติดตั้งแบบนักเรียน', h('button', { class: 'pill sec', onclick: () => { prefs.lock = { ...(prefs.lock || {}), studentOnly: false }; savePrefs(); toast('ยกเลิกแล้ว · เครื่องนี้ใช้เป็นเครื่องครูได้', 2500); this.openSettings(); } }, 'ยกเลิกสถานะนักเรียน'), 'เปิดแอปครั้งถัดไปจะกลับเป็นโหมดนักเรียนเอง')] : []))]),
       h('div', { class: 'sec-t' }, 'ข้อมูล (เก็บในเครื่องนี้เท่านั้น)'),
       card(
         row('พื้นที่ที่ใช้', usage),
@@ -316,6 +323,10 @@ class App {
         'ต้องการไฟล์วิดีโอ: ในเครื่องเล่นกด <b>ส่งออกเป็นวิดีโอ</b> เลือกความละเอียด ได้ MP4 ไปอยู่ใน "คลิปที่อัดไว้" (ใช้เวลาเท่าความยาวจริง)',
         'เปิดดูได้ที่เมนู ⋯ > <b>บทเรียนที่อัดในเล่มนี้</b> (หรือป้ายไมค์บนปกสมุดในห้องสมุด) · อัดเสร็จจะเก็บลงเครื่องก่อน แล้วส่งขึ้น Google Drive เบื้องหลัง',
         'กดค้างปุ่มไมค์เพื่อเลือกไมโครโฟน (รองรับไมค์แยก จำชื่อไมค์ไว้ให้) และเปิด<b>กล้องครู</b>: ภาพครูวงกลมเล็ก ๆ ที่มุมกระดาน ลากย้ายได้ จะติดไปในการเล่นย้อนและวิดีโอที่ส่งออก (ไม่ฉายขึ้นทีวี)'),
+      sec('ล็อกโหมดนักเรียน',
+        'โหมดครูเปิดได้<b>เฉพาะเครื่องที่เชื่อม Google Drive ด้วยบัญชีครู</b> เครื่องอื่นทุกเครื่องเป็นโหมดนักเรียนโดยอัตโนมัติ สลับไม่ได้ (เครื่องใหม่ของครู: ตั้งค่า > เชื่อม Google Drive ด้วยบัญชีครู แล้วโหมดครูจะเปิดให้เอง)',
+        'ตั้งค่า > สำหรับห้องเรียน > <b>ตั้ง PIN ครู</b> แล้วบนเครื่องของนักเรียนกด <b>ล็อกเครื่องนี้</b> (ใส่ PIN ครั้งเดียว) เครื่องนั้นจะอยู่ในโหมดนักเรียนตลอด สลับกลับได้เฉพาะคนที่รู้ PIN และกลับเป็นนักเรียนเองเมื่อเปิดแอปใหม่',
+        'นักเรียนใหม่: ให้สแกน <b>ลิงก์ติดตั้งสำหรับนักเรียน</b> แล้วเพิ่มลงหน้าจอโฮม แอปจะเป็นโหมดนักเรียนตั้งแต่แรก · ข้อจำกัด: ถ้านักเรียนลบข้อมูลเว็บไซต์ของ Safari แอปจะกลับเป็นค่าเริ่มต้น (และสมุดในเครื่องหาย)'),
       sec('กู้เส้นที่หาย',
         'แอปเก็บสำเนาของแต่ละหน้าไว้ในเครื่องอัตโนมัติ (30 สำเนาล่าสุด / 21 วัน) ถ้าเส้นหายให้ไปที่เมนู ⋯ > <b>กู้เส้นที่หาย (หน้านี้)</b> เลือกสำเนาก่อนเวลาที่หาย แล้วกด "เติมเส้นที่หาย" (เติมเฉพาะที่ขาด) หรือ "ย้อนทั้งหน้า"',
         'ทุกครั้งที่เส้นหายจากหน้า ระบบจดไว้ว่าหายเพราะอะไร จากเครื่องไหน ดูได้ที่ "ประวัติเส้นที่หาย" ในหน้าเดียวกัน · การซิงค์จะลบเส้นก็ต่อเมื่อเครื่องที่ลบยืนยันการลบนั้นจริง ๆ สำเนาเก่าจากเครื่องอื่นจะเขียนทับไม่ได้อีก'),
