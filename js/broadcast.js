@@ -241,63 +241,70 @@ function confirmSecondScreen(ed) {
 export function studentMenu(app, anchor, ed) {
   const b = app.broadcast;
   const box = h('div', { class: 'scr-menu', style: { width: 'min(460px, calc(100vw - 20px))' } });
-  box.append(h('div', { class: 'row' }, h('div', {}, h('b', {}, 'ฉายขึ้นทีวี / โปรเจกเตอร์'), h('div', { class: 'sub' }, 'เลือกตามวิธีที่ต่อจอ')),
-    b.connected ? h('span', { style: { color: '#1E9E5A', fontWeight: 700, whiteSpace: 'nowrap' } }, '● จอนักเรียนเปิดอยู่') : ''));
-  // Goodnotes-style: what the audience sees
-  const kind = prefs.presentKind || (b.mode === 'page' ? 'page' : 'present');
-  const kinds = [
-    ['screen', 'ฉายทั้งหน้าจอ', 'ผู้ชมเห็นเหมือนจอครู รวมเครื่องมือและเมนู', 'screen'],
-    ['present', 'ฉายหน้านำเสนอ', 'ผู้ชมจะไม่เห็นคำสั่งใช้งาน', 'hide'],
-    ['page', 'ฉายเฉพาะหน้า', 'ผู้ชมจะไม่เห็นคำสั่งใช้งานและการซูม', 'pages'],
-  ];
-  const pk = h('div', { class: 'pkind' });
-  for (const [id, t, sub, ic] of kinds) {
-    const r = h('button', { class: 'pk' + (kind === id ? ' on' : '') }, icon(ic), h('div', {}, h('b', {}, t), h('div', { class: 'sub' }, sub)), h('span', { class: 'ck' }, kind === id ? '✓' : ''));
-    r.onclick = () => {
-      prefs.presentKind = id; savePrefs(); close();
-      b.setMode(id === 'page' ? 'page' : 'follow');
-      if (id === 'screen') { if (prefs.toolbarHidden) ed.exitPresent(); toast(b.connected ? 'ฉายทั้งหน้าจอ · ทีวีเห็นเครื่องมือและเมนูเหมือนจอครู' : 'ฉายทั้งหน้าจอ · ผู้ชมเห็นเหมือนจอครู', 2200); b.sendUI(); return; }
-      if (b.connected) { toast(id === 'page' ? 'จอนักเรียนแสดงทั้งหน้าเสมอ ไม่ซูมตามครู' : 'จอนักเรียนซูม/เลื่อนตามครู ไม่เห็นเครื่องมือ', 2600); return; }
-      // mirroring: the TV shows the iPad screen, so hide the tools here
-      if (id === 'page') ed.fit();
-      presentMode(ed);
-    };
-    pk.append(r);
-  }
-  box.append(h('div', { class: 'lbl' }, 'โหมดพรีเซนเทชั่น'), pk);
-  const card = (title, sub, btn) => h('div', { class: 'scr-card' }, h('b', {}, title), h('div', { class: 'sub' }, sub), btn);
-  // A: mirroring
-  const pres = h('button', { class: 'pill sec' }, icon('hide'), 'ซ่อนเครื่องมือ (โหมดนำเสนอ)');
-  pres.onclick = () => { close(); presentMode(ed); };
-  box.append(h('div', { class: 'sub', style: { margin: '6px 2px 0' } }, 'สะท้อนจอ (AirPlay/AirServer/สายธรรมดา): ทีวีเห็นเหมือน iPad จึงซ่อนเครื่องมือบน iPad ให้แทน · ถ้าอยากให้ครูยังเห็นเครื่องมือ ใช้ "ทีวีเป็นจอที่สอง" ด้านล่าง'));
-  // B: second screen
-  const open = h('button', { class: 'pill ' + (twoScreens() ? 'prim' : 'sec') }, icon('screen'), b.connected ? 'เปิดหน้าต่างนักเรียนอีกครั้ง' : 'เปิดหน้าจอนักเรียน');
-  open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
-  if (isHomeApp() && isIOS()) {
-    // the student window only works inside Safari on iPad
-    const open = h('button', { class: 'pill sec' }, icon('screen'), 'หรือเปิดเส้นคิดใน Safari แล้วสอนที่นั่น');
-    open.onclick = () => { close(); ed?.flush?.(); location.href = 'x-safari-' + APP_URL(); };
-    if (canPair() && syncOn()) {
-      const pairBtn = h('button', { class: 'pill prim' }, icon('screen'), b.rtc.open ? 'เชื่อมต่อใหม่ (เปิด Safari)' : 'ส่งหน้าจอนักเรียนไป Safari');
-      pairBtn.onclick = () => { close(); startPairing(b, true); };
-      const reBtn = h('button', { class: 'pill sec' }, icon('sync'), 'ต่อกับหน้าต่าง Safari ที่เปิดค้างไว้บนทีวี'); reBtn.onclick = () => { close(); startPairing(b, false); };
-      box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', 'สอนในแอปนี้ต่อได้ · จะเปิดหน้าจอนักเรียนใน Safari ให้ แล้วลากหน้าต่างนั้นไปทีวี (ต้องเปิด Stage Manager) · ใช้เน็ตแค่ตอนจับคู่', h('div', {}, pairBtn, h('div', { class: 'tvtip' }, h('b', {}, 'ครั้งแรก: '), 'กดปุ่ม → Safari เปิดขึ้นมา → กลับมาที่แอปเส้นคิด (รอ "เชื่อมหน้าต่าง Safari แล้ว") → กดค้างจุดสีเขียวของหน้าต่าง Safari → "ย้ายไปยัง…" ทีวี · ', h('b', {}, 'ครั้งต่อไป: '), 'ปล่อยหน้าต่างนั้นไว้บนทีวี แล้วกดปุ่มด้านล่างนี้แทน ไม่ต้องสลับแอป'), reBtn, open)));
-    } else box.append(card('ทีวีเป็นจอที่สอง (เต็มจอ)', syncOn() ? 'เชื่อมต่อ Google ในตั้งค่าก่อน แล้วจะส่งหน้าจอนักเรียนไป Safari จากแอปนี้ได้' : 'เปิด "ซิงก์ผ่าน Google Drive" ในตั้งค่าก่อน แล้วจะส่งหน้าจอนักเรียนไป Safari จากแอปนี้ได้', open));
-  } else {
-    if (isIOS()) {
-      // a real link: press-and-hold gives iPad's own "Open in New Window", which skips the "move tab to new window" step
-      const a = h('a', { class: 'pill prim', href: new URL('student.html', location.href).href, target: 'senkid-student', style: { textDecoration: 'none', justifyContent: 'center' } }, icon('screen'), 'เปิดหน้าจอนักเรียน');
-      a.addEventListener('click', () => setTimeout(close, 50));
-      box.append(card('ทีวีเป็นจอที่สอง', 'ต่อสาย + เปิด Stage Manager · นักเรียนเห็นแค่กระดาษเต็มทีวี', h('div', {}, a,
-        h('div', { class: 'tvtip' }, h('b', {}, 'ทางลัด: '), 'กดค้างปุ่มนี้ → เลือก "เปิดในหน้าต่างใหม่" → แล้วกดค้างจุดสีเขียวของหน้าต่างนั้น → "ย้ายไปยัง…" ทีวี'))));
-    } else box.append(card('ทีวีเป็นจอที่สอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี · ต้องต่อสายและเปิด Stage Manager', open));
-  }
-  if (b.connected) {
-    if (studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; box.append(x); }
-  }
-  const link = new URL('student.html', location.href).href;
-  const cp = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '2px', fontSize: '19px' } }, 'คัดลอกลิงก์หน้าจอนักเรียน (สำหรับคอมพิวเตอร์)');
-  cp.onclick = async () => { try { await navigator.clipboard.writeText(link); toast('คัดลอกลิงก์แล้ว'); } catch { toast(link, 5000); } };
-  box.append(cp);
+  const on = b.connected;
+  // header: one line that says where things stand
+  box.append(h('div', { class: 'row' }, h('div', {}, h('b', {}, 'ทีวี / โปรเจกเตอร์'), h('div', { class: 'sub' }, on ? 'ทีวีเป็นจอสองอยู่ · นักเรียนเห็นบนทีวีแล้ว' : 'ยังไม่ได้เชื่อมเป็นจอสอง')),
+    h('span', { style: { color: on ? '#1E9E5A' : 'var(--muted)', fontWeight: 700, whiteSpace: 'nowrap' } }, on ? '● เชื่อมแล้ว' : '○ ยังไม่เชื่อม')));
+  // two tabs: how the TV is connected / what the TV shows
+  let tab = on ? 'show' : 'connect';
+  const tabs = seg([['connect', 'ต่อทีวี'], ['show', 'ทีวีแสดงอะไร']], tab, (v) => { tab = v; paint(); });
+  tabs.style.marginTop = '8px';
+  const body = h('div', {});
+  box.append(tabs, body);
+  const card = (title, sub, ...btns) => h('div', { class: 'scr-card' }, h('b', {}, title), sub ? h('div', { class: 'sub' }, sub) : null, ...btns);
+  const paint = () => {
+    body.innerHTML = '';
+    if (tab === 'connect') {
+      // choice 1: mirroring (cable / AirPlay) — the TV shows the iPad as is
+      const pres = h('button', { class: 'pill sec' }, icon('hide'), 'ซ่อนเครื่องมือบน iPad (โหมดนำเสนอ)');
+      pres.onclick = () => { close(); presentMode(ed); };
+      body.append(card('แบบที่ 1 · สะท้อนจอ (สาย / AirPlay)', 'ทีวีเห็นเหมือนหน้าจอ iPad ทุกอย่าง · ง่ายสุด ไม่ต้องตั้งค่า · ถ้าไม่อยากให้นักเรียนเห็นเครื่องมือ ให้ซ่อน', pres));
+      // choice 2: second screen through the Safari TV window
+      if (isHomeApp() && isIOS()) {
+        if (canPair() && syncOn()) {
+          const pairBtn = h('button', { class: 'pill prim' }, icon('screen'), on ? 'เชื่อมใหม่ (เปิด Safari อีกครั้ง)' : 'เชื่อมทีวี (เปิด Safari ให้)');
+          pairBtn.onclick = () => { close(); startPairing(b, true); };
+          const reBtn = h('button', { class: 'pill sec' }, icon('sync'), 'ต่อกับหน้าต่าง Safari ที่เปิดค้างอยู่'); reBtn.onclick = () => { close(); startPairing(b, false); };
+          body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง (เต็มจอ)', on ? 'เชื่อมอยู่แล้ว · ครูสอนในแอปนี้ต่อได้เลย' : '1) ต่อทีวี + เปิด Stage Manager  2) กดปุ่มนี้ แอปจะเปิดหน้าทีวีใน Safari  3) ลากหน้าต่าง Safari ไปทีวี แล้วกลับมาแอปนี้ · ครั้งต่อไปต่อให้เองภายใน 12 ชม.', pairBtn, reBtn));
+        } else body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง (เต็มจอ)', syncOn() ? 'เชื่อมต่อ Google ในตั้งค่าก่อน แล้วปุ่มเชื่อมทีวีจะใช้ได้' : 'เปิด "ซิงก์ผ่าน Google Drive" ในตั้งค่าก่อน แล้วปุ่มเชื่อมทีวีจะใช้ได้'));
+      } else {
+        const open = h('button', { class: 'pill ' + (twoScreens() ? 'prim' : 'sec') }, icon('screen'), on ? 'เปิดหน้าต่างนักเรียนอีกครั้ง' : 'เปิดหน้าจอนักเรียน');
+        open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
+        if (isIOS()) {
+          const a = h('a', { class: 'pill prim', href: new URL('student.html', location.href).href, target: 'senkid-student', style: { textDecoration: 'none', justifyContent: 'center' } }, icon('screen'), 'เปิดหน้าจอนักเรียน');
+          a.addEventListener('click', () => setTimeout(close, 50));
+          body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง', 'ต่อสาย + เปิด Stage Manager · นักเรียนเห็นแค่กระดาษเต็มทีวี', a, h('div', { class: 'tvtip' }, h('b', {}, 'ทางลัด: '), 'กดค้างปุ่มนี้ → "เปิดในหน้าต่างใหม่" → กดค้างจุดสีเขียวของหน้าต่างนั้น → ย้ายไปจอทีวี')));
+        } else body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง', 'ครูเห็นเครื่องมือบน iPad · นักเรียนเห็นแค่กระดาษบนทีวี', open));
+      }
+      if (on && studentWin && !studentWin.closed) { const x = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, 'ปิดหน้าจอนักเรียน'); x.onclick = () => { try { studentWin.close(); } catch { } close(); }; body.append(x); }
+      const link = new URL('student.html', location.href).href;
+      const cp = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '2px', fontSize: '18px' } }, 'คัดลอกลิงก์หน้าจอนักเรียน (เปิดบนคอมพิวเตอร์)');
+      cp.onclick = async () => { try { await navigator.clipboard.writeText(link); toast('คัดลอกลิงก์แล้ว'); } catch { toast(link, 5000); } };
+      body.append(cp);
+    } else {
+      // what the audience sees (Goodnotes-style)
+      const kind = prefs.presentKind || (b.mode === 'page' ? 'page' : 'present');
+      const kinds = [
+        ['page', 'เฉพาะกระดาษ ทั้งหน้า', 'นักเรียนเห็นหน้าเต็ม ๆ ไม่ซูมตามครู ไม่เห็นเครื่องมือ (เหมาะกับสอนปกติ)', 'pages'],
+        ['present', 'กระดาษ ซูมตามครู', 'นักเรียนเห็นส่วนที่ครูซูม/เลื่อนอยู่ ไม่เห็นเครื่องมือ', 'hide'],
+        ['screen', 'ทั้งหน้าจอเหมือนครู', 'เห็นเครื่องมือ เมนู และหน้าต่างทุกอย่าง (เหมาะกับสอนวิธีใช้แอป)', 'screen'],
+      ];
+      const pk = h('div', { class: 'pkind' });
+      for (const [id, t, sub, ic] of kinds) {
+        const r = h('button', { class: 'pk' + (kind === id ? ' on' : '') }, icon(ic), h('div', {}, h('b', {}, t), h('div', { class: 'sub' }, sub)), h('span', { class: 'ck' }, kind === id ? '✓' : ''));
+        r.onclick = () => {
+          prefs.presentKind = id; savePrefs(); close();
+          b.setMode(id === 'page' ? 'page' : 'follow');
+          if (id === 'screen') { if (prefs.toolbarHidden) ed.exitPresent(); toast(on ? 'ทีวีเห็นทั้งหน้าจอเหมือนครู' : 'ตั้งเป็น "ทั้งหน้าจอ" แล้ว · จะมีผลเมื่อทีวีเป็นจอสอง', 2500); return; }
+          if (on) toast(id === 'page' ? 'ทีวีแสดงทั้งหน้าเสมอ ไม่ซูมตามครู' : 'ทีวีซูม/เลื่อนตามครู ไม่เห็นเครื่องมือ', 2500);
+          if (id === 'page') ed.fit();
+          presentMode(ed);
+        };
+        pk.append(r);
+      }
+      body.append(h('div', { class: 'sub', style: { margin: '6px 2px 4px' } }, on ? 'เลือกว่าทีวีจะแสดงอะไร (เปลี่ยนได้ตลอดระหว่างสอน)' : 'ใช้เมื่อทีวีเป็นจอสอง · ถ้าสะท้อนจอ ทีวีจะเห็นเหมือน iPad เสมอ'), pk);
+    }
+  };
+  paint();
   const close = popover(anchor, box, ed.popOpts());
 }
