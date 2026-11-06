@@ -185,7 +185,7 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
   const close = h('button', { class: 'btn', title: 'ปิด (บันทึกให้เอง)' }, icon('close'));
   const addBtn = h('button', { class: 'pill prim' }, icon('plus'), 'เพิ่มคลิป');
   const quietBtn = h('button', { class: 'pill sec' }, icon('mic'), 'ตัดช่วงเงียบ');
-  const chapBtn = h('button', { class: 'pill sec' }, icon('pages'), 'สารบัญ');
+  const chapBtn = h('button', { class: 'pill sec' }, icon('edit'), 'สารบัญ');
   const expBtn = h('button', { class: 'pill sec' }, icon('film'), 'ส่งออก');
   const head = h('div', { class: 'lp-head' }, nameBtn, h('span', { class: 'grow' }), addBtn, quietBtn, chapBtn, expBtn, close);
   const stageEl = h('div', { class: 'lp-stage' }, cv);
@@ -238,7 +238,7 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
     if (!sel) { tools.append(h('div', { class: 'sub', style: { padding: '6px 12px' } }, pr.clips.length ? 'แตะคลิปเพื่อตัด · ลำดับซ้าย→ขวาคือลำดับในวิดีโอ' : '')); return; }
     const c = sel, i = pr.clips.indexOf(c), B = (ic, label, fn, cls = 'sec') => { const b = h('button', { class: 'pill ' + cls }, icon(ic), label); b.onclick = fn; return b; };
     const row = h('div', { class: 'cut-row' });
-    if (c.kind === 'lesson' || c.kind === 'video') row.append(B('cut', 'ตัดหัว‑ท้าย', () => trimDialog(c)), B('split', 'แบ่งตรงนี้', () => splitAt()));
+    if (c.kind === 'lesson' || c.kind === 'video') row.append(B('scissors', 'ตัดหัว‑ท้าย', () => trimDialog(c)), B('dup', 'แบ่งตรงนี้', () => splitAt()));
     else row.append(B('timer', `แสดง ${Math.round((c.hold || HOLD) / 1000)} วิ`, () => holdDialog(c)));
     row.append(B('gear', 'ตั้งค่า', () => clipSettings(c)), B('back', 'ซ้าย', () => move(-1)), B('chev', 'ขวา', () => move(1)), B('copy', 'ทำสำเนา', () => { pr.clips.splice(i + 1, 0, { ...c, id: uid() }); changed(); }), B('trash', 'ลบ', () => { pr.clips.splice(i, 1); sel = null; changed(); }, 'ghost'));
     tools.append(row);

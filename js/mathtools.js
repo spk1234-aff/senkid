@@ -199,3 +199,11 @@ export async function graphDialog(old) {
     ], { width: 640, onClose: () => { if (!ok) res(null); } });
   });
 }
+// LaTeX → image file sized in page units (same scale as the equation dialog), no dialog
+export async function texImage(tex, color = '#1E2A55', size = 22) {
+  const MJ = await loadMathJax();
+  const { svg, wEx, hEx } = texSvg(MJ, tex, color);
+  const c = await svgToCanvas(svg, wEx, hEx, 40), k = size * 0.45;
+  return { file: await toFile(c, 'equation.png'), meta: { kind: 'tex', tex, color, size }, w: (wEx * 40 + 8) / 40 * k, h: (hEx * 40 + 8) / 40 * k };
+}
+export async function texSvgEl(tex, color = '#1E2A55') { const MJ = await loadMathJax(); const { svg } = texSvg(MJ, tex, color); return svg; }

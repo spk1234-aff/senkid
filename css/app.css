@@ -804,3 +804,30 @@ video.campip.round{border-radius:18%}
 .xq-pill .i{width:18px;height:18px}
 .lp-cap{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);max-width:80%;padding:6px 14px;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-size:22px;font-family:"TH Sarabun New",sans-serif;pointer-events:none;white-space:pre-wrap;text-align:center}
 .lp-cap:empty{display:none}
+/* เทียบสองหน้า */
+.ed.split .stage{margin-right:34%}
+.ed.split:has(.splitpane.wide) .stage{margin-right:50%}
+.splitpane{position:absolute;right:0;width:34%;display:flex;flex-direction:column;background:var(--desk);border-left:2px solid rgba(0,0,0,.12);z-index:5}
+.splitpane.wide{width:50%}
+.sp-head{display:flex;gap:4px;align-items:center;padding:6px;background:var(--panel,#fff);border-bottom:1px solid rgba(0,0,0,.08)}
+.sp-head .btn.sq{width:36px;height:36px;flex:none}
+.sp-no{font-size:17px;min-width:44px;text-align:center;flex:none}
+.sp-body{flex:1;overflow:auto;padding:8px;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+.sp-cv{display:block;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.15);border-radius:2px}
+/* สถิติ */
+.st-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.st-tile{background:var(--chip,rgba(0,0,0,.04));border-radius:10px;padding:8px 10px;display:flex;flex-direction:column}
+.st-tile b{font-size:26px;line-height:1.1}.st-tile span{font-size:15px;color:var(--muted)}
+.st-chart{display:flex;gap:4px;align-items:flex-end;height:130px;padding-top:6px}
+.st-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+.st-bars{flex:1;width:100%;display:flex;gap:2px;align-items:flex-end;justify-content:center}
+.st-bars i,.st-legend i{display:block;width:40%;min-height:1px;border-radius:3px 3px 0 0}
+.st-col span{font-size:13px;color:var(--muted)}
+i.w{background:#2563EB}i.tv{background:#0F8A7E}
+.st-legend{display:flex;gap:14px;font-size:15px;color:var(--muted);margin-top:4px}.st-legend span{display:flex;align-items:center;gap:5px}.st-legend i{width:12px;height:12px;border-radius:3px}
+.st-mrow{display:flex;align-items:center;gap:8px;font-size:16px;margin:3px 0}.st-mrow>span:first-child{width:62px}.st-mrow .n{width:130px;text-align:right;color:var(--muted)}
+.st-mbar{flex:1;height:12px;background:rgba(0,0,0,.06);border-radius:6px;overflow:hidden}.st-mbar i{display:block;height:100%;background:#2563EB}
+.st-top>div{display:flex;justify-content:space-between;font-size:17px;padding:3px 0;border-bottom:1px solid rgba(0,0,0,.05)}
+.pb-prev{max-height:44vh;overflow:auto;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:6px 10px}
+.pb-row{display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px dashed rgba(0,0,0,.08)}.pb-row b{width:26px}
+.pb-arrow{font-size:14px;color:#0F8A7E;margin-left:auto}

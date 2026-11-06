@@ -616,7 +616,9 @@ export class Editor {
     mi('pageplus', 'เพิ่มหน้า / แทรก PDF', () => this.addPageMenu(anchor));
     if (prefs.studentUI) mi('upload', 'ส่งงานให้ครู', () => openExportDialog(this, { submit: true }));
     if (!prefs.studentUI) mi('screen', 'หน้าจอนักเรียน', () => this.app.studentMenu(anchor));
-    mi('mic', 'บทเรียนที่อัดในเล่มนี้', () => this.app.openRecordings(this.nb.id));
+    if (!prefs.studentUI) mi('mic', 'บทเรียนที่อัดในเล่มนี้', () => this.app.openRecordings(this.nb.id));
+    if (!prefs.studentUI) mi('pages', this.splitPane ? 'ปิดเทียบสองหน้า' : 'เทียบสองหน้า (ดูอีกหน้าด้านขวา)', () => import('./split.js').then(m => m.toggleSplit(this)));
+    if (!prefs.studentUI) mi('dice', 'สุ่มโจทย์ฝึก', () => import('./problems.js').then(m => m.openProblems(this, anchor)));
     mi('history', 'ย้อนดูขั้นก่อนหน้า (ไม่ลบ)', () => this.openPeek(anchor));
     mi('undo', 'กู้เส้นที่หาย (หน้านี้)', () => import('./recover.js').then(m => m.openRecover(this)));
     mi('share', 'คัดลอก / ย้ายหน้าไปสมุดอื่น', () => import('./copypages.js').then(m => m.openCopyPages(this)));
@@ -2545,7 +2547,7 @@ export class Editor {
     if (!gone.length && ids.size) db.snapshot(p, 'edit');
     p._ids = ids; this.delWhy = null;
   }
-  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.hooks?.dirty?.(p); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
+  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.hooks?.dirty?.(p); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); this.splitPane?.changed(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
   saveNb() { this.nbDirty = true; this.scheduleSave(); }
   scheduleSave() { clearTimeout(this.saveT); this.saveT = setTimeout(() => this.flush(), 700); }
   async flush() {
