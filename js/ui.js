@@ -106,6 +106,8 @@ const P = {
   pdf: '<path d="M6 2.5 H14.5 L19.5 7.5 V20 a1.5 1.5 0 0 1-1.5 1.5 H7.5 A1.5 1.5 0 0 1 6 20 Z" fill="currentColor" stroke="none"/><path d="M14.5 2.5 V7.5 H19.5" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.5"/><path d="M8.6 17 V11.5 h2 a1.6 1.6 0 0 1 0 3.2 h-2 M13.2 17 V11.5 h1.4 a2.75 2.75 0 0 1 0 5.5 Z" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.4"/>',
   rec: '<circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/>',
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
+  history: '<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/><path d="M12 8v4.5l3 2"/>',
+  pin: '<path d="M12 21v-5"/><path d="M8 16h8l-1.5-4V7h1V4H8.5v3h1v5z" fill="currentColor" stroke="none"/>',
   qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 14h2M14 18h2M18 18h2v2"/>',
 };
 export const icon = (n, cls = 'i') => {

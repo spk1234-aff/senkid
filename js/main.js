@@ -278,13 +278,25 @@ class App {
     const tok = tokenOk(), on = connected();
     if (!on) it('warn', 'ยังไม่ได้เปิดซิงก์ Google Drive', 'สมุดอยู่ในเครื่องนี้เท่านั้น', { label: 'ตั้งค่า', fn: () => this.openSettings() });
     else if (!tok) it('warn', 'การเชื่อม Google หมดอายุ (ต่อให้เองเมื่อว่าง)', 'ระหว่างนี้ทุกอย่างเก็บในเครื่อง ซิงก์ตามหลังได้ · ถ้าจะต่อเดี๋ยวนี้ กดปุ่มนี้ก่อนเริ่มสอน', { label: 'เชื่อมต่อใหม่', fn: async () => { await this.editor?.flush?.(); signIn(); } });
-    else { const ago = sync.lastSync ? Math.round((Date.now() - sync.lastSync) / 60000) : null; it(ago != null && ago < 180 ? true : 'warn', 'Google Drive: ' + (sync.email || 'เชื่อมต่อแล้ว'), ago == null ? 'ยังไม่เคยซิงก์' : `ซิงก์ล่าสุด ${ago < 1 ? 'เมื่อสักครู่' : ago + ' นาทีที่แล้ว'}` + (sync.error ? ' · ' + sync.error : ''), { label: 'ซิงก์ตอนนี้', fn: () => syncNow('manual') }); }
+    else {
+      // how long the Google ticket still lasts: renew before a long class so nothing has to happen mid-lesson
+      try { const t = JSON.parse(localStorage.getItem('senkid.gtoken') || 'null'); const left = t ? Math.round((t.exp - Date.now()) / 60000) : 0; if (left < 60) it('warn', `สิทธิ์ Google เหลือ ${left} นาที`, 'ถ้าคาบนี้ยาวกว่านั้น แอปจะรอต่อสิทธิ์จนกว่าจะว่าง (ไม่เด้งระหว่างสอน) · ต่อตอนนี้เพื่อให้ได้เต็ม 60 นาที', { label: 'ต่อสิทธิ์ตอนนี้', fn: async () => { await this.editor?.flush?.(); signIn({ force: true }); } }); else it(true, `สิทธิ์ Google เหลือ ${left} นาที`, 'พอสำหรับคาบนี้', null); } catch { }
+      const ago = sync.lastSync ? Math.round((Date.now() - sync.lastSync) / 60000) : null; it(ago != null && ago < 180 ? true : 'warn', 'Google Drive: ' + (sync.email || 'เชื่อมต่อแล้ว'), ago == null ? 'ยังไม่เคยซิงก์' : `ซิงก์ล่าสุด ${ago < 1 ? 'เมื่อสักครู่' : ago + ' นาทีที่แล้ว'}` + (sync.error ? ' · ' + sync.error : ''), { label: 'ซิงก์ตอนนี้', fn: () => syncNow('manual') }); }
     // storage
     try { const e = await navigator.storage?.estimate?.(); if (e) { const free = (e.quota - e.usage) / 1048576; it(free > 500 ? true : free > 150 ? 'warn' : false, `พื้นที่: ใช้ ${fmtBytes(e.usage)} จาก ${fmtBytes(e.quota)}`, free < 500 ? 'เหลือน้อย · ย้ายคลิปขึ้น Drive หรือลบคลิปเก่า' : 'เพียงพอ', free < 500 ? { label: 'คลิป', fn: () => openRecordings() } : null); } } catch { }
     // persistent storage (iPad may evict otherwise)
     try { const p = await navigator.storage?.persisted?.(); if (p != null) it(p ? true : 'warn', p ? 'ข้อมูลถูกตั้งเป็นถาวรแล้ว' : 'ข้อมูลยังไม่ได้ตั้งเป็นถาวร', p ? 'ระบบจะไม่ลบข้อมูลแอปเอง' : 'iPad อาจเคลียร์ข้อมูลเมื่อพื้นที่เต็ม', p ? null : { label: 'ตั้งถาวร', fn: async () => { const ok = await navigator.storage.persist(); toast(ok ? 'ตั้งเป็นถาวรแล้ว' : 'ระบบไม่อนุญาต (ใช้จากไอคอนบนหน้าโฮมจะได้สิทธิ์นี้)', 2500); } }); } catch { }
     // microphone
     try { const st = await navigator.permissions?.query?.({ name: 'microphone' }); if (st) it(st.state === 'granted' ? true : st.state === 'denied' ? false : 'warn', 'ไมโครโฟน: ' + ({ granted: 'อนุญาตแล้ว', denied: 'ถูกปฏิเสธ', prompt: 'จะถามเมื่อกดอัด' }[st.state] || st.state), st.state === 'denied' ? 'เปิดได้ที่ การตั้งค่า iPad > Safari > ไมโครโฟน' : '', null); } catch { it('warn', 'ไมโครโฟน: จะถามเมื่อกดอัด', '', null); }
+    // microphone really hears something: a 2-second level sample with the chosen mic
+    try {
+      const R = await import('./recorder.js');
+      const { label, peak, err } = await R.micProbe(2000);
+      if (err) it(false, 'ไมค์: เปิดไม่ได้', R.camErrorText(err), null);
+      else it(peak > 0.02 ? true : 'warn', `ไมค์: ${R.micName(label)}`, peak > 0.02 ? `ได้ยินเสียง (ระดับ ${Math.round(peak * 100)}%)` : 'เงียบมาก · พูดใส่ไมค์แล้วกด "ตรวจอีกครั้ง" หรือเลือกไมค์อื่น (กดค้างปุ่มไมค์)', null);
+      // camera (only when the teacher turned it on)
+      if (prefs.rec?.cam) { const cams = await R.listCams(); const ok = cams.some(d => d.deviceId === prefs.rec.cam || (prefs.rec.camLabel && d.label === prefs.rec.camLabel)) || prefs.rec.cam === 'user' || prefs.rec.cam === 'environment'; it(ok ? true : 'warn', ok ? `กล้องครู: ${prefs.rec.camLabel || 'กล้องในตัว'}` : `กล้องครู "${prefs.rec.camLabel || prefs.rec.cam}" ไม่พบ`, ok ? 'พร้อมอัด' : 'เสียบกล้องหรือเปลี่ยนเป็นกล้องในตัว (กดค้างปุ่มไมค์)', null); }
+    } catch (e) { console.warn('probe', e); }
     // TV window
     const b = this.broadcast; const paired = prefs.pairedAt && Date.now() - prefs.pairedAt < 12 * 3600e3;
     it(b?.rtc?.open || b?.connected ? true : paired ? 'warn' : 'warn', b?.rtc?.open ? 'ทีวี (จอที่สอง): เชื่อมต่ออยู่' : b?.connected ? 'หน้าจอนักเรียน: เชื่อมต่ออยู่' : paired ? 'ทีวี: ยังไม่ได้ต่อ · จะต่อเองเมื่อหน้าต่างบนทีวีเปิดอยู่' : 'ทีวี: ยังไม่ได้ตั้งค่าวันนี้', '', this.editor && !b?.rtc?.open ? { label: 'ต่อทีวี', fn: () => this.studentMenu(document.querySelector('.tb .btn') || document.body) } : null);

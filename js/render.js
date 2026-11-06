@@ -1,3 +1,4 @@
+import { MATH_BGS, drawMathPaper } from './papers.js';
 // Stroke + page rendering (Canvas 2D). Coordinates are page points (1/72 in).
 import { drawImageObj } from './images.js';
 import { pdfDetail, pdfBitmap } from './pdfdoc.js';
@@ -433,6 +434,8 @@ export function drawPaper(ctx, page, paperKey, k) {
     for (let y = 72; y < P.h - 20; y += sp) { ctx.moveTo(0, y); ctx.lineTo(P.w, y); }
     ctx.stroke();
     ctx.strokeStyle = pp.margin; ctx.beginPath(); ctx.moveTo(64, 0); ctx.lineTo(64, P.h); ctx.stroke();
+  } else if (page.bg in MATH_BGS) {
+    drawMathPaper(ctx, page, P, pp, k);
   } else if (page.bg === 'dots') {
     const sp = 19.84; ctx.fillStyle = pp.line;
     const r = Math.max(0.7, 1.2 / Math.sqrt(k)) * (pp.dark ? 1 : 1.05);
@@ -531,6 +534,14 @@ export function drawLaserTrail(ctx, pts, headOn, opt = {}) {
 }
 
 // answer curtain: an opaque sheet over the lower part of a page (page coordinates)
+// step markers (where the curtain stops) as small flags in the left margin
+export function drawMarks(ctx, page, k) {
+  const st = page.steps; if (!st?.length) return;
+  ctx.save(); ctx.fillStyle = '#F5B83D'; ctx.strokeStyle = 'rgba(245,184,61,.55)'; ctx.lineWidth = Math.max(1, 1.2 / k); ctx.setLineDash([6, 6]);
+  const P = dims(page);
+  for (const y of st) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(14, y - 6); ctx.lineTo(14, y + 6); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(14, y); ctx.lineTo(P.w, y); ctx.stroke(); }
+  ctx.restore();
+}
 export function drawCurtain(ctx, page, y, k) {
   const P = dims(page); if (y >= P.h) return;
   ctx.save();

@@ -2,13 +2,14 @@
 // Writing screen: toolbar, view (pan/zoom), pen input, rendering, pages, history, autosave
 import { h, icon, toast, popover, menu, dialog, confirmBox, toggle, seg, onLongPress, uid, ask, pickFile, busy, $, $$ } from './ui.js';
 import { prefs, savePrefs, pushRecent, applyTheme, PEN_LABEL } from './prefs.js';
-import { drawCurtain } from './render.js';
+import { drawCurtain, drawMarks } from './render.js';
 import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
 import { recognize, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical, recognizeBracket, recognizeChevron } from './shapes.js';
 import * as db from './db.js';
+import { isMathBg, mathPaperDialog, describe as describeMath } from './papers.js';
 import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
 import { makeDraggable } from './ui.js';
 import { normalizeImage, openCropper, rotateBlob, setImageReadyHook } from './images.js';
@@ -187,6 +188,7 @@ export class Editor {
         { icon: 'text', label: 'กล่องข้อความ', action: () => this.setTool('text') },
         { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง + ลายมือ', action: () => this.app.audioClick(this, b) },
         { icon: 'play', label: 'บทเรียนที่อัดในเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
+        { icon: 'history', label: 'ย้อนดูขั้นก่อนหน้า (ไม่ลบ)', action: () => this.openPeek(b) },
         { icon: 'pageplus', label: 'เพิ่มหน้า / แทรก PDF', action: () => this.addPageMenu(b) },
         ...(prefs.studentUI ? [{ icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'dice', label: 'สุ่มชื่อนักเรียน / จัดกลุ่ม', action: () => this.app.picker.open(b) }]),
       ], this.popOpts()), t === 'shapes' || t === 'text'));
@@ -585,11 +587,12 @@ export class Editor {
     const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
     box.append(h('div', { class: 'lbl', style: { marginTop: '4px' } }, `พื้นกระดาษหน้านี้ (หน้า ${this.nb.pages.indexOf(page.id) + 1})`));
     if (page.pdf) box.append(h('div', { style: { fontSize: '19px', color: 'var(--muted)', margin: '0 0 6px' } }, 'หน้านี้มาจากไฟล์ PDF จึงเปลี่ยนพื้นไม่ได้ (เปลี่ยนพื้นทุกหน้าจะไม่กระทบหน้า PDF)'));
-    box.append(seg([['blank', 'เปล่า'], ['lines', 'เส้น'], ['grid', 'ตาราง'], ['dots', 'จุด']], page.bg, (v) => this.setPageProps(page, { bg: v })));
+    box.append(seg([['blank', 'เปล่า'], ['lines', 'เส้น'], ['grid', 'ตาราง'], ['dots', 'จุด'], ['math', 'คณิต…']], isMathBg(page.bg) ? 'math' : page.bg, async (v) => { if (v === 'math') { const r = await mathPaperDialog(page); if (r) this.setPageProps(page, r); return; } this.setPageProps(page, { bg: v, bgo: undefined }); }));
+    if (isMathBg(page.bg)) box.append(h('div', { class: 'sub', style: { margin: '4px 2px 0' } }, describeMath(page.bg, page.bgo)));
     box.append(h('div', { style: { height: '8px' } }));
     box.append(seg([['P', 'A4 แนวตั้ง'], ['L', 'A4 แนวนอน']], page.size || 'P', (v) => this.setPageProps(page, { size: v })));
     const allBtn = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '4px' } }, 'ใช้พื้นนี้กับทุกหน้า');
-    allBtn.onclick = () => { this.setAllPagesProps({ bg: page.bg, size: page.size }); toast('เปลี่ยนพื้นทุกหน้าแล้ว'); };
+    allBtn.onclick = () => { this.setAllPagesProps({ bg: page.bg, bgo: page.bgo, size: page.size }); toast('เปลี่ยนพื้นทุกหน้าแล้ว'); };
     box.append(allBtn);
     box.append(h('div', { class: 'lbl' }, 'สีกระดาษ (ทั้งเล่ม)'));
     box.append(seg(Object.entries(PAPERS).map(([k, v]) => [k, v.label]), this.paper, (v) => { this.nb.paper = v; this.saveNb(); this.updateLiveBlend(); this.need.main = true; this.thumbsDirtyAll(); }));
@@ -614,7 +617,9 @@ export class Editor {
     if (prefs.studentUI) mi('upload', 'ส่งงานให้ครู', () => openExportDialog(this, { submit: true }));
     if (!prefs.studentUI) mi('screen', 'หน้าจอนักเรียน', () => this.app.studentMenu(anchor));
     mi('mic', 'บทเรียนที่อัดในเล่มนี้', () => this.app.openRecordings(this.nb.id));
+    mi('history', 'ย้อนดูขั้นก่อนหน้า (ไม่ลบ)', () => this.openPeek(anchor));
     mi('undo', 'กู้เส้นที่หาย (หน้านี้)', () => import('./recover.js').then(m => m.openRecover(this)));
+    mi('share', 'คัดลอก / ย้ายหน้าไปสมุดอื่น', () => import('./copypages.js').then(m => m.openCopyPages(this)));
     if (!prefs.studentUI) mi('film', 'คลิปที่อัดไว้ (ทุกเล่ม)', () => this.app.openRecordings());
     if (!prefs.studentUI) mi('download', 'สำรองสมุดเล่มนี้', async () => { await this.flush(); this.app.exportNotebooks([this.nb.id]); });
     mi('gear', 'ตั้งค่าทั้งหมด', () => this.app.openSettings());
@@ -757,8 +762,9 @@ export class Editor {
       ctx.fillStyle = 'rgba(0,0,0,.10)'; ctx.fillRect(-0.5 / this.z, 2 / this.z, r.w + 1 / this.z, r.h + 1 / this.z);
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, r.w, r.h); ctx.clip();
       drawPaper(ctx, p, this.paper, k);
-      drawStrokes(ctx, p, k, dark, [vx0 - r.x, vy0 - r.y, vx1 - r.x, vy1 - r.y]);
-      if (this.curtain && this.curtain.pid === p.id) drawCurtain(ctx, p, this.curtain.y, k);
+      if (this.peek && this.peek.pid === p.id) { drawStrokes(ctx, { ...p, strokes: this.peek.strokes }, k, dark, [vx0 - r.x, vy0 - r.y, vx1 - r.x, vy1 - r.y]); ctx.save(); ctx.fillStyle = 'rgba(245,184,61,.9)'; ctx.font = `bold ${Math.max(14, 20 / k)}px "TH Sarabun New", sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText(this.peek.label, r.w - 8 / k, 6 / k); ctx.restore(); }
+      else drawStrokes(ctx, p, k, dark, [vx0 - r.x, vy0 - r.y, vx1 - r.x, vy1 - r.y]);
+      if (this.curtain && this.curtain.pid === p.id) { drawCurtain(ctx, p, this.curtain.y, k); drawMarks(ctx, p, k); }
       ctx.restore();
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -912,6 +918,7 @@ export class Editor {
     if (this.pointers.size) { this.pointers.clear(); this.gesture = null; this.pan = null; }
     try { this.stage.setPointerCapture(e.pointerId); } catch { }
     if (this.tryHandle(sx, sy, e)) return;
+    if (this.markArm && this.curtain) { const [wx, wy] = this.toWorld(sx, sy); const pg = this.pageAt(wx, wy); if (pg) { const r = this.rects.get(pg.id); this.placeMark(pg, wy - r.y); try { navigator.vibrate?.(8); } catch { } return; } }
     if (this.curtainHit(sx, sy)) { this.curtainDown(e, sx, sy); return; }
     const rh = this.ruler && this.rulerHit(sx, sy);
     if (rh?.body) { if (type === 'mouse') { this.rgrabObj = 'ruler'; this.rulerDown(e, sx, sy); } return; } // pen resting on the ruler draws nothing
@@ -1145,7 +1152,7 @@ export class Editor {
   up(e, cancel) {
     if (this.shDraw && this.shDraw.id === e.pointerId) { const D = this.shDraw; this.shDraw = null; this.need.ui = true; if (!cancel) this.commitShapeTool(D); this.pointers.delete(e.pointerId); return; }
     if (this.rgrab && this.rgrab.pts.has(e.pointerId)) { this.rulerUp(e); return; }
-    if (this.cdrag && this.cdrag.id === e.pointerId) { this.cdrag = null; this.pointers.delete(e.pointerId); const P = dims(this.pageMap.get(this.curtain.pid)); if (this.curtain.y >= P.h - 4) { this.curtain = null; this.buildToolbar(); toast('เปิดม่านหมดแล้ว', 1000); } this.need.main = true; return; }
+    if (this.cdrag && this.cdrag.id === e.pointerId) { this.cdrag = null; this.pointers.delete(e.pointerId); this.curtainSnap(); const P = dims(this.pageMap.get(this.curtain.pid)); if (this.curtain.y >= P.h - 4) { this.curtain = null; this.buildToolbar(); this.buildCurtainBar(); toast('เปิดม่านหมดแล้ว', 1000); } this.need.main = true; return; }
     if (this.lp && this.lp.id === e.pointerId) { clearTimeout(this.lp.t); this.lp = null; }
     if (this.lasering && this.lasering.id === e.pointerId) { (this.laserEnd ||= new Map()).set(this.lasering.s, performance.now()); this.lasering = null; this.pointers.delete(e.pointerId); this.laserDirty = true; return; }
     if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { this.pointers.delete(e.pointerId); this.finishLasso(); return; }
@@ -1640,7 +1647,87 @@ export class Editor {
   toggleCurtain() {
     if (this.curtain) { this.curtain = null; }
     else { const p = this.currentPage(), r = this.rects.get(p.id), P = dims(p); const [, wy] = this.toWorld(0, this.H * 0.45); this.curtain = { pid: p.id, y: Math.max(40, Math.min(P.h - 60, wy - r.y)) }; toast('ลากขอบสีเหลืองลงเพื่อเปิดคำตอบทีละส่วน · กดปุ่มม่านอีกครั้งเพื่อเอาออก', 3000); }
-    this.need.main = true; this.buildToolbar();
+    this.markArm = false; this.need.main = true; this.buildToolbar(); this.buildCurtainBar();
+  }
+  // ---------- "ย้อนดู": look at earlier states of this page without undoing ----------
+  // each step is a stroke op in the undo stack that touched this page; the view shows the page as it was BEFORE that op
+  peekSteps(page) {
+    const out = [];
+    for (let i = this.undoStack.length - 1; i >= 0; i--) { const op = this.undoStack[i]; if (op.k !== 'str') continue; const it = op.items.find(x => x.pid === page.id); if (it) out.push({ i, before: it.before }); }
+    return out; // newest first
+  }
+  openPeek(anchor) {
+    const page = this.currentPage(); const steps = this.peekSteps(page);
+    if (!steps.length) { toast('หน้านี้ยังไม่มีขั้นก่อนหน้าให้ย้อนดู (นับจากที่เปิดสมุดครั้งนี้)', 2500); return; }
+    const box = h('div', { class: 'peekbox' });
+    const lbl = h('div', { class: 'sub', style: { textAlign: 'center' } }, 'เลื่อนเพื่อดูย้อนหลัง · ไม่ลบอะไรจริง');
+    const range = h('input', { type: 'range', min: 0, max: steps.length, value: 0, style: { width: '100%' } });
+    const stat = h('div', { style: { textAlign: 'center', fontWeight: 700 } }, 'ปัจจุบัน');
+    const apply = (v) => {
+      v = +v;
+      if (!v) { this.peek = null; stat.textContent = 'ปัจจุบัน'; }
+      else { const st = steps[v - 1]; this.peek = { pid: page.id, strokes: st.before, label: `ย้อนดู −${v}` }; stat.textContent = `ย้อนหลัง ${v} ขั้น (จาก ${steps.length}) · ${st.before.length} ชิ้น`; }
+      this.need.main = true; this.app.broadcast?.pageChanged?.(this.peek ? { ...page, strokes: this.peek.strokes } : page);
+    };
+    range.oninput = () => apply(range.value);
+    const prev = h('button', { class: 'chip' }, icon('back'), 'ย้อนอีก'); prev.onclick = () => { range.value = Math.min(steps.length, +range.value + 1); apply(range.value); };
+    const next = h('button', { class: 'chip' }, 'กลับมา', icon('chev')); next.onclick = () => { range.value = Math.max(0, +range.value - 1); apply(range.value); };
+    const restore = h('button', { class: 'pill sec', style: { width: '100%', marginTop: '6px' } }, icon('undo'), 'ใช้สถานะที่ดูอยู่เป็นปัจจุบัน (เลิกทำได้)');
+    restore.onclick = () => { if (!this.peek) { toast('อยู่ที่ปัจจุบันแล้ว', 1500); return; } const before = page.strokes.slice(); page.strokes = this.peek.strokes.map(x => ({ ...x })); this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] }); this.markDirty(page); this.peek = null; this.need.main = true; close(); toast('ย้อนหน้ากลับไปสถานะนั้นแล้ว (เลิกทำได้)', 2500); };
+    box.append(lbl, range, h('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', margin: '6px 0' } }, prev, stat, next), restore);
+    const close = popover(anchor, box, { ...this.popOpts(), onClose: () => { this.peek = null; this.need.main = true; this.app.broadcast?.pageChanged?.(page); } });
+  }
+  // stops the curtain snaps to: the teacher's step markers on this page, else the bottoms of the rows of ink
+  curtainStops(page) {
+    if (page.steps?.length) return page.steps.slice().sort((a, b) => a - b);
+    const rows = [];
+    for (const s of page.strokes) { const bb = strokeBB(s); if (!bb) continue; const r = rows.find(x => bb[1] <= x.y1 + 10 && bb[3] >= x.y0 - 10); if (r) { r.y0 = Math.min(r.y0, bb[1]); r.y1 = Math.max(r.y1, bb[3]); } else rows.push({ y0: bb[1], y1: bb[3] }); }
+    // merge overlapping rows after growth
+    rows.sort((a, b) => a.y0 - b.y0);
+    const out = []; for (const r of rows) { const l = out[out.length - 1]; if (l && r.y0 <= l.y1 + 10) l.y1 = Math.max(l.y1, r.y1); else out.push({ ...r }); }
+    return out.map(r => r.y1 + 8);
+  }
+  curtainStep(dir) {
+    const c = this.curtain; if (!c) return;
+    const page = this.pageMap.get(c.pid), P = dims(page), stops = this.curtainStops(page);
+    let y;
+    if (dir > 0) { y = stops.find(v => v > c.y + 6); if (y == null) y = P.h; }
+    else { const prev = stops.filter(v => v < c.y - 6); y = prev.length ? prev[prev.length - 1] : Math.max(20, Math.min(...stops.filter(v => v < c.y), c.y)); if (!prev.length) y = Math.max(20, stops[0] ? Math.min(stops[0], c.y) - 0 : c.y); }
+    c.y = Math.max(0, Math.min(P.h, y));
+    if (c.y >= P.h - 4) { this.curtain = null; this.buildToolbar(); toast('เปิดม่านหมดแล้ว', 1000); }
+    this.need.main = true; this.app.broadcast?.viewChanged?.();
+  }
+  // snap the dragged curtain to the nearest stop when it is close
+  curtainSnap() {
+    const c = this.curtain; if (!c) return;
+    const page = this.pageMap.get(c.pid), stops = this.curtainStops(page);
+    let best = null; for (const v of stops) if (best == null || Math.abs(v - c.y) < Math.abs(best - c.y)) best = v;
+    if (best != null && Math.abs(best - c.y) < 16) c.y = best;
+  }
+  // step markers: tap to place where the curtain should stop
+  curtainMarkMode() {
+    if (!this.curtain) return;
+    this.markArm = !this.markArm; this.need.ui = true;
+    toast(this.markArm ? 'แตะบนหน้าตรงที่อยากให้ม่านหยุด (แตะได้หลายจุด · แตะปุ่มอีกครั้งเพื่อเลิก)' : 'เลิกวางจุดหยุด', 2500);
+    this.buildCurtainBar();
+  }
+  placeMark(page, y) {
+    page.steps = [...(page.steps || []), Math.round(y)].sort((a, b) => a - b);
+    this.markDirty(page); this.need.main = true; this.buildCurtainBar();
+  }
+  clearMarks(page) { page.steps = undefined; this.markDirty(page); this.need.main = true; this.buildCurtainBar(); toast('ลบจุดหยุดทั้งหมดของหน้านี้แล้ว', 1500); }
+  buildCurtainBar() {
+    this.curtainBar?.remove(); this.curtainBar = null;
+    if (!this.curtain) return;
+    const page = this.pageMap.get(this.curtain.pid), n = page.steps?.length || 0;
+    const B = (ic, label, fn, on) => { const b = h('button', { class: 'chip' + (on ? ' on' : '') }, icon(ic), h('span', {}, label)); b.onclick = fn; return b; };
+    const bar = h('div', { class: 'ctxbar curtainbar' },
+      B('up', 'ย้อน', () => this.curtainStep(-1)),
+      B('down', n ? 'ถัดไป' : 'บรรทัดถัดไป', () => this.curtainStep(1)),
+      B('pin', n ? `จุดหยุด ${n}` : 'วางจุดหยุด', () => this.curtainMarkMode(), this.markArm),
+      n ? B('trash', 'ลบจุด', () => this.clearMarks(page)) : null,
+      B('close', 'ปิดม่าน', () => { this.toggleCurtain(); }));
+    this.stage.append(bar); this.curtainBar = bar;
   }
   curtainHit(sx, sy) {
     const c = this.curtain; if (!c) return false;
@@ -2217,7 +2304,8 @@ export class Editor {
   newPageObj(props = {}) {
     const cur = this.currentPage();
     const bg = props.bg || (cur?.bg === 'pdf' ? 'grid' : cur?.bg) || 'grid';
-    return { id: uid(), nb: this.nb.id, size: props.size || (cur?.pdf ? (cur.pw > cur.ph ? 'L' : 'P') : cur?.size) || 'P', bg, strokes: [] };
+    const bgo = props.bg ? props.bgo : (cur && !cur.pdf ? cur.bgo : undefined);
+    return { id: uid(), nb: this.nb.id, size: props.size || (cur?.pdf ? (cur.pw > cur.ph ? 'L' : 'P') : cur?.size) || 'P', bg, bgo, strokes: [] };
   }
   addPage(props, afterId) {
     const p = this.newPageObj(props); this.pageMap.set(p.id, p);
@@ -2270,9 +2358,9 @@ export class Editor {
   }
   setPageProps(page, props) {
     if (page.pdf) { toast('หน้า PDF เปลี่ยนพื้นไม่ได้'); return; }
-    const before = { bg: page.bg, size: page.size || 'P' };
+    const before = { bg: page.bg, bgo: page.bgo, size: page.size || 'P' };
     Object.assign(page, props);
-    this.pushHistory({ k: 'props', items: [{ pid: page.id, before, after: { bg: page.bg, size: page.size } }] });
+    this.pushHistory({ k: 'props', items: [{ pid: page.id, before, after: { bg: page.bg, bgo: page.bgo, size: page.size } }] });
     this.markDirty(page); this.relayout(false); this.need.main = true;
   }
   setAllPagesProps(props) {
@@ -2291,7 +2379,7 @@ export class Editor {
   applyRemotePage(np) {
     const p = this.pageMap.get(np.id); if (!p) return false;
     if (this.dirty.has(p.id) || (this.live && this.live.page === p)) return false; // being written here right now
-    p.strokes = np.strokes; p.bg = np.bg; p.size = np.size; p.pw = np.pw; p.ph = np.ph; p.pdf = np.pdf; p.del = np.del; p.updated = np.updated; p._ver = (p._ver || 0) + 1; p._ids = new Set(p.strokes.map(x => x.id).filter(Boolean)); this.lastShot?.set(p.id, p.strokes.slice());
+    p.strokes = np.strokes; p.bg = np.bg; p.bgo = np.bgo; p.steps = np.steps; p.size = np.size; p.pw = np.pw; p.ph = np.ph; p.pdf = np.pdf; p.del = np.del; p.updated = np.updated; p._ver = (p._ver || 0) + 1; p._ids = new Set(p.strokes.map(x => x.id).filter(Boolean)); this.lastShot?.set(p.id, p.strokes.slice());
     this.app.broadcast?.pageChanged(p);
     this.thumbCache?.delete(p.id); this.need.main = true;
     if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 300); }
@@ -2336,6 +2424,7 @@ export class Editor {
       B('down', 'เลื่อนหน้าลง', () => this.movePage(this.currentPage().id, 1)),
       B('star', this.nb.marks?.[cur?.id] ? 'ถอนที่คั่น' : 'ปักที่คั่นหน้านี้', () => this.toggleMark(this.currentPage().id)),
       B('copy', 'ทำสำเนาหน้า', () => this.duplicatePage(this.currentPage().id)),
+      B('share', 'คัดลอก / ย้ายหน้าไปสมุดอื่น', () => import('./copypages.js').then(m => m.openCopyPages(this))),
       B('trash', 'ลบหน้า', () => this.deletePage(this.currentPage().id)));
     t.append(list, acts);
     if (keep != null) list.scrollTop = keep;
@@ -2424,16 +2513,17 @@ export class Editor {
   }
   addPageMenu(anchor) {
     const cur = this.currentPage();
-    let bg = cur.bg, size = cur.size || 'P';
+    let bg = cur.bg, bgo = cur.bgo, size = cur.size || 'P';
+    const mdesc = h('div', { class: 'sub', style: { margin: '4px 2px 0' } }, isMathBg(bg) ? describeMath(bg, bgo) : '');
     const box = h('div', { style: { width: '330px' } },
-      h('div', { class: 'lbl', style: { marginTop: 0 } }, 'พื้นกระดาษ'), seg([['blank', 'เปล่า'], ['lines', 'เส้น'], ['grid', 'ตาราง'], ['dots', 'จุด']], bg, v => bg = v),
+      h('div', { class: 'lbl', style: { marginTop: 0 } }, 'พื้นกระดาษ'), seg([['blank', 'เปล่า'], ['lines', 'เส้น'], ['grid', 'ตาราง'], ['dots', 'จุด'], ['math', 'คณิต…']], isMathBg(bg) ? 'math' : bg, async v => { if (v === 'math') { const r = await mathPaperDialog({ bg, bgo }); if (r) { bg = r.bg; bgo = r.bgo; mdesc.textContent = describeMath(bg, bgo); } return; } bg = v; bgo = undefined; mdesc.textContent = ''; }), mdesc,
       h('div', { class: 'lbl' }, 'ขนาด'), seg([['P', 'A4 แนวตั้ง'], ['L', 'A4 แนวนอน']], size, v => size = v));
     const ok = h('button', { class: 'pill prim', style: { width: '100%', marginTop: '14px' } }, icon('plus'), 'เพิ่มต่อจากหน้านี้');
     const end = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '4px' } }, 'เพิ่มไว้ท้ายสมุด');
-    ok.onclick = () => { close(); this.addPage({ bg, size }, cur.id); };
+    ok.onclick = () => { close(); this.addPage({ bg, bgo, size }, cur.id); };
     const pdfB = h('button', { class: 'pill sec', style: { width: '100%', marginTop: '8px' } }, icon('pdf'), 'แทรกไฟล์ PDF ต่อจากหน้านี้');
     pdfB.onclick = async () => { close(); const f = await pickFile('application/pdf,.pdf'); if (f) this.insertPdf(f, cur.id); };
-    end.onclick = () => { close(); this.addPage({ bg, size }); };
+    end.onclick = () => { close(); this.addPage({ bg, bgo, size }); };
     box.append(ok, end, pdfB);
     const close = popover(anchor, box, { place: 'auto' });
   }
@@ -2587,7 +2677,7 @@ export function deviceTag() {
   try { let t = localStorage.getItem('senkid.dev'); if (!t) { t = (navigator.standalone ? 'app' : 'web') + '-' + Math.random().toString(36).slice(2, 6); localStorage.setItem('senkid.dev', t); } return t; } catch { return '?'; }
 }
 export function serializePage(p) {
-  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, del: p.del && Object.keys(p.del).length ? p.del : undefined, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, rot: s.rot || undefined }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, meta: s.meta, rot: s.rot || undefined }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.rev) o.rev = s.rev; if (s.hs) o.hs = s.hs; if (s.fill) o.fill = s.fill; if (s.fc) o.fc = s.fc; if (s.raw) o.raw = s.raw; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
+  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, bgo: p.bgo, steps: p.steps?.length ? p.steps : undefined, pw: p.pw, ph: p.ph, pdf: p.pdf, del: p.del && Object.keys(p.del).length ? p.del : undefined, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, rot: s.rot || undefined }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, meta: s.meta, rot: s.rot || undefined }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.rev) o.rev = s.rev; if (s.hs) o.hs = s.hs; if (s.fill) o.fill = s.fill; if (s.fc) o.fc = s.fc; if (s.raw) o.raw = s.raw; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
 }
 
 // affine transform of any page object (M = [a,b,c,d,e,f]; sc = uniform scale; ang = rotation)
