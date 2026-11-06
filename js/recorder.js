@@ -111,7 +111,7 @@ export class Recorder {
         camSub.textContent = (camSel.value ? `เปิด: ${camSel.selectedOptions[0]?.textContent}` : prefs.rec.cam ? `ไม่พบกล้อง "${prefs.rec.camLabel || prefs.rec.cam}" ตอนนี้ · เสียบแล้วเลือกใหม่` : 'ปิดอยู่ · จะอัดเสียงกับลายมืออย่างเดียว') + (force ? ` · พบกล้อง ${devs.length} ตัว${names ? ': ' + names : ''}` : '');
       };
       camRefresh.onclick = () => fillCams(true, true);
-      const startCamPreview = async () => { stopCamPreview(); if (!prefs.rec.cam) return; const st = await openCam(); if (!st) { camSub.textContent = 'เปิดกล้องไม่ได้ · ตรวจการอนุญาตกล้องใน Safari'; return; } this.camTest = st; const stage = ed?.stage || document.body; showCamPip(stage, st, {}); };
+      const startCamPreview = async () => { stopCamPreview(); if (!prefs.rec.cam) return; camSub.textContent = 'กำลังเปิดกล้อง…'; const st = await openCam(); if (!st) { camSub.textContent = 'เปิดกล้องไม่ได้: ' + camErrorText(openCam.lastError); camSub.style.color = 'var(--warn, #b45309)'; return; } camSub.style.color = ''; camSub.textContent = `เปิด: ${camSel.selectedOptions[0]?.textContent} · ${st.getVideoTracks()[0]?.getSettings?.().width || '?'}×${st.getVideoTracks()[0]?.getSettings?.().height || '?'}`; this.camTest = st; const stage = ed?.stage || document.body; showCamPip(stage, st, {}); };
       const stopCamPreview = () => { hideCamPip(); this.camTest?.getTracks().forEach(t => t.stop()); this.camTest = null; };
       camSel.onchange = () => { prefs.rec.cam = camSel.value; prefs.rec.camLabel = camSel.value ? (camSel.selectedOptions[0]?.textContent || '') : ''; savePrefs(); fillCams(); startCamPreview(); };
       fillCams(true); if (prefs.rec.cam) startCamPreview();
@@ -295,11 +295,40 @@ export async function openCam() {
   const devs = await listCams();
   let d = devs.find(x => x.deviceId === want); if (!d && prefs.rec.camLabel) d = devs.find(x => x.label && x.label === prefs.rec.camLabel);
   const tries = [];
-  if (d) tries.push({ ...vid, deviceId: { exact: d.deviceId } });
+  // external (USB) cameras on iPad are picky about size constraints: ask for the device alone first, then with sizes
+  if (d) tries.push({ deviceId: { exact: d.deviceId } }, { deviceId: { exact: d.deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }, { ...vid, deviceId: { exact: d.deviceId } });
   if (want === 'user' || want === 'environment' || !d) tries.push({ ...vid, facingMode: want === 'environment' ? 'environment' : 'user' });
-  tries.push(vid);
-  for (const c of tries) { try { return await navigator.mediaDevices.getUserMedia({ video: c, audio: false }); } catch (e) { console.warn('cam', e); } }
+  if (!d) tries.push(vid);
+  openCam.lastError = null;
+  for (const c of tries) {
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ video: c, audio: false });
+      // some external cameras hand over a track that never delivers frames: wait briefly for the first frame
+      const ok = await firstFrame(st, 2500);
+      if (ok) return st;
+      st.getTracks().forEach(t => t.stop()); openCam.lastError = { name: 'NoFrames', message: 'กล้องเปิดได้แต่ไม่ส่งภาพ' };
+    } catch (e) { console.warn('cam', e); openCam.lastError = e; }
+  }
   return null;
+}
+function firstFrame(stream, ms) {
+  return new Promise((res) => {
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.srcObject = stream; v.style.cssText = 'position:fixed;left:-9999px;width:64px';
+    document.body.append(v); let done = false;
+    const fin = (ok) => { if (done) return; done = true; v.srcObject = null; v.remove(); res(ok); };
+    const tick = () => { if (done) return; if (v.videoWidth > 0 && v.readyState >= 2) return fin(true); requestAnimationFrame(tick); };
+    v.play().then(tick).catch(() => tick()); setTimeout(() => fin(false), ms);
+  });
+}
+export function camErrorText(e) {
+  if (!e) return '';
+  const n = e.name || '';
+  if (n === 'NotAllowedError') return 'ไม่ได้รับอนุญาตให้ใช้กล้อง · ตั้งค่า iPad > Safari > กล้อง = อนุญาต (หรือ ตั้งค่า > แอปเส้นคิด)';
+  if (n === 'NotReadableError' || n === 'AbortError') return 'กล้องถูกแอปอื่นใช้อยู่ (เช่น FaceTime) · ปิดแอปนั้นแล้วลองใหม่';
+  if (n === 'OverconstrainedError') return 'กล้องไม่รองรับค่าที่ขอ';
+  if (n === 'NotFoundError') return 'ไม่พบกล้องแล้ว · ตรวจสายและฮับ';
+  if (n === 'NoFrames') return 'กล้องเปิดได้แต่ไม่ส่งภาพ (Safari ยังรับภาพจากกล้องนี้ไม่ได้) · ลองถอด-เสียบใหม่ หรือใช้กล้องในตัว';
+  return `${n} ${e.message || ''}`.trim();
 }
 export function pickCamMime() {
   if (typeof MediaRecorder === 'undefined') return '';
@@ -380,7 +409,7 @@ export class AudioRecorder {
     this.cam = null;
     if (prefs.rec.cam) {
       const cs = await openCam();
-      if (!cs) toast('เปิดกล้องครูไม่ได้ · อัดเสียง + ลายมืออย่างเดียว', 3000, 'warn');
+      if (!cs) toast('เปิดกล้องครูไม่ได้ (' + camErrorText(openCam.lastError) + ') · อัดเสียง + ลายมืออย่างเดียว', 4500, 'warn');
       else {
         const cmime = pickCamMime(); let cmr; try { cmr = new MediaRecorder(cs, cmime ? { mimeType: cmime, videoBitsPerSecond: 900e3 } : { videoBitsPerSecond: 900e3 }); } catch { cmr = new MediaRecorder(cs); }
         this.cam = { stream: cs, mr: cmr, id: this.recId + '-cam', seq: 0, bytes: 0, writes: [], mime: cmr.mimeType || cmime || 'video/mp4' };
