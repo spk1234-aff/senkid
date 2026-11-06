@@ -92,20 +92,25 @@ export class Recorder {
       const camShape = seg([['circle', 'วงกลม'], ['round', 'สี่เหลี่ยมมน']], prefs.rec.camShape || 'circle', v => { prefs.rec.camShape = v; savePrefs(); for (const el of document.querySelectorAll('video.campip')) el.className = 'campip ' + v; });
       const camSize = seg([['110', 'เล็ก'], ['150', 'กลาง'], ['210', 'ใหญ่']], String(prefs.rec.camSize || 150), v => { prefs.rec.camSize = +v; savePrefs(); if (this.camTest) startCamPreview(); });
       const camSub = h('div', { class: 'sub', style: { marginTop: '4px' } }, 'ปิดอยู่ · จะอัดเสียงกับลายมืออย่างเดียว');
-      body.append(h('div', { class: 'lbl' }, 'กล้องครู (ภาพเล็กที่มุม)'), h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, camSel), camSub,
+      const camRefresh = h('button', { class: 'pill sec', style: { flex: 'none' }, title: 'ค้นหากล้องใหม่ (หลังเสียบกล้องนอก)' }, icon('sync'), 'ค้นหากล้อง');
+      body.append(h('div', { class: 'lbl' }, 'กล้องครู (ภาพเล็กที่มุม)'), h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, camSel, camRefresh), camSub,
         h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' } }, h('span', { class: 'sub' }, 'รูปทรง'), camShape, h('span', { class: 'sub' }, 'ขนาด'), camSize),
         h('p', { class: 'sub', style: { margin: '6px 0 0' } }, 'เปิดแล้ว: ระหว่างอัดจะเห็นตัวเองเล็ก ๆ ที่มุมกระดาน ลากย้ายได้ ไม่ฉายขึ้นทีวี · ตอนเล่นย้อน/ส่งออกวิดีโอจะมีภาพครูซ้อนที่มุมนั้น · ไฟล์ ≈ 6–8 MB/นาที'));
-      const fillCams = async (askPerm = false) => {
+      const fillCams = async (askPerm = false, force = false) => {
         let devs = await listCams();
-        if (askPerm && devs.length && devs.every(d => !d.label) && prefs.rec.cam) { try { const st = await navigator.mediaDevices.getUserMedia({ video: true }); st.getTracks().forEach(t => t.stop()); devs = await listCams(); } catch { } }
+        // Safari shows camera names only after the camera permission was granted once; ask when the teacher looks for a camera
+        if ((force || (askPerm && prefs.rec.cam)) && (!devs.length || devs.every(d => !d.label))) { try { const st = await navigator.mediaDevices.getUserMedia({ video: true }); st.getTracks().forEach(t => t.stop()); devs = await listCams(); } catch (e) { camSub.textContent = 'ขอสิทธิ์กล้องไม่สำเร็จ: ' + (e.name || e); } }
+        const names = devs.map((d, i) => camName(d, i)).join(', ');
+        camSel._names = names;
         camSel.innerHTML = ''; camSel.append(h('option', { value: '' }, 'ปิด (ไม่อัดกล้อง)'));
         if (!devs.length) { camSel.append(h('option', { value: 'user' }, 'กล้องหน้า'), h('option', { value: 'environment' }, 'กล้องหลัง')); }
         devs.forEach((d, i) => camSel.append(h('option', { value: d.deviceId }, camName(d, i))));
         const cur = devs.find(x => x.deviceId === prefs.rec.cam) || (prefs.rec.camLabel && devs.find(x => x.label === prefs.rec.camLabel));
         camSel.value = cur ? cur.deviceId : (prefs.rec.cam === 'user' || prefs.rec.cam === 'environment') && !devs.length ? prefs.rec.cam : prefs.rec.cam && !cur ? '' : '';
         if (prefs.rec.cam && !cur && devs.length) { camSel.value = ''; }
-        camSub.textContent = camSel.value ? `เปิด: ${camSel.selectedOptions[0]?.textContent}` : prefs.rec.cam ? `ไม่พบกล้อง "${prefs.rec.camLabel || prefs.rec.cam}" ตอนนี้ · เสียบแล้วเลือกใหม่` : 'ปิดอยู่ · จะอัดเสียงกับลายมืออย่างเดียว';
+        camSub.textContent = (camSel.value ? `เปิด: ${camSel.selectedOptions[0]?.textContent}` : prefs.rec.cam ? `ไม่พบกล้อง "${prefs.rec.camLabel || prefs.rec.cam}" ตอนนี้ · เสียบแล้วเลือกใหม่` : 'ปิดอยู่ · จะอัดเสียงกับลายมืออย่างเดียว') + (force ? ` · พบกล้อง ${devs.length} ตัว${names ? ': ' + names : ''}` : '');
       };
+      camRefresh.onclick = () => fillCams(true, true);
       const startCamPreview = async () => { stopCamPreview(); if (!prefs.rec.cam) return; const st = await openCam(); if (!st) { camSub.textContent = 'เปิดกล้องไม่ได้ · ตรวจการอนุญาตกล้องใน Safari'; return; } this.camTest = st; const stage = ed?.stage || document.body; showCamPip(stage, st, {}); };
       const stopCamPreview = () => { hideCamPip(); this.camTest?.getTracks().forEach(t => t.stop()); this.camTest = null; };
       camSel.onchange = () => { prefs.rec.cam = camSel.value; prefs.rec.camLabel = camSel.value ? (camSel.selectedOptions[0]?.textContent || '') : ''; savePrefs(); fillCams(); startCamPreview(); };
