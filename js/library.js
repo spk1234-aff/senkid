@@ -51,7 +51,7 @@ export class Library {
     const st = h('button', { class: 'fold' }, icon('gear'), 'ตั้งค่า'); st.onclick = () => this.app.openSettings();
     const hp = h('button', { class: 'fold' }, icon('help'), 'วิธีใช้'); hp.onclick = () => this.app.openHelp();
     const mode = h('div', { class: 'modesw' }, h('div', { class: 'lbl' }, 'ใช้งานแบบ'),
-      seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', async (v) => { if (v === 't' && !(await requireTeacher())) { this.render(); return; } prefs.studentUI = v === 's'; if (v === 's') setUnlocked(false); savePrefs(); this.render(); toast(prefs.studentUI ? 'โหมดนักเรียน: ซ่อนเครื่องมือฉายจอ อัดเสียง จับเวลา และม่าน' : 'โหมดครู: แสดงเครื่องมือครบ', 2200); }));
+      seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', async (v) => { if (v === 't' && !(await requireTeacher())) { this.render(); return; } prefs.studentUI = v === 's'; if (v === 's') setUnlocked(false); savePrefs(); this.render(); toast(prefs.studentUI ? 'โหมดนักเรียน: ซ่อนเครื่องมือฉายจอ สุ่มชื่อ และม่านบังคำตอบ' : 'โหมดครู: แสดงเครื่องมือครบ', 2200); }));
     const sp = h('button', { class: 'fold syncpill' }, icon('cloud'), h('span', {}, ''));
     const paint = () => { sp.lastChild.textContent = statusText(); sp.classList.toggle('spin', sync.state === 'syncing'); sp.classList.toggle('warn', sync.state === 'auth' || sync.state === 'error'); };
     sp.onclick = () => { if (!connected()) this.app.openSettings(); else if (sync.state === 'auth') signIn(); else syncNow('manual'); };

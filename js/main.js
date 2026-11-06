@@ -18,7 +18,7 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { sync, initSync, syncNow, signIn, disconnect, statusText, connected, hasFileScope, tokenOk } from './sync.js';
 
-export const VERSION = '1.9.46';
+export const VERSION = '1.9.47';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -215,7 +215,7 @@ class App {
       card(
         row('ธีม', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
         row('ฟอนต์ของแอป', (() => { const cur = UI_FONTS.find(f => f[0] === (prefs.uiFont || 'sarabun')) || UI_FONTS[0]; const b = h('button', { class: 'pill sec', style: { height: '42px', fontFamily: familyOf(cur[0]) } }, cur[1], icon('down')); b.onclick = () => this.fontPicker(b); return b; })(), 'ปุ่มและเมนู · ข้อความบนกระดาษไม่เปลี่ยน'),
-        row('โหมดนักเรียน', toggle(!!prefs.studentUI, async (v, t) => { if (!v && !(await requireTeacher())) { t?.set?.(true); prefs.studentUI = true; savePrefs(); return; } prefs.studentUI = v; if (v) setUnlocked(false); savePrefs(); refreshEd(); }), (accountRule() && !isTeacherDevice() ? 'เครื่องนี้เป็นเครื่องนักเรียน · โหมดครูเปิดได้เฉพาะเครื่องที่เชื่อม Google ด้วยบัญชีครู' : 'ซ่อนเครื่องมือของครู (ฉายจอ อัดเสียง จับเวลา ม่าน) ให้แถบเรียบง่าย')),
+        row('โหมดนักเรียน', toggle(!!prefs.studentUI, async (v, t) => { if (!v && !(await requireTeacher())) { t?.set?.(true); prefs.studentUI = true; savePrefs(); return; } prefs.studentUI = v; if (v) setUnlocked(false); savePrefs(); refreshEd(); }), (accountRule() && !isTeacherDevice() ? 'เครื่องนี้เป็นเครื่องนักเรียน · โหมดครูเปิดได้เฉพาะเครื่องที่เชื่อม Google ด้วยบัญชีครู' : 'ซ่อนเครื่องมือของครู (ฉายจอ สุ่มชื่อ ม่านบังคำตอบ) ให้แถบเรียบง่าย')),
                 row('ตำแหน่งแถบเครื่องมือ', seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, v => { prefs.toolbarPos = v; savePrefs(); refreshEd(); })),
         row('แสดง 2 หน้าคู่เมื่อจอแนวนอน', toggle(prefs.twoPage, v => { prefs.twoPage = v; savePrefs(); this.editor?.relayout(true); })),
         row('ซ่อนแถบเครื่องมือ', toggle(prefs.toolbarHidden, v => { prefs.toolbarHidden = v; savePrefs(); refreshEd(); }))),

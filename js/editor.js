@@ -188,7 +188,7 @@ export class Editor {
         { icon: 'mic', label: this.app.audio?.active ? 'หยุดอัดเสียง' : 'อัดเสียง + ลายมือ', action: () => this.app.audioClick(this, b) },
         { icon: 'play', label: 'บทเรียนที่อัดในเล่มนี้', action: () => this.app.openRecordings(this.nb.id) },
         { icon: 'pageplus', label: 'เพิ่มหน้า / แทรก PDF', action: () => this.addPageMenu(b) },
-        ...(prefs.studentUI ? [] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'dice', label: 'สุ่มชื่อนักเรียน / จัดกลุ่ม', action: () => this.app.picker.open(b) }]),
+        ...(prefs.studentUI ? [{ icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }] : [{ icon: 'screen', label: 'หน้าจอนักเรียน / ต่อทีวี', action: () => this.app.studentMenu(b) }, { icon: 'timer', label: 'นาฬิกาจับเวลา', action: () => this.app.timer.panel(b) }, { icon: 'dice', label: 'สุ่มชื่อนักเรียน / จัดกลุ่ม', action: () => this.app.picker.open(b) }]),
       ], this.popOpts()), t === 'shapes' || t === 'text'));
       if (prefs.studentUI) for (const el of dock.querySelectorAll('button')) if (/^ม่านบัง/.test(el.title)) el.remove();
       // options for the current tool
@@ -310,7 +310,7 @@ export class Editor {
     // student mode: hide the teacher-only tools (projector, recording, timer, curtain)
     if (prefs.studentUI) for (const el of this.tb.querySelectorAll('button')) {
       const t = el.title || el.getAttribute('aria-label') || '';
-      if (/^(หน้าจอนักเรียน|นาฬิกาจับเวลา|อัดคลิป|ม่านบังคำตอบ|สุ่มชื่อ)/.test(t) || el.classList.contains('recbtn')) el.remove(); // students may still record audio
+      if (/^(หน้าจอนักเรียน|อัดคลิป|ม่านบังคำตอบ|สุ่มชื่อ)/.test(t) || el.classList.contains('recbtn')) el.remove(); // students keep the timer may still record audio
     }
   }
   buildToolbar0() {
@@ -598,7 +598,7 @@ export class Editor {
     box.append(h('div', { class: 'lbl' }, 'ธีม'));
     box.append(seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, (v) => { prefs.theme = v; savePrefs(); applyTheme(); this.need.main = true; }));
     box.append(h('div', { style: { height: '6px' } }));
-    box.append(row('ใช้งานแบบ', seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', async (v) => { if (v === 't' && !(await (await import('./lock.js')).requireTeacher())) { this.buildToolbar(); return; } prefs.studentUI = v === 's'; savePrefs(); this.buildToolbar(); }), 'โหมดนักเรียนซ่อนปุ่มฉายจอ อัดคลิป จับเวลา และม่าน'));
+    box.append(row('ใช้งานแบบ', seg([['t', 'ครู'], ['s', 'นักเรียน']], prefs.studentUI ? 's' : 't', async (v) => { if (v === 't' && !(await (await import('./lock.js')).requireTeacher())) { this.buildToolbar(); return; } prefs.studentUI = v === 's'; savePrefs(); this.buildToolbar(); }), 'โหมดนักเรียนซ่อนปุ่มฉายจอ อัดคลิป และม่าน'));
     box.append(row('เขียนด้วยนิ้ว', toggle(prefs.fingerDraw, (v) => { prefs.fingerDraw = v; savePrefs(); }), 'ปิดไว้: นิ้วใช้เลื่อนและซูม'));
     box.append(row('แปลงเป็นรูปทรงอัตโนมัติ', toggle(prefs.shapeRecog, (v) => { prefs.shapeRecog = v; savePrefs(); this.buildToolbar(); }), 'ขีดแล้วกดค้างไว้ 0.5 วินาที'));
     box.append(row('ขีดฆ่าเพื่อลบ', toggle(prefs.scribbleErase, (v) => { prefs.scribbleErase = v; savePrefs(); }), 'ขีดไปมาซ้ำ ๆ ทับเส้นที่ต้องการลบ'));
