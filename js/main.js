@@ -21,7 +21,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.53';
+export const VERSION = '1.9.54';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -260,7 +260,7 @@ class App {
         row('สำรองสมุดทั้งหมด', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'ส่งออก'); b.onclick = async () => { await this.editor?.flush(); this.exportNotebooks((await db.getAll('notebooks')).map(n => n.id)); }; return b; })()),
         row('นำเข้าไฟล์สำรอง', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('upload'), 'นำเข้า'); b.onclick = () => this.importBackup(); return b; })()),
         ...(prefs.studentUI ? [] : [row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => openRecordings(); return b; })()),
-        row('ตัดต่อบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('scissors'), 'โปรเจกต์'); b.onclick = async () => (await import('./cut.js')).openProjects(this); return b; })())])),
+        row('ทำวิดีโอจากบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เริ่ม'); b.onclick = async () => (await import('./makevideo.js')).openMakeVideo(this); return b; })(), 'เลือกบทเรียน ตัดช่วงเงียบให้เอง ได้วิดีโอ 1 ไฟล์')])),
       h('div', { class: 'sec-t' }, 'ความช่วยเหลือ'),
       card(
         ...(prefs.studentUI ? [] : [row('สถิติการใช้งาน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('graph'), 'ดู'); b.onclick = async () => (await import('./stats.js')).openStats(); return b; })(), 'เวลาเขียน ต่อทีวี บทเรียนที่อัด (นับในเครื่องนี้)')]),

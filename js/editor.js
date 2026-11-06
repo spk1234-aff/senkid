@@ -360,7 +360,7 @@ export class Editor {
     this.micBtn = B('mic', 'อัดเสียง + ลายมือ (กดค้างเพื่อตั้งค่า)', (b) => this.app.audioClick(this, b)); onLongPress(this.micBtn, () => this.app.recorderSettings(this, this.micBtn));
     const g4 = h('div', { class: 'grp' }, this.micBtn,
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
-      B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
+      this.menuBtn = B('menu', 'เมนู', (b) => import('./hub.js').then(m => m.openHub(this, b))),
       B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · ลากขีดบนแถบเล็กเพื่อย้ายไปไหนก็ได้ · ˄˅ เปลี่ยนหน้า · แตะเครื่องมือซ้ำเพื่อตั้งค่า · × ออก', 4500, 'keep'); }));
     tb.append(g1, sep(), g2, sep(), g3, sep(), this.gSizes, h('div', { class: 'grow' }), g4);
     this.updateUndoBtns();
@@ -389,34 +389,30 @@ export class Editor {
     const left = h('div', { class: 'side l' },
       this.btnPages = B('pages', 'ภาพย่อหน้า', () => this.toggleThumbs(), this.thumbs.classList.contains('open')),
       B('fit', 'พอดีหน้าจอ', () => this.fit()));
+    // labelled buttons: icon with a Thai word under it
+    const L = (ic, label, title, fn, on, cls = '') => { const b = h('button', { class: 'btn sq lb ' + cls + (on ? ' on' : ''), title, 'aria-label': title }, icon(ic), h('span', { class: 'lbt' }, label)); b.addEventListener('click', (e) => fn(b, e)); return b; };
     const center = h('div', { class: 'center' },
-      B(prefs.penType, 'ปากกา', (b) => { if (this.tool === 'pen') openPenPanel(b, this, {}); else this.setTool('pen'); }, t === 'pen'),
-      B('hl', 'ไฮไลต์', (b) => { if (this.tool === 'hl') openPenPanel(b, this, {}); else this.setTool('hl'); }, t === 'hl'),
-      B('eraser', 'ยางลบ', (b) => { if (this.tool === 'eraser') openEraserPanel(b, this, {}); else this.setTool('eraser'); }, t === 'eraser'),
-      B('shape', 'รูปทรงและลูกศร (ทำแผนผัง)', () => this.setTool('shapes'), t === 'shapes'),
-      B('sticker', 'สติกเกอร์', (b) => this.stickerPanel(b)),
-      B('curtain', 'ม่านบังคำตอบ', () => this.toggleCurtain(), !!this.curtain),
-      B('equation', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์', (b) => this.mathMenu(b)),
-      B('calc', 'เครื่องคิดเลขวิทยาศาสตร์', async () => (await import('./calculator.js')).toggleCalculator(this)),
-      B('ruler', 'ไม้บรรทัด (ใช้นิ้วลากย้าย สองนิ้วหมุน ลากปากกาชิดขอบได้เส้นตรง)', () => this.toggleRuler(), !!this.ruler),
-      B('lasso', 'บ่วงบาศ (เลือก ย้าย ย่อขยาย หมุน)', () => this.setTool('lasso'), t === 'lasso'),
-      B('image', 'แทรกรูปภาพ', () => this.pickImage()),
-      B('text', 'กล่องข้อความ', () => this.setTool('text'), t === 'text'),
-      B('laser', 'เลเซอร์พอยเตอร์', () => this.setTool('laser'), t === 'laser'));
-    this.recBtn = h('button', { class: 'recbtn', title: 'อัดคลิป (กดค้างเพื่อตั้งค่า)' }, h('span', { class: 'dot' }), h('span', { class: 'lab' }, 'อัดคลิป'));
-    this.recBtn.onclick = () => this.app.recorderClick(this, this.recBtn);
-    onLongPress(this.recBtn, () => this.app.recorderSettings(this, this.recBtn));
-    this.micBtn = B('mic', 'อัดเสียง + ลายมือ (กดค้างเพื่อตั้งค่า)', (b) => this.app.audioClick(this, b)); onLongPress(this.micBtn, () => this.app.recorderSettings(this, this.micBtn));
+      L(prefs.penType, 'ปากกา', 'ปากกา', (b) => { if (this.tool === 'pen') openPenPanel(b, this, {}); else this.setTool('pen'); }, t === 'pen'),
+      L('hl', 'ไฮไลต์', 'ไฮไลต์', (b) => { if (this.tool === 'hl') openPenPanel(b, this, {}); else this.setTool('hl'); }, t === 'hl'),
+      L('eraser', 'ยางลบ', 'ยางลบ', (b) => { if (this.tool === 'eraser') openEraserPanel(b, this, {}); else this.setTool('eraser'); }, t === 'eraser'),
+      L('lasso', 'เลือก', 'บ่วงบาศ (เลือก ย้าย ย่อขยาย หมุน)', () => this.setTool('lasso'), t === 'lasso'),
+      L('shape', 'รูปทรง', 'รูปทรงและลูกศร (ทำแผนผัง)', () => this.setTool('shapes'), t === 'shapes'),
+      L('text', 'ข้อความ', 'กล่องข้อความ', () => this.setTool('text'), t === 'text'),
+      L('image', 'รูป', 'แทรกรูปภาพ', () => this.pickImage()),
+      L('ruler', 'ไม้บรรทัด', 'ไม้บรรทัด (ใช้นิ้วลากย้าย สองนิ้วหมุน ลากปากกาชิดขอบได้เส้นตรง)', () => this.toggleRuler(), !!this.ruler),
+      L('equation', 'คณิต', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์ เครื่องคิดเลข', (b) => this.mathMenu(b)),
+      ...(t === 'laser' ? [L('laser', 'เลเซอร์', 'เลเซอร์พอยเตอร์ (แตะอีกครั้งเพื่อกลับไปใช้ปากกา)', () => this.setTool('pen'), true)] : []),
+      ...(this.curtain ? [L('curtain', 'ม่าน', 'ปิดม่านบังคำตอบ', () => this.toggleCurtain(), true)] : []));
+    this.micBtn = L('mic', 'อัด', 'อัดเสียง + ลายมือ (กดค้างเพื่อตั้งค่า)', (b) => this.app.audioClick(this, b)); onLongPress(this.micBtn, () => this.app.recorderSettings(this, this.micBtn));
+    this.recBtn = h('button', { class: 'recbtn', style: { display: 'none' } });
+    this.menuBtn = h('button', { class: 'hubbtn', title: 'เมนู', 'aria-label': 'เมนู' }, icon('menu'), h('span', {}, 'เมนู'));
+    this.menuBtn.onclick = () => import('./hub.js').then(m => m.openHub(this, this.menuBtn));
+    const student = !!prefs.studentUI;
     const right = h('div', { class: 'side r' },
-      B('timer', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b), this.app.timer.visible),
-      B('dice', 'สุ่มชื่อนักเรียน / จัดกลุ่ม', (b) => this.app.picker.open(b), !!this.app.picker?.el?.isConnected),
-      B('screen', 'หน้าจอนักเรียน / นำเสนอ', (b) => this.app.studentMenu(b), this.app.broadcast?.connected),
-      this.micBtn,
-      B('pageplus', 'เพิ่มหน้า', (b) => this.addPageMenu(b)),
-      this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
-      B('share', 'ส่งออก / สำรอง', (b) => this.exportMenu(b)),
-      B('more', 'เพิ่มเติม', (b) => this.moreMenu(b)),
-      B('hide', 'ซ่อนแถบเครื่องมือ (โหมดนำเสนอ)', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · ลากขีดบนแถบเล็กเพื่อย้ายไปไหนก็ได้ · ˄˅ เปลี่ยนหน้า · แตะเครื่องมือซ้ำเพื่อตั้งค่า · × ออก', 4500, 'keep'); }));
+      L('timer', 'จับเวลา', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b), this.app.timer.visible),
+      ...(student ? [] : [this.micBtn]),
+      this.menuBtn);
+    this.saveBtn = null;
     tb.append(tabs, h('div', { class: 'trow' }, left, center, right));
     // undo capsule
     this.btnUndo = B('undo', 'ย้อนกลับ', () => this.undo());
@@ -581,7 +577,25 @@ export class Editor {
   updateLiveBlend() { this.cvLive.style.mixBlendMode = this.tool === 'hl' && !this.darkPaper ? 'multiply' : 'normal'; }
 
   // ---------- quick settings ----------
-  moreMenu(anchor) {
+  paperMenu(anchor) {
+    const page = this.currentPage();
+    const box = h('div', { style: { width: 'min(400px, calc(100vw - 20px))', padding: '4px 6px' } });
+    const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
+    box.append(h('div', { class: 'lbl', style: { marginTop: '4px' } }, `พื้นกระดาษหน้านี้ (หน้า ${this.nb.pages.indexOf(page.id) + 1})`));
+    if (page.pdf) box.append(h('div', { style: { fontSize: '19px', color: 'var(--muted)', margin: '0 0 6px' } }, 'หน้านี้มาจากไฟล์ PDF จึงเปลี่ยนพื้นไม่ได้ (เปลี่ยนพื้นทุกหน้าจะไม่กระทบหน้า PDF)'));
+    box.append(seg([['blank', 'เปล่า'], ['lines', 'เส้น'], ['grid', 'ตาราง'], ['dots', 'จุด'], ['math', 'คณิต…']], isMathBg(page.bg) ? 'math' : page.bg, async (v) => { if (v === 'math') { const r = await mathPaperDialog(page); if (r) this.setPageProps(page, r); return; } this.setPageProps(page, { bg: v, bgo: undefined }); }));
+    if (isMathBg(page.bg)) box.append(h('div', { class: 'sub', style: { margin: '4px 2px 0' } }, describeMath(page.bg, page.bgo)));
+    box.append(h('div', { style: { height: '8px' } }));
+    box.append(seg([['P', 'A4 แนวตั้ง'], ['L', 'A4 แนวนอน']], page.size || 'P', (v) => this.setPageProps(page, { size: v })));
+    const allBtn = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '4px' } }, 'ใช้พื้นนี้กับทุกหน้า');
+    allBtn.onclick = () => { this.setAllPagesProps({ bg: page.bg, bgo: page.bgo, size: page.size }); toast('เปลี่ยนพื้นทุกหน้าแล้ว'); };
+    box.append(allBtn);
+    box.append(h('div', { class: 'lbl' }, 'สีกระดาษ (ทั้งเล่ม)'));
+    box.append(seg(Object.entries(PAPERS).map(([k, v]) => [k, v.label]), this.paper, (v) => { this.nb.paper = v; this.saveNb(); this.updateLiveBlend(); this.need.main = true; this.thumbsDirtyAll(); }));
+    popover(anchor, box, this.popOpts());
+  }
+  moreMenu(anchor) { import('./hub.js').then(m => m.openHub(this, anchor)); }
+  _oldMoreMenu(anchor) {
     const page = this.currentPage();
     const box = h('div', { style: { width: 'min(400px, calc(100vw - 20px))', padding: '4px 6px' } });
     const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);

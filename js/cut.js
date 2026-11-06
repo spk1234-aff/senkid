@@ -16,7 +16,7 @@ export async function deleteProject(id) { try { await db.del('kv', KEY(id)); } c
 const HOLD = 4000; // default length of a still (page / image / title), ms
 const FADE = 500;
 const clipDur = (c) => c.kind === 'lesson' || c.kind === 'video' ? Math.max(100, (c.out - c.in) / (c.speed || 1)) : (c.hold || HOLD);
-const totalDur = (pr) => pr.clips.reduce((a, c) => a + clipDur(c), 0);
+export const totalDur = (pr) => pr.clips.reduce((a, c) => a + clipDur(c), 0);
 const KIND_TH = { lesson: 'บทเรียน', video: 'วิดีโอ', page: 'หน้าสมุด', image: 'รูป', title: 'ชื่อตอน' };
 
 // ---------- sources (cached per clip src key) ----------
@@ -161,7 +161,7 @@ export async function findDeadAir(src, { minLen = 8000, pad = 500, level = 'mid'
   return { ranges: ranges.filter(r => r.b > r.a + 500), stats };
 }
 // apply cuts to a clip: split into the kept pieces
-function applyCuts(pr, clip, ranges) {
+export function applyCuts(pr, clip, ranges) {
   const keep = []; let pos = clip.in || 0; const end = clip.out;
   for (const r of ranges.sort((x, y) => x.a - y.a)) { const a = Math.max(pos, r.a), b = Math.min(end, r.b); if (b <= a) continue; if (a > pos + 300) keep.push([pos, a]); pos = b; }
   if (end > pos + 300) keep.push([pos, end]);

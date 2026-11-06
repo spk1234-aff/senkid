@@ -108,6 +108,9 @@ const P = {
   lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.5" fill="currentColor" stroke="none"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>',
   history: '<path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4.5h4.5"/><path d="M12 8v4.5l3 2"/>',
   pin: '<path d="M12 21v-5"/><path d="M8 16h8l-1.5-4V7h1V4H8.5v3h1v5z" fill="currentColor" stroke="none"/>',
+  menu: '<rect x="3.5" y="3.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/><rect x="13.5" y="3.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/><rect x="3.5" y="13.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/>',
+  teach: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20l4-4 4 4M7 9l3 2 4-3 3 2"/>',
+  tv: '<rect x="2.5" y="5" width="19" height="12.5" rx="2"/><path d="M8 21h8M12 17.5V21"/>',
   qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 14h2M14 18h2M18 18h2v2"/>',
 };
 export const icon = (n, cls = 'i') => {

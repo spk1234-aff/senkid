@@ -10,7 +10,7 @@ export function enqueue(job) { Q.push(job); paint(); if (!running) next(); }
 async function next() {
   running = Q.shift() || null; paint(); if (!running) { release(); return; }
   cancelFlag = false;
-  try { await hold(); await render(running); } catch (e) { console.warn('export', e); toast('ส่งออก "' + running.name + '" ไม่สำเร็จ: ' + (e.message || e), 5000, 'warn'); }
+  try { await hold(); await render(running); } catch (e) { console.warn('export', e); toast('ส่งออก "' + running.name + '" ไม่สำเร็จ: ' + (e.message || e), 5000, 'warn'); running.onError?.(e); }
   next();
 }
 async function hold() { try { if (!wake && navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch { } }
@@ -56,13 +56,13 @@ async function render(job) {
   });
   const stopped = new Promise(r => { mr.onstop = r; setTimeout(r, 3000); }); mr.stop(); await stopped;
   eng.pauseAll(); eng.dispose(); try { ac.close(); } catch { } cv.remove();
-  if (cancelFlag) { toast('ยกเลิกการส่งออกแล้ว', 1500); return; }
+  if (cancelFlag) { toast('ยกเลิกการส่งออกแล้ว', 1500); job.onCancel?.(); return; }
   let blob = new Blob(chunks, { type: (mime || 'video/webm').split(';')[0] });
   if (blob.type.includes('mp4')) { try { const { defragMp4 } = await import('./mp4fix.js'); const fixed = await defragMp4(blob); if (fixed) blob = new Blob([fixed], { type: blob.type }); } catch { } }
   const nb = pr.clips.find(c => c.kind === 'page')?.src?.nb || (await (async () => { const c = pr.clips.find(c => c.kind === 'lesson'); if (!c) return null; return (await db.get('recs', c.src))?.nb || null; })());
   const vmeta = { id: uid(), kind: 'video', name: job.name + ' · วิดีโอ', nb, created: Date.now(), duration: dur, size: blob.size, mime: blob.type, res: String(H), done: true, fromProject: pr.id };
   await db.put('recs', vmeta); await db.addChunk(vmeta.id, 0, blob);
   toast(`ส่งออก "${job.name}" เสร็จแล้ว · ${fmtBytes(blob.size)}`, 4000);
-  if (!Q.length) showRecording(vmeta, true, blob);
+  if (job.onDone) { try { job.onDone(vmeta, blob); } catch { } } else if (!Q.length) showRecording(vmeta, true, blob);
   try { scheduleBackgroundUpload(); } catch { }
 }
