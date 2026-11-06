@@ -9,6 +9,19 @@ const RES = [['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K
 const BITRATE = { 720: 3e6, 1080: 5e6, 1440: 8e6, 2160: 12e6 };
 const AUDIO_BPS = 128e3; // audio-only recordings use 96 kbps (see AudioRecorder)
 
+// developer credit pill rendered for a frame of height H — every exported clip carries it
+export function creditImage(H) {
+  const px = Math.max(12, Math.round(H * 0.019)), text = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
+  const cv = document.createElement('canvas'), x = cv.getContext('2d');
+  x.font = `${px}px "TH Sarabun New", sans-serif`;
+  const w = Math.ceil(x.measureText(text).width), pad = Math.round(px * 0.5), hh = Math.round(px * 1.4);
+  cv.width = w + pad * 2; cv.height = hh;
+  x.fillStyle = 'rgba(30,32,38,0.38)'; const r = hh / 2;
+  x.beginPath(); x.moveTo(r, 0); x.arcTo(cv.width, 0, cv.width, hh, r); x.arcTo(cv.width, hh, 0, hh, r); x.arcTo(0, hh, 0, 0, r); x.arcTo(0, 0, cv.width, 0, r); x.fill();
+  x.font = `${px}px "TH Sarabun New", sans-serif`; x.fillStyle = 'rgba(255,255,255,0.92)'; x.textBaseline = 'middle'; x.fillText(text, pad, hh / 2 + px * 0.04);
+  return cv;
+}
+export function drawCredit(ctx, W, H, img) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(img, W - img.width - Math.round(H * 0.012), H - img.height - Math.round(H * 0.01)); ctx.restore(); }
 export function pickMime() {
   if (typeof MediaRecorder === 'undefined') return null;
   const c = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
@@ -223,19 +236,7 @@ export class Recorder {
     if (cr) c.drawImage(cr, this.canvas.width - cr.width - Math.round(this.canvas.height * 0.012), this.canvas.height - cr.height - Math.round(this.canvas.height * 0.01));
   }
   // developer credit, always in the clip (bottom-right, small)
-  creditImg() {
-    const H = this.canvas.height;
-    if (this._cr && this._crH === H) return this._cr;
-    const px = Math.max(12, Math.round(H * 0.019)), text = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
-    const cv = document.createElement('canvas'), x = cv.getContext('2d');
-    x.font = `${px}px "TH Sarabun New", sans-serif`;
-    const w = Math.ceil(x.measureText(text).width), pad = Math.round(px * 0.5), hh = Math.round(px * 1.4);
-    cv.width = w + pad * 2; cv.height = hh;
-    x.fillStyle = 'rgba(30,32,38,0.38)'; const r = hh / 2;
-    x.beginPath(); x.moveTo(r, 0); x.arcTo(cv.width, 0, cv.width, hh, r); x.arcTo(cv.width, hh, 0, hh, r); x.arcTo(0, hh, 0, 0, r); x.arcTo(0, 0, cv.width, 0, r); x.fill();
-    x.font = `${px}px "TH Sarabun New", sans-serif`; x.fillStyle = 'rgba(255,255,255,0.92)'; x.textBaseline = 'middle'; x.fillText(text, pad, hh / 2 + px * 0.04);
-    this._cr = cv; this._crH = H; return cv;
-  }
+  creditImg() { const H = this.canvas.height; if (this._cr && this._crH === H) return this._cr; this._cr = creditImage(H); this._crH = H; return this._cr; }
   frame(ed) { if (this.state === 'recording') this.paint(ed); }
   onTick() {
     const ed = this.app.editor;
@@ -524,7 +525,7 @@ export function uploadPendingRecordings(force) {
   pendingRun = (async () => {
     if (!syncOn() || prefs.rec.toDrive === false || !hasFileScope() || !navigator.onLine) return;
     if (prefs.rec.uploadMode === 'manual' && !force) return;
-    const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive).sort((a, b) => a.created - b.created);
+    const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive && !r.local).sort((a, b) => a.created - b.created);
     let n = 0;
     if (recs.length) toast(`กำลังส่ง ${recs.length} ไฟล์ขึ้น Google Drive อยู่เบื้องหลัง · ใช้งานต่อได้ตามปกติ`, 3000);
     for (const m of recs) {
@@ -586,7 +587,7 @@ export async function openRecordings(nb, app) {
   let dlg = null;
   const render = () => {
     list.innerHTML = '';
-    const pend = recs.filter(r => r.done && !r.drive).length;
+    const pend = recs.filter(r => r.done && !r.drive && !r.local).length;
     if (pend && syncOn()) {
       if (!hasFileScope()) { const b = h('button', { class: 'pill prim', style: { height: '40px' } }, 'เชื่อมต่อใหม่'); b.onclick = () => signIn(); list.append(h('div', { class: 'bk-banner warn' }, h('div', {}, `มี ${pend} คลิปรอส่งขึ้น Google Drive · ต้องเชื่อมต่อ Google ใหม่ก่อนเพื่ออนุญาตเก็บคลิปใน Drive`), b)); }
       else if (prefs.rec.toDrive === false) list.append(h('div', { class: 'bk-banner' }, h('div', {}, `มี ${pend} คลิปเก็บอยู่ในเครื่อง · เปิด "เก็บคลิปใน Google Drive" ในตั้งค่าการอัดเพื่อย้ายขึ้นอัตโนมัติ`)));
@@ -602,6 +603,7 @@ export async function openRecordings(nb, app) {
       if (pn) { const pb = h('button', { class: 'chip', style: { height: '32px', padding: '0 10px', fontSize: '18px' }, title: 'ไปหน้าที่เริ่มอัด' }, `หน้า ${pn}`); pb.onclick = () => { const ed = app?.editor; if (ed && ed.nb?.id === nb) { ed.scrollToPage(m.page); ed.need && (ed.need.main = ed.need.ui = true); dlg?.close(); } }; it.querySelector('.meta div').append(' ', pb); }
       const B = (ic, t, fn) => { const b = h('button', { class: 'btn sq', title: t }, icon(ic)); b.onclick = fn; return b; };
       if (m.lesson) { const pb = h('button', { class: 'pill prim', style: { height: '38px', padding: '0 12px' } }, icon('play'), 'เล่นย้อน'); pb.onclick = async () => { const bz = busy('กำลังโหลดเสียง…'); let blob = null; try { blob = await recBlob(m); } catch { } finally { bz.done(); } (await import('./lesson.js')).openPlayer(m, blob); }; it.append(pb); it.querySelector('.meta div').append(' · มีลายมือ'); }
+      if ((m.kind === 'audio' && m.lesson) || m.kind === 'video') it.append(B('scissors', 'ตัดต่อ (ใส่ในโปรเจกต์ตัดต่อใหม่)', async () => { dlg?.close(); (await import('./cut.js')).openCutEditor(app, { addRec: m }); }));
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
       else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
@@ -610,5 +612,7 @@ export async function openRecordings(nb, app) {
     }
   };
   render(); document.addEventListener('senkid:rec-moved', render);
-  dlg = dialog(nb ? `บทเรียนที่อัดในเล่ม "${nbRec?.name || ''}"` : 'คลิปและเสียงที่อัดไว้ (ทุกเล่ม)', list, [], { width: 720 });
+  const projBtn = h('button', { class: 'pill sec', style: { height: '40px' } }, icon('scissors'), 'โปรเจกต์ตัดต่อ'); projBtn.onclick = async () => { dlg?.close(); (await import('./cut.js')).openProjects(app); };
+  const head = h('div', { style: { display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' } }, projBtn, h('span', { class: 'sub' }, 'รวม/ตัดคลิป ตัดช่วงเงียบ แล้วส่งออกเป็นวิดีโอเดียว'));
+  dlg = dialog(nb ? `บทเรียนที่อัดในเล่ม "${nbRec?.name || ''}"` : 'คลิปและเสียงที่อัดไว้ (ทุกเล่ม)', h('div', {}, head, list), [], { width: 720 });
 }

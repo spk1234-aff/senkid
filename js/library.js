@@ -193,7 +193,7 @@ export class Library {
       cards.set(n.id, cover);
     }
     // small badge on covers that have recorded lessons → opens that notebook's list
-    import('./recorder.js').then(({ recordingCounts }) => recordingCounts()).then(cnt => {
+    if (!prefs.studentUI) import('./recorder.js').then(({ recordingCounts }) => recordingCounts()).then(cnt => {
       for (const [id, cover] of cards) { const c = cnt[id]; if (!c || !cover.isConnected) continue; const b = h('button', { class: 'recbadge', title: 'บทเรียนที่อัดในเล่มนี้' }, icon('mic'), String(c)); b.onclick = (e) => { e.stopPropagation(); this.app.openRecordings(id); }; cover.append(b); }
     }).catch(() => { });
     if (!l.length && !this.q && this.folder !== '*' && this.folder !== '~recent') g.append(h('div', { class: 'empty' }, 'โฟลเดอร์นี้ยังว่าง · กด "สมุดใหม่" หรือเปิด PDF เข้ามาในโฟลเดอร์นี้ได้เลย'));

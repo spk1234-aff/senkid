@@ -782,3 +782,23 @@ video.campip.round{border-radius:18%}
 .recpanel .cam svg{width:16px;height:16px}
 .recpanel .cam.bad,.recpanel .sp.bad{color:#ffb3b3}
 .recpanel .sp{opacity:.75;white-space:nowrap}
+
+/* ---- ตัดต่อบทเรียน ---- */
+.cutter{display:flex;flex-direction:column}
+.cutter .lp-stage{flex:1 1 auto;min-height:0}
+.cut-strip{display:flex;gap:8px;overflow-x:auto;padding:8px 12px;background:var(--bg2,#1a1d26);border-top:1px solid rgba(255,255,255,.08);flex:0 0 auto;-webkit-overflow-scrolling:touch}
+.cut-clip{flex:0 0 auto;width:168px;border-radius:10px;background:rgba(255,255,255,.06);border:2px solid transparent;padding:4px;color:inherit;text-align:left;cursor:pointer;position:relative}
+.cut-clip.on{border-color:var(--acc,#3b82f6)}
+.cut-clip.playing::after{content:'';position:absolute;left:6px;top:6px;width:10px;height:10px;border-radius:50%;background:#e33}
+.cut-clip.bad{opacity:.5}
+.cut-clip.add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:transparent;border:2px dashed rgba(255,255,255,.25);width:120px;font-size:16px}
+.cut-th{width:160px;height:90px;border-radius:6px;background:#000;display:block}
+.cut-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+.cut-meta{font-size:13px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cut-empty{align-self:center;opacity:.7;font-size:16px;padding:0 8px}
+.cut-tools{flex:0 0 auto;padding:6px 12px 10px;background:var(--bg2,#1a1d26)}
+.cut-row{display:flex;gap:6px;flex-wrap:wrap}
+.cut-nudge{display:flex;gap:6px;align-items:center;margin:4px 0 8px}
+.cut-tl{flex:1;font-size:16px}
+.xq-pill{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;background:#1E2A55;color:#fff;border:0;font:inherit;font-size:16px;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.xq-pill .i{width:18px;height:18px}

@@ -255,7 +255,8 @@ class App {
         row('ป้องกันเบราว์เซอร์ลบข้อมูล', persisted),
         row('สำรองสมุดทั้งหมด', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'ส่งออก'); b.onclick = async () => { await this.editor?.flush(); this.exportNotebooks((await db.getAll('notebooks')).map(n => n.id)); }; return b; })()),
         row('นำเข้าไฟล์สำรอง', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('upload'), 'นำเข้า'); b.onclick = () => this.importBackup(); return b; })()),
-        row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => openRecordings(); return b; })())),
+        ...(prefs.studentUI ? [] : [row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => openRecordings(); return b; })()),
+        row('ตัดต่อบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('scissors'), 'โปรเจกต์'); b.onclick = async () => (await import('./cut.js')).openProjects(this); return b; })())])),
       h('div', { class: 'sec-t' }, 'ความช่วยเหลือ'),
       card(
         row('ตรวจความพร้อมก่อนสอน', (() => { const b = h('button', { class: 'pill prim', style: { height: '42px' } }, icon('check'), 'ตรวจ'); b.onclick = () => this.healthCheck(); return b; })(), 'เช็ก Google · ซิงก์ · พื้นที่ · ไมค์ · ทีวี ในหน้าเดียว'),
@@ -301,7 +302,7 @@ class App {
     const b = this.broadcast; const paired = prefs.pairedAt && Date.now() - prefs.pairedAt < 12 * 3600e3;
     it(b?.rtc?.open || b?.connected ? true : paired ? 'warn' : 'warn', b?.rtc?.open ? 'ทีวี (จอที่สอง): เชื่อมต่ออยู่' : b?.connected ? 'หน้าจอนักเรียน: เชื่อมต่ออยู่' : paired ? 'ทีวี: ยังไม่ได้ต่อ · จะต่อเองเมื่อหน้าต่างบนทีวีเปิดอยู่' : 'ทีวี: ยังไม่ได้ตั้งค่าวันนี้', '', this.editor && !b?.rtc?.open ? { label: 'ต่อทีวี', fn: () => this.studentMenu(document.querySelector('.tb .btn') || document.body) } : null);
     // pending clips
-    try { const recs = await db.getAll('recs'); const pend = recs.filter(r => r.done && !r.drive).length; if (pend) it('warn', `คลิป ${pend} รายการยังอยู่ในเครื่อง`, 'จะส่งขึ้น Drive เองเมื่อเชื่อม Google และมีเน็ต', { label: 'ดูคลิป', fn: () => openRecordings() }); } catch { }
+    try { const recs = await db.getAll('recs'); const pend = recs.filter(r => r.done && !r.drive && !r.local).length; if (pend) it('warn', `คลิป ${pend} รายการยังอยู่ในเครื่อง`, 'จะส่งขึ้น Drive เองเมื่อเชื่อม Google และมีเน็ต', { label: 'ดูคลิป', fn: () => openRecordings() }); } catch { }
     // online
     it(navigator.onLine ? true : 'warn', navigator.onLine ? 'อินเทอร์เน็ต: ต่ออยู่' : 'อินเทอร์เน็ต: ออฟไลน์', navigator.onLine ? '' : 'สอนได้ปกติ · ซิงก์และทีวี(จอสอง)จะทำเมื่อมีเน็ต', null);
     const list = h('div', { class: 'hc' }, ...items.map(x => h('div', { class: 'hc-row ' + (x.ok === true ? 'ok' : x.ok === 'warn' ? 'warn' : 'bad') }, h('i', {}, x.ok === true ? '✓' : x.ok === 'warn' ? '!' : '✕'), h('div', {}, h('b', {}, x.title), x.sub ? h('div', { class: 'sub' }, x.sub) : ''), x.fix ? (() => { const bb = h('button', { class: 'pill sec', style: { height: '38px', flex: 'none' } }, x.fix.label); bb.onclick = () => { close(); x.fix.fn(); }; return bb; })() : '')));
@@ -337,6 +338,11 @@ class App {
         'ต้องการไฟล์วิดีโอ: ในเครื่องเล่นกด <b>ส่งออกเป็นวิดีโอ</b> เลือกความละเอียด ได้ MP4 ไปอยู่ใน "คลิปที่อัดไว้" (ใช้เวลาเท่าความยาวจริง)',
         'เปิดดูได้ที่เมนู ⋯ > <b>บทเรียนที่อัดในเล่มนี้</b> (หรือป้ายไมค์บนปกสมุดในห้องสมุด) · อัดเสร็จจะเก็บลงเครื่องก่อน แล้วส่งขึ้น Google Drive เบื้องหลัง',
         'กดค้างปุ่มไมค์เพื่อเลือกไมโครโฟน (รองรับไมค์แยก จำชื่อไมค์ไว้ให้) และเปิด<b>กล้องครู</b>: ภาพครูวงกลมเล็ก ๆ ที่มุมกระดาน ลากย้ายได้ จะติดไปในการเล่นย้อนและวิดีโอที่ส่งออก (ไม่ฉายขึ้นทีวี)'),
+      sec('ตัดต่อบทเรียน',
+        'ในรายการคลิปกดปุ่ม<b>กรรไกร</b>ที่บทเรียนหรือวิดีโอ (หรือ ตั้งค่า > ตัดต่อบทเรียน) จะได้โปรเจกต์ที่เรียงคลิปจากซ้ายไปขวา เพิ่มได้ทั้งบทเรียนที่อัดไว้ วิดีโอในแอป หน้าสมุด รูป ไฟล์วิดีโอจากเครื่อง และ<b>หน้าชื่อตอน</b>',
+        'แตะคลิปเพื่อ<b>ตัดหัว‑ท้าย</b> (เลื่อนดูภาพได้ ปรับทีละ 1 วิ) <b>แบ่งตรงนี้</b> ลบชิ้นที่ไม่เอา สลับซ้าย‑ขวา ตั้งความเร็ว 1.5×/2× หรือปิดเสียงเฉพาะช่วง · ต้นฉบับไม่ถูกแก้ ย้อนกลับได้เสมอ',
+        '<b>ตัดช่วงเงียบ</b>: แอปฟังเสียงพูดและดูว่ามีการเขียนไหม ช่วงที่ไม่มีทั้งสองอย่างนานกว่าที่ตั้ง (5–30 วิ) จะถูกเสนอให้ตัด เอาเครื่องหมายถูกออกเพื่อเก็บช่วงไหนไว้ได้ ช่วงที่ครูเขียนเงียบ ๆ จะไม่ถูกตัด',
+        '<b>สารบัญ</b> สร้างรายการเวลาแต่ละตอนจากชื่อคลิป/หน้าชื่อตอน คัดลอกไปวางในคำอธิบาย YouTube ได้เลย · <b>ส่งออก</b> เลือก 720p–4K ใส่คิวได้หลายงาน แปลงเบื้องหลังระหว่างใช้งานอื่น (เปิดแอปค้างไว้) ไฟล์ที่ได้อยู่ใน "คลิปที่อัดไว้" พร้อมลายน้ำผู้พัฒนาเสมอ'),
       sec('การเชื่อม Google หมดอายุ',
         'Google ให้สิทธิ์ครั้งละ 1 ชั่วโมง แอปจะต่อให้เอง<b>เงียบ ๆ เฉพาะตอนว่าง</b> (ไม่เขียน 3 นาที ไม่อัด ไม่ได้ต่อทีวี) และ<b>ไม่มีทางเด้งหน้าระหว่างอัดหรือสอน</b> · ระหว่างที่ยังไม่ได้ต่อ ทุกเส้นเก็บในเครื่องและซิงก์ตามหลัง ไม่มีอะไรหาย',
         'ถ้าอยากให้ต่อเดี๋ยวนี้: ตั้งค่า > ซิงก์ผ่าน Google Drive > เชื่อมต่อใหม่ (ทำก่อนเริ่มสอน) · แอปจะกลับมาที่เล่มและหน้าเดิมเอง'),

@@ -4,7 +4,7 @@ import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy, nobr } from '.
 import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo } from './render.js';
 import { pdfBytes } from './pdfdoc.js';
 import { prefs } from './prefs.js';
-const CREDIT = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
+export const CREDIT = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
 
 let libP = null;
 const lib = () => (libP ||= import('../vendor/pdf-lib.esm.min.js'));
