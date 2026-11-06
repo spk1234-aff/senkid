@@ -435,6 +435,11 @@ async function folderId(name, parent) {
 export const DEFAULT_API_KEY = '';
 export const driveApiKey = () => prefs.driveApiKey || DEFAULT_API_KEY;
 // put a file in เส้นคิด/<folder> and share it by link (anyone with the link can read)
+// make an already-uploaded Drive file readable by link and return the link
+export async function driveShareLink(id) {
+  await gfetch(`${API}/files/${id}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) });
+  const r = await gfetch(`${API}/files/${id}?fields=webViewLink`); const j = await r.json(); return j.webViewLink || ('https://drive.google.com/file/d/' + id + '/view');
+}
 export async function driveShareFile(blob, name, folder, onProgress) {
   const r = await uploadRecording(blob, name, onProgress, folder);
   await gfetch(`${API}/files/${r.id}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) });

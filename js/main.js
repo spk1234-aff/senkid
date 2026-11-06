@@ -16,6 +16,7 @@ import { importPdf } from './pdfdoc.js';
 import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
+import { ytCard } from './youtube.js';
 import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, connected, hasFileScope, tokenOk, busyNow } from './sync.js';
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
@@ -55,6 +56,7 @@ class App {
     catch (e) { console.error(e); prefs.lastOpen = null; savePrefs(); try { await this.openLibrary(); } catch { } toast('เปิดสมุดล่าสุดไม่สำเร็จ จึงกลับมาหน้าแรก', 3500, 'warn'); }
     finally { document.getElementById('boot')?.remove(); }
     if (!prefs.onboarded) this.onboarding();
+    try { await (await import('./youtube.js')).ytHandleRedirect(this); } catch (e) { console.warn('yt', e); }
     initSync(this).catch(e => console.warn('sync init', e)).finally(() => { setTimeout(uploadPendingRecordings, 8000); window.addEventListener('online', () => setTimeout(uploadPendingRecordings, 3000)); });
     if (location.hash === '#from-app') this.receiveFromApp();
     applyLock();
@@ -243,6 +245,7 @@ class App {
         row('โหมดประหยัด', toggle(prefs.economy, v => { prefs.economy = v; savePrefs(); applyTheme(); this.editor?.resize(); }), 'ลดความละเอียดจอและเอฟเฟกต์ สำหรับเครื่องสเปกต่ำ'),
         row('ความละเอียดคลิปเริ่มต้น', seg([['720', '720p'], ['1080', '1080p'], ['1440', '1440p'], ['2160', '4K']], prefs.rec.res, v => { prefs.rec.res = v; savePrefs(); }))),
       ...(prefs.studentUI && (hasPin() || studentOnly()) && !accountRule() ? [] : [h('div', { class: 'sec-t' }, 'ซิงก์ผ่าน Google Drive'), this.syncCard()]),
+      ...(prefs.studentUI ? [] : [h('div', { class: 'sec-t' }, 'YouTube'), ytCard()]),
       ...(prefs.studentUI ? [] : [h('div', { class: 'sec-t' }, 'สำหรับห้องเรียน'),
         card(
           row('PIN ครู', h('button', { class: 'pill sec', onclick: async (e) => { if (await managePin()) { document.querySelector('.sheet .top button')?.click(); this.openSettings(); } } }, icon('lock'), hasPin() ? 'เปลี่ยน / ลบ PIN' : 'ตั้ง PIN'), hasPin() ? 'ตั้งแล้ว · การออกจากโหมดนักเรียนบนเครื่องนี้ต้องใส่ PIN' : 'เมื่อตั้งแล้ว การเปลี่ยนจากโหมดนักเรียนกลับเป็นโหมดครูต้องใส่ PIN (ต่อเครื่อง ไม่ซิงค์)'),

@@ -802,3 +802,5 @@ video.campip.round{border-radius:18%}
 .cut-tl{flex:1;font-size:16px}
 .xq-pill{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;background:#1E2A55;color:#fff;border:0;font:inherit;font-size:16px;box-shadow:0 4px 16px rgba(0,0,0,.3)}
 .xq-pill .i{width:18px;height:18px}
+.lp-cap{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);max-width:80%;padding:6px 14px;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-size:22px;font-family:"TH Sarabun New",sans-serif;pointer-events:none;white-space:pre-wrap;text-align:center}
+.lp-cap:empty{display:none}

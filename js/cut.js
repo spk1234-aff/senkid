@@ -171,10 +171,11 @@ function applyCuts(pr, clip, ranges) {
 }
 
 // ---------- the editor UI ----------
-export async function openCutEditor(app, { projectId = null, addRec = null } = {}) {
+export async function openCutEditor(app, { projectId = null, addRec = null, addRecs = null } = {}) {
   let pr = projectId ? (await db.get('kv', KEY(projectId)))?.v : null;
   if (!pr) { pr = { id: uid(), name: 'ตัดต่อ ' + new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }), created: Date.now(), clips: [], fade: true, res: '1920', chapters: [] }; }
   if (addRec) await addRecClip(pr, addRec);
+  if (addRecs) { for (const r of addRecs) { try { await addRecClip(pr, r); } catch (e) { toast('เพิ่ม "' + r.name + '" ไม่ได้: ' + (e.message || e), 3000, 'warn'); } } if (addRecs.length) pr.name = (addRecs[0].name || pr.name).replace(/ · (เสียง.*|ตอนที่ \d+)$/, '') + ' · ตัดต่อ'; }
   for (const sc of document.querySelectorAll('#layer .scrim')) sc.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   const eng = new Engine(pr);
   const root = h('div', { class: 'lplayer cutter' });

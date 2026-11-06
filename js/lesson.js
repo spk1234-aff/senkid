@@ -170,6 +170,8 @@ export async function openPlayer(meta, audioBlob) {
   document.body.append(root);
   const placeCam = () => { if (!camV) return; const r = stageEl.getBoundingClientRect(), k = r.width / (meta.camStageW || r.width); const size = Math.max(60, (meta.camSize || 150) * k), pos = meta.camPos || { x: 0.985, y: 0.985 }; camV.style.width = camV.style.height = size + 'px'; camV.style.left = Math.max(0, Math.min(r.width - size, pos.x * r.width - size)) + 'px'; camV.style.top = Math.max(0, Math.min(r.height - size, pos.y * r.height - size)) + 'px'; };
   if (camV) { stageEl.append(camV); placeCam(); addEventListener('resize', placeCam); }
+  let tx = null, capEl = null; if (meta.transcript) { tx = (await db.get('kv', 'tx:' + meta.id))?.v || null; if (tx?.length) { capEl = h('div', { class: 'lp-cap' }); stageEl.append(capEl); } }
+  const caption = (t) => { if (!tx) return; let cur = null; for (const x of tx) { if (x.t <= t + 300) cur = x; else break; } capEl.textContent = cur && t - cur.t < 12000 ? cur.text : ''; };
   let playing = false, rate = 1, t = 0, base = 0, startAt = 0, raf = 0, dirty = true;
   const size = () => { const r = cv.parentElement.getBoundingClientRect(); const d = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); cv._w = r.width; cv._h = r.height; cv._d = d; dirty = true; };
   size(); addEventListener('resize', size); setImageReadyHook(() => dirty = true); setPdfReadyHook(() => dirty = true);
@@ -177,7 +179,7 @@ export async function openPlayer(meta, audioBlob) {
   const loop = () => {
     raf = requestAnimationFrame(loop);
     const nt = Math.min(dur, curT());
-    if (nt !== t || dirty) { t = nt; st.seek(t); st.draw(ctx, cv._w, cv._h, cv._d); dirty = false; bar.value = Math.round(t); tEl.textContent = fmtTime(t) + ' / ' + fmtTime(dur); if (playing && camV && (raf & 31) === 0) camSync(); }
+    if (nt !== t || dirty) { t = nt; st.seek(t); st.draw(ctx, cv._w, cv._h, cv._d); dirty = false; bar.value = Math.round(t); tEl.textContent = fmtTime(t) + ' / ' + fmtTime(dur); caption(t); if (playing && camV && (raf & 31) === 0) camSync(); }
     if (playing && t >= dur) stop();
   };
   const camSync = () => { if (!camV) return; const want = t / 1000; if (Math.abs((camV.currentTime || 0) - want) > 0.35) { try { camV.currentTime = want; } catch { } } };
