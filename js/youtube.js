@@ -28,11 +28,24 @@ export async function ytHandleRedirect(app) {
   const tok = { t: hh.get('access_token'), exp: Date.now() + (+hh.get('expires_in') || 3600) * 1000, scope: hh.get('scope') || '' };
   localStorage.setItem(KEY, JSON.stringify(tok));
   prefs.yt = { ...(prefs.yt || {}), on: true };
-  try { const r = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: 'Bearer ' + tok.t } }); if (r.ok) { const j = await r.json(); const c = j.items?.[0]; if (c) { prefs.yt.channel = c.snippet?.title || ''; prefs.yt.channelId = c.id; } } else if (r.status === 403) { const j = await r.json().catch(() => ({})); if (/not been used|disabled|accessNotConfigured/i.test(JSON.stringify(j))) toast('โปรเจกต์ Google ยังไม่ได้เปิด YouTube Data API · ดูวิธีในตั้งค่า > YouTube', 6000, 'warn'); } } catch { }
+  const chk = await ytCheck();
   savePrefs();
-  toast('เชื่อม YouTube แล้ว' + (prefs.yt.channel ? ' · ช่อง ' + prefs.yt.channel : ''), 3000);
+  if (chk.ok) toast('เชื่อม YouTube แล้ว · ช่อง ' + chk.channel, 3000); else toast('เข้าสู่ระบบแล้ว แต่: ' + chk.why, 7000, 'warn');
   if (pend.rec) { try { const m = await db.get('recs', pend.rec); if (m) setTimeout(() => uploadToYouTube(m), 600); } catch { } }
   return true;
+}
+// ask YouTube which channel this token belongs to; returns {ok, channel} or {ok:false, why}
+export async function ytCheck() {
+  const tok = ytToken(); if (!tok) return { ok: false, why: 'สิทธิ์หมดอายุ · กดเปลี่ยนบัญชีเพื่อเข้าสู่ระบบใหม่' };
+  try {
+    const r = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', { headers: { Authorization: 'Bearer ' + tok.t } });
+    const txt = await r.text();
+    if (!r.ok) { const why = ytErrorText(r.status, txt); prefs.yt = { ...(prefs.yt || {}), err: why }; savePrefs(); return { ok: false, why }; }
+    const c = JSON.parse(txt).items?.[0];
+    if (!c) { const why = 'บัญชีนี้ยังไม่มีช่อง YouTube · เปิด YouTube ด้วยบัญชีนี้แล้วสร้างช่องก่อน'; prefs.yt = { ...(prefs.yt || {}), err: why, channel: '' }; savePrefs(); return { ok: false, why }; }
+    prefs.yt = { ...(prefs.yt || {}), channel: c.snippet?.title || '', channelId: c.id, err: '' }; savePrefs();
+    return { ok: true, channel: prefs.yt.channel };
+  } catch (e) { return { ok: false, why: 'ต่อ YouTube ไม่ได้ (เน็ต?)' }; }
 }
 export function ytDisconnect() { localStorage.removeItem(KEY); prefs.yt = { on: false }; savePrefs(); }
 
@@ -92,10 +105,21 @@ export async function uploadToYouTube(meta, blob = null) {
 
 // settings card
 export function ytCard() {
-  const on = !!prefs.yt?.on, tok = !!ytToken();
-  const b = h('button', { class: 'pill ' + (on ? 'sec' : 'prim'), style: { height: '42px' } }, icon('user'), on ? 'เปลี่ยนบัญชี' : 'เชื่อมบัญชี YouTube'); b.onclick = () => ytSignIn();
-  const off = h('button', { class: 'pill ghost', style: { height: '42px' } }, 'ตัดการเชื่อม'); off.onclick = () => { ytDisconnect(); toast('ตัดการเชื่อม YouTube แล้ว', 1500); off.closest('.sheet')?.querySelector('.top button')?.click(); };
+  const on = !!prefs.yt?.on;
+  const name = h('div', { class: 'yt-name' }), st = h('div', { class: 'sub' });
+  const show = () => {
+    const tok = !!ytToken();
+    name.textContent = !on ? 'ยังไม่ได้เชื่อม' : prefs.yt.channel ? 'ช่อง ' + prefs.yt.channel : 'เข้าสู่ระบบแล้ว (ยังหาช่องไม่เจอ)';
+    st.textContent = !on ? 'ใช้บัญชี Google ใดก็ได้ แยกจากบัญชีซิงก์ Drive' : !tok ? 'สิทธิ์หมดอายุ · จะขอใหม่ตอนกดอัปโหลด' : prefs.yt.err ? prefs.yt.err : prefs.yt.channel ? 'พร้อมอัปโหลด' : 'กด "ตรวจสอบ" เพื่อดูสาเหตุ';
+    st.style.color = on && prefs.yt.err ? 'var(--danger,#c33)' : '';
+  };
+  const b = h('button', { class: 'pill ' + (on ? 'sec' : 'prim'), style: { height: '40px' } }, icon('user'), on ? 'เปลี่ยนบัญชี' : 'เชื่อมบัญชี YouTube'); b.onclick = () => ytSignIn();
+  const chk = h('button', { class: 'pill sec', style: { height: '40px' } }, icon('check'), 'ตรวจสอบ'); chk.onclick = async () => { chk.disabled = true; st.textContent = 'กำลังตรวจ…'; const r = await ytCheck(); chk.disabled = false; show(); toast(r.ok ? 'พร้อมอัปโหลด · ช่อง ' + r.channel : r.why, r.ok ? 2500 : 6000, r.ok ? undefined : 'warn'); };
+  const off = h('button', { class: 'pill ghost', style: { height: '40px' } }, 'ตัดการเชื่อม'); off.onclick = () => { ytDisconnect(); toast('ตัดการเชื่อม YouTube แล้ว', 1500); off.closest('.sheet')?.querySelector('.top button')?.click(); };
+  show();
+  if (on && ytToken() && !prefs.yt.channel) ytCheck().then(show);
   return h('div', { class: 'card' },
-    h('div', { class: 'row' }, h('div', {}, h('div', {}, on ? `ช่อง: ${prefs.yt.channel || '(ไม่ทราบชื่อช่อง)'}` : 'ยังไม่ได้เชื่อม'), h('div', { class: 'sub' }, on ? (tok ? 'พร้อมอัปโหลด' : 'สิทธิ์หมดอายุ · จะขอใหม่ตอนกดอัปโหลด') : 'ใช้บัญชี Google ใดก็ได้ แยกจากบัญชีซิงก์ Drive')), h('div', { style: { display: 'flex', gap: '6px' } }, b, on ? off : null)),
-    h('p', { class: 'sub', style: { margin: '8px 0 0' } }, 'กด "ส่งขึ้น YouTube" ได้ที่คลิปวิดีโอใน "คลิปที่อัดไว้" · ครั้งแรกต้องเปิด YouTube Data API v3 ในโปรเจกต์ Google Cloud ของแอป (ทำครั้งเดียว) มิฉะนั้นจะขึ้นข้อความ "ยังไม่ได้เปิดใช้"'));
+    name, st,
+    h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' } }, b, on ? chk : null, on ? off : null),
+    h('p', { class: 'sub', style: { margin: '10px 0 0' } }, 'ส่งวิดีโอได้ที่ปุ่ม "ส่งขึ้น YouTube" ในรายการคลิปที่อัดไว้'));
 }

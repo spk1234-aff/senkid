@@ -831,3 +831,4 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .pb-prev{max-height:44vh;overflow:auto;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:6px 10px}
 .pb-row{display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px dashed rgba(0,0,0,.08)}.pb-row b{width:26px}
 .pb-arrow{font-size:14px;color:#0F8A7E;margin-left:auto}
+.yt-name{font-size:20px;font-weight:600;word-break:keep-all}
