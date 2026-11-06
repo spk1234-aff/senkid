@@ -219,28 +219,36 @@ async function doSync(reason) {
           if (rpg && (!lpg || rpg.updated > (lpg.updated || 0))) jobs.push(async () => {
             // remote is newer. If this device also has ink on the page, do a 3-way merge against the last synced state
             // (what was added here stays, what was erased there goes) so nothing written on either side is lost.
-            const lpage = id === openId ? ed.pageMap.get(pid) : null;
-            if (lpage && (ed.dirty.has(pid) || (ed.live && ed.live.page === lpage))) return; // mid-stroke: next round
-            if (id === openId) await ed.flush?.();
+            if (id === openId) { const lp0 = ed.pageMap.get(pid); if (lp0 && (ed.dirty.has(pid) || (ed.live && ed.live.page === lp0))) return; await ed.flush?.(); } // mid-stroke: next round
             const rp = await pageIn(await download(rpg.f.id)); rp.updated = rpg.updated;
             const cur = await db.get('pages', pid);
-            const base = new Set((await db.get('kv', 'sync:base:' + pid))?.v || []);
-            const lIds = (cur?.strokes || []).map(x => x.id), rIds = new Set((rp.strokes || []).map(x => x.id));
-            const localChanged = !!cur && ((cur.updated || 0) > 0 || lIds.length) && (lIds.some(x => !base.has(x)) || [...base].some(x => !lIds.includes(x)) || !base.size);
-            if (cur && localChanged && lIds.length) {
-              const keep = (cur.strokes || []).filter(x => !x.id || rIds.has(x.id) || !base.has(x.id)); // drop what the other side erased
-              const have = new Set(keep.map(x => x.id));
-              const add = (rp.strokes || []).filter(x => x.id && !have.has(x.id) && !base.has(x.id)); // take what the other side added
-              const merged = { ...cur, strokes: [...keep, ...add], bg: rp.bg || cur.bg, pdf: rp.pdf || cur.pdf, updated: Math.max(Date.now(), rpg.updated + 1) };
-              await db.put('pages', merged);
-              if (lpage) { lpage.strokes = merged.strokes; lpage.updated = merged.updated; lpage._ver = (lpage._ver || 0) + 1; ed.thumbCache?.delete(pid); ed.need.main = true; ed.app?.broadcast?.pageChanged(lpage); }
-              await upload(rpg.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(merged.updated) }, await pageOut(merged)); pushed++; if (add.length) pulled++;
-              await db.put('kv', { k: 'sync:base:' + pid, v: merged.strokes.map(x => x.id).filter(Boolean) });
+            if (!cur || !(cur.strokes || []).length) { // nothing of ours to protect: take the remote page as is
+              await db.savePagesAndNotebook([rp], null); pulled++;
+              await db.put('kv', { k: 'sync:base:' + pid, v: (rp.strokes || []).map(x => x.id).filter(Boolean) });
+              if (id === openId && !ed.applyRemotePage(rp)) touchedOpen = true;
               return;
             }
-            await db.savePagesAndNotebook([rp], null); pulled++;
-            await db.put('kv', { k: 'sync:base:' + pid, v: [...rIds].filter(Boolean) });
-            if (id === openId && !ed.applyRemotePage(rp)) touchedOpen = true;
+            // Union merge guarded by tombstones: a stroke is dropped ONLY when the other side says it erased it
+            // (page.del), never because a copy somewhere happens to lack it. A stale copy therefore cannot wipe ink.
+            const lDel = cur.del || {}, rDel = rp.del || {};
+            const rById = new Map((rp.strokes || []).filter(x => x.id).map(x => [x.id, x]));
+            const keep = (cur.strokes || []).filter(x => !x.id || !(rDel[x.id] > (x.rev || 0))).map(x => x.id && rById.has(x.id) && (rById.get(x.id).rev || 0) > (x.rev || 0) ? rById.get(x.id) : x); // for a stroke both have, keep ours unless theirs was revised later
+            const have = new Set(keep.map(x => x.id).filter(Boolean));
+            const add = (rp.strokes || []).filter(x => x.id && !have.has(x.id) && !(lDel[x.id] > (x.rev || 0)));
+            const del = { ...lDel }; for (const k in rDel) del[k] = Math.max(del[k] || 0, rDel[k]);
+            for (const st of [...keep, ...add]) if (st.id && del[st.id] && !(del[st.id] > (st.rev || 0))) delete del[st.id];
+            const dropped = (cur.strokes || []).filter(x => x.id && !have.has(x.id)).length;
+            const strokes = [...keep, ...add];
+            const sameAsRemote = strokes.length === (rp.strokes || []).length && strokes.every((x, i) => x.id === rp.strokes[i]?.id) && Object.keys(del).length === Object.keys(rDel).length;
+            const merged = { ...cur, strokes, del: Object.keys(del).length ? del : undefined, bg: rp.bg || cur.bg, pdf: rp.pdf || cur.pdf, size: rp.size || cur.size, pw: rp.pw || cur.pw, ph: rp.ph || cur.ph, updated: sameAsRemote ? rpg.updated : Math.max(Date.now(), rpg.updated + 1) };
+            if (dropped) { await db.snapshot(cur, 'before-merge'); db.journal({ pid, nb: id, n: dropped, left: strokes.length, why: 'remote-erase', dev: 'sync' }); }
+            const lpage = id === openId ? ed.pageMap.get(pid) : null;
+            if (lpage && (ed.dirty.has(pid) || (ed.live && ed.live.page === lpage))) return; // mid-stroke here: next round (merge is safe to repeat)
+            await db.put('pages', merged);
+            if (lpage) { lpage.strokes = merged.strokes; lpage.del = merged.del; lpage.updated = merged.updated; lpage.bg = merged.bg; lpage.pdf = merged.pdf; lpage._ver = (lpage._ver || 0) + 1; lpage._ids = new Set(merged.strokes.map(x => x.id).filter(Boolean)); ed.lastShot?.set(pid, merged.strokes.slice()); ed.thumbCache?.delete(pid); ed.need.main = true; ed.app?.broadcast?.pageChanged(lpage); }
+            pulled++;
+            if (!sameAsRemote) { await upload(rpg.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(merged.updated) }, await pageOut(merged)); pushed++; }
+            await db.put('kv', { k: 'sync:base:' + pid, v: merged.strokes.map(x => x.id).filter(Boolean) });
           });
           else if (lpg && (!rpg || (lpg.updated || 0) > rpg.updated)) jobs.push(async () => {
             await upload(rpg?.f.id, `pg-${pid}.json`, { kind: 'page', id: pid, nb: id, updated: String(lpg.updated || 0) }, await pageOut(lpg)); pushed++;

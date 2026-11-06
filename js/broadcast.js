@@ -12,7 +12,7 @@ export class Broadcast {
     this.mode = prefs.studentMode || 'follow';
     try { this.ch = new BroadcastChannel('senkid-live'); } catch { this.ch = null; }
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
-    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.rtcWas = v; this.app.editor?.buildToolbar(); } });
+    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) { setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.autoAt = 0; } this.rtcWas = v; this.app.editor?.buildToolbar(); } });
     app.timer.onChange((st) => this.post({ type: 'timer', st }));
     this.armMirror();
     // once a Safari window has been paired, keep it paired by itself: after a break, an app switch or a restart of the app,
@@ -20,19 +20,29 @@ export class Broadcast {
     const tryAuto = () => {
       if (this.rtc.open || pairing || document.visibilityState !== 'visible' || !navigator.onLine) return;
       const t = prefs.pairedAt || 0; if (Date.now() - t > 12 * 3600e3) return; // only on a day a TV window was set up
-      if (Date.now() - (this.autoAt || 0) < 45e3) return; this.autoAt = Date.now();
+      if (Date.now() - (this.autoAt || 0) < ((this.autoFail || 0) >= 5 ? 60e3 : 12e3)) return; this.autoAt = Date.now(); // quick retries first, then once a minute
       import('./pair.js').then(m => { if (!m.canPair()) return; startPairing(this, false, true); });
     };
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(tryAuto, 1500); });
-    setInterval(tryAuto, 20e3); setTimeout(tryAuto, 4000);
+    setInterval(tryAuto, 5e3); setTimeout(tryAuto, 3000);
+    // hand the TV window our Google token whenever it changes, so it can re-pair without signing in
+    setInterval(() => this.sendToken(), 30e3);
   }
   get connected() { return performance.now() - this.lastAlive < 4500; }
+  sendToken(force) {
+    if (!this.rtc.open) return;
+    let t = null; try { t = JSON.parse(localStorage.getItem('senkid.gtoken') || 'null'); } catch { }
+    if (!t || !(t.exp > Date.now())) return;
+    if (!force && this.tokSent === t.exp) return; this.tokSent = t.exp;
+    this.rtc.send({ type: 'tok', t });
+  }
   post(m) { if (!this.connected) return; try { this.ch && this.ch.postMessage(m); } catch (e) { console.warn(e); } if (this.rtc.open) this.rtc.send(m); }
   onMsg(m, viaRtc) {
     if (!m) return;
     if (m.type === 'alive' || m.type === 'hello') {
       const was = this.connected; this.lastAlive = performance.now();
       try { if (viaRtc) this.rtc.send({ type: 'ack' }); else this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
+      if (viaRtc) this.sendToken(m.type === 'hello');
       if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.uiWas = false; setTimeout(() => this.sendUI(), 200); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
     } else if (m.type === 'need') {
       const ed = this.app.editor; if (!ed) return;
@@ -50,8 +60,9 @@ export class Broadcast {
   mirrorOn() { return prefs.presentKind === 'screen' && this.connected && !!this.app.editor; }
   uiSnapshot() {
     const ed = this.app.editor; if (!ed) return null;
-    const stageUI = [...ed.stage.children].filter(el => el.tagName !== 'CANVAS').map(el => el.outerHTML).join('');
-    return { type: 'ui', on: true, W: innerWidth, H: innerHeight, theme: document.documentElement.dataset.theme || '', edClass: ed.el.className, tb: ed.tb.outerHTML, stageUI, layer: document.getElementById('layer')?.innerHTML || '', toasts: document.getElementById('toasts')?.innerHTML || '' };
+    const stageUI = [...ed.stage.children].filter(el => el.tagName !== 'CANVAS' && !el.dataset.nomirror).map(el => htmlOf(el)).join('');
+    const layer = [...(document.getElementById('layer')?.children || [])].map(el => htmlOf(el)).join('');
+    return { type: 'ui', on: true, W: innerWidth, H: innerHeight, theme: document.documentElement.dataset.theme || '', edClass: ed.el.className, tb: ed.tb.outerHTML, stageUI, layer, toasts: document.getElementById('toasts')?.innerHTML || '' };
   }
   armMirror() {
     if (this.mo) return;
@@ -62,7 +73,7 @@ export class Broadcast {
   sendUI() {
     if (!this.mirrorOn()) { if (this.uiWas) { this.uiWas = false; this.post({ type: 'ui', on: false }); } return; }
     const snap = this.uiSnapshot(); if (!snap) return;
-    const key = snap.tb.length + ':' + snap.stageUI.length + ':' + snap.layer.length + ':' + snap.toasts.length + ':' + snap.W + 'x' + snap.H;
+    const key = snap.tb.length + ':' + snap.stageUI.length + ':' + snap.layer.length + ':' + snap.toasts.length + ':' + snap.W + 'x' + snap.H + ':' + sum(snap.stageUI) + ':' + sum(snap.layer);
     if (key === this.uiKey && this.uiWas && snap.tb === this.uiTb) return;
     this.uiKey = key; this.uiTb = snap.tb; this.uiWas = true; this.post(snap);
   }
@@ -98,6 +109,24 @@ export class Broadcast {
   setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; this.lastTools = null; setTimeout(() => this.sendUI(), 50); }
 }
 
+// outerHTML of a UI element with its canvases (page thumbnails, previews) turned into small images, so the TV shows
+// dialogs and the page picker exactly as the teacher sees them (a bare <canvas> in HTML is blank)
+const cvCache = new WeakMap();
+function htmlOf(el) {
+  const cvs = el.querySelectorAll('canvas'); if (!cvs.length) return el.outerHTML;
+  const clone = el.cloneNode(true), ccv = clone.querySelectorAll('canvas');
+  cvs.forEach((c, i) => {
+    const r = c.getBoundingClientRect(); if (!c.width || !c.height || r.width === 0) { ccv[i].remove(); return; }
+    let e = cvCache.get(c); const key = c.width + 'x' + c.height + ':' + (c._ver || 0);
+    if (!e || e.key !== key || Date.now() - e.t > 2500) {
+      try { const w = Math.min(c.width, 320), hgt = Math.round(c.height * w / c.width), t = document.createElement('canvas'); t.width = w; t.height = hgt; t.getContext('2d').drawImage(c, 0, 0, w, hgt); e = { key, t: Date.now(), url: t.toDataURL('image/jpeg', 0.6) }; cvCache.set(c, e); } catch { e = null; }
+    }
+    const img = document.createElement('img'); if (e) img.src = e.url; img.className = ccv[i].className; img.style.cssText = ccv[i].style.cssText; img.style.width = r.width + 'px'; img.style.height = r.height + 'px'; img.draggable = false;
+    ccv[i].replaceWith(img);
+  });
+  return clone.outerHTML;
+}
+function sum(str) { let x = 0; for (let i = 0; i < str.length; i += 7) x = (x * 31 + str.charCodeAt(i)) | 0; return x; }
 let studentWin = null;
 let pairing = false;
 // small status pill (bottom-right of the page area) so the teacher always knows what the TV link is doing
@@ -116,10 +145,11 @@ async function startPairing(b, openSafari = true, quiet = false) {
   setTv('wait', quiet ? 'กำลังเชื่อมจอสอง (ทีวี)…' : 'กำลังจับคู่กับ Safari…');
   try {
     await b.app.editor?.flush?.(); // iPadOS may suspend or restart this app while Safari is in front: nothing may be left unsaved
-    const url = new URL('student.html#pair', location.href).href;
+    let tokq = ''; try { const t = JSON.parse(localStorage.getItem('senkid.gtoken') || 'null'); if (t && t.exp > Date.now()) tokq = '&tok=' + encodeURIComponent(JSON.stringify(t)); } catch { }
+    const url = new URL('student.html#pair' + tokq, location.href).href;
     const p = teacherPair(b.rtc, { timeoutMs: quiet ? 40e3 : 180e3, onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else if (!quiet) toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
     const ok = await p;
-    if (ok) { prefs.pairedAt = Date.now(); savePrefs(); } else if (!b.rtc.open) setTv(quiet ? 'off' : 'off', quiet ? 'ยังไม่พบหน้าต่างทีวี · จะลองใหม่เอง' : 'จับคู่ไม่สำเร็จ');
+    if (ok) { prefs.pairedAt = Date.now(); savePrefs(); b.autoFail = 0; } else { b.autoFail = (b.autoFail || 0) + 1; } if (!ok && !b.rtc.open) setTv(quiet ? 'off' : 'off', quiet ? 'ยังไม่พบหน้าต่างทีวี · จะลองใหม่เอง' : 'จับคู่ไม่สำเร็จ');
     if (!ok && !quiet) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
   } catch (e) { console.warn('pair', e); if (!quiet) toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
   finally { bz.done(); pairing = false; }

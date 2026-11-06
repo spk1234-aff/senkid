@@ -1,5 +1,5 @@
 // IndexedDB storage: notebooks, pages, recordings (meta + chunks)
-const NAME = 'senkid', VER = 3;
+const NAME = 'senkid', VER = 4;
 let dbp = null;
 // change tracking for cloud sync: every normal write stamps `updated`; writes coming *from* sync are quiet
 let quiet = false; export function setQuiet(v) { quiet = v; }
@@ -18,6 +18,8 @@ export function openDB() {
       if (!db.objectStoreNames.contains('pdfs')) db.createObjectStore('pdfs', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'k' });
       if (!db.objectStoreNames.contains('chunks')) db.createObjectStore('chunks', { keyPath: ['rec', 'seq'] }).createIndex('rec', 'rec');
+      // page snapshots (ink history for "กู้เส้นที่หาย"): { id, pid, nb, t, n, strokes }
+      if (!db.objectStoreNames.contains('snaps')) db.createObjectStore('snaps', { keyPath: 'id' }).createIndex('pid', 'pid');
     };
     r.onsuccess = () => {
       const db = r.result;
@@ -84,4 +86,26 @@ export async function deleteRec(rec) {
   for (const k of keys) t.objectStore('chunks').delete(k);
   t.objectStore('recs').delete(rec);
   return done(t);
+}
+
+export async function snapsOf(pid) { const t = await tx(['snaps']); const a = await req(t.objectStore('snaps').index('pid').getAll(pid)); return a.sort((x, y) => y.t - x.t); }
+// a deletion journal + bounded page snapshots, so lost ink can be explained and brought back
+const JOURNAL = 'journal';
+export async function journal(entry) {
+  try { const j = (await get('kv', JOURNAL))?.v || []; j.push({ t: Date.now(), ...entry }); while (j.length > 400) j.shift(); await putQuiet('kv', { k: JOURNAL, v: j }); } catch { }
+}
+export async function journalRead() { return (await get('kv', JOURNAL))?.v || []; }
+export async function snapshot(page, why) {
+  try {
+    const list = await snapsOf(page.id);
+    const n = (page.strokes || []).length;
+    if (list[0] && Date.now() - list[0].t < 45e3 && why !== 'before-restore') { // fold quick successive edits into one snapshot
+      if (list[0].n === n) return;
+    }
+    const id = page.id + ':' + Date.now();
+    const strokes = (page.strokes || []).map(s => s.pts && !(s.pts instanceof Float32Array) ? { ...s, pts: Float32Array.from(s.pts) } : s);
+    await putQuiet('snaps', { id, pid: page.id, nb: page.nb, t: Date.now(), n, why, strokes });
+    const old = list.filter((x, i) => i >= 29 || Date.now() - x.t > 21 * 86400e3).map(x => x.id);
+    if (old.length) await delMany('snaps', old);
+  } catch (e) { console.warn('snapshot', e); }
 }

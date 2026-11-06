@@ -203,6 +203,58 @@ export function recognizeRadical(p, { strict = true, force = false } = {}) {
   return { k: 'poly', closed: false, pts: out, radical: true };
 }
 export function looksLikeRadical(p) { return !!recognizeRadical(p, { strict: false }); }
+
+// ---- brackets: ( ) [ ] { } drawn as one tall stroke, both ends on the same side ----
+// shape: { k:'bracket', kind:'paren'|'square'|'brace', pts:[xTop,yTop,xBot,yBot] (the two ends), d: signed depth
+// (positive = bulges to the right of the top→bottom direction, i.e. ")" ; negative = "(") }
+export function recognizeBracket(p, { force = null } = {}) {
+  if (p.length < 8) return null;
+  const R = resample(trimRest(p), 96); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const q of P) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
+  const w = x1 - x0, hgt = y1 - y0; if (hgt < 24) return null;
+  const a = P[0], b = P[P.length - 1];
+  const top = a[1] < b[1] ? a : b, bot = a[1] < b[1] ? b : a;
+  if (!force) {
+    if (hgt < 1.6 * w) return null;                                     // tall
+    if (Math.abs(top[1] - y0) > 0.2 * hgt || Math.abs(bot[1] - y1) > 0.2 * hgt) return null; // ends at top and bottom
+    if (Math.abs(top[0] - bot[0]) > 0.45 * w + 6) return null;          // ends on the same side
+  }
+  const ex = (top[0] + bot[0]) / 2, ym = (y0 + y1) / 2;
+  // the far side: the point farthest from the ends' side
+  let far = P[0], fd = -1; for (const q of P) { const dd = Math.abs(q[0] - ex); if (dd > fd) { fd = dd; far = q; } }
+  const d = far[0] - ex;
+  if (!force && Math.abs(d) < 0.55 * w) return null;
+  let kind = force;
+  if (!kind) {
+    const V = rdp(P, Math.max(2, 0.05 * hgt));
+    // sharpness at the far point: angle between the directions to points ~12% of the height away
+    const i0 = P.indexOf(far), k = 12, A = P[Math.max(0, i0 - k)], B = P[Math.min(P.length - 1, i0 + k)];
+    const ang = Math.acos(Math.max(-1, Math.min(1, ((A[0] - far[0]) * (B[0] - far[0]) + (A[1] - far[1]) * (B[1] - far[1])) / ((Math.hypot(A[0] - far[0], A[1] - far[1]) || 1) * (Math.hypot(B[0] - far[0], B[1] - far[1]) || 1))))) * 180 / Math.PI;
+    const farMid = Math.abs(far[1] - ym) < 0.22 * hgt;
+    if (V.length === 4 && Math.abs(V[1][1] - V[2][1]) > 0.6 * hgt && Math.abs(V[1][0] - V[2][0]) < 0.25 * hgt) kind = 'square'; // two corners, straight spine
+    else if (farMid && ang < 125) kind = 'brace';
+    else kind = 'paren';
+  }
+  return { k: 'bracket', kind, pts: [ex, y0, ex, y1], d, closed: false };
+}
+export function bracketPts(sh, steps = 48) {
+  const [ax, ay, bx, by] = sh.pts, L = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / L, uy = (by - ay) / L, nx = uy, ny = -ux; // n: +x (right) when the spine runs top→bottom
+  // point at fraction t along the spine, offset s to the side
+  const Q = (t, s) => [ax + ux * t * L + nx * s, ay + uy * t * L + ny * s];
+  const out = [], push = (q) => out.push(q[0], q[1]);
+  const d = sh.d;
+  if (sh.kind === 'paren') { for (let i = 0; i <= steps; i++) { const t = i / steps; push(Q(t, d * Math.pow(Math.max(0, 1 - (2 * t - 1) ** 2), 0.72))); } return out; }
+  if (sh.kind === 'square') { const tk = Math.min(Math.abs(d), L * 0.5); push(Q(0, 0)); push(Q(0, Math.sign(d) * tk)); push(Q(1, Math.sign(d) * tk)); push(Q(1, 0)); return out; }
+  // brace: ends → short bend → straight run → cusp at the middle → straight run → bend → end (smooth bends, sharp cusp)
+  const r = Math.min(Math.abs(d) * 0.55, L * 0.12), sg = Math.sign(d) || 1, s1 = sg * Math.abs(d) * 0.5;
+  const bend = (p0, c, p1, n = 8) => { for (let i = 0; i <= n; i++) { const t = i / n, u = 1 - t; out.push(u * u * p0[0] + 2 * u * t * c[0] + t * t * p1[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * p1[1]); } };
+  const rt = r / L; // bend radius as a fraction of the spine
+  bend(Q(0, 0), Q(0, s1), Q(rt, s1));
+  bend(Q(0.5 - rt, s1), Q(0.5, s1), Q(0.5, d));
+  bend(Q(0.5, d), Q(0.5, s1), Q(0.5 + rt, s1));
+  bend(Q(1 - rt, s1), Q(1, s1), Q(1, 0));
+  return out;
+}
 export function recognize(p) {
   if (p.length < 8) return null;
   p = trimRest(p);
@@ -330,13 +382,17 @@ export function shapeHandles(sh) {
       { id: 'move', x: sh.cx, y: sh.cy },
     ];
   }
+  if (sh.k === 'bracket') {
+    const q = bracketPts(sh, 2), m = sh.kind === 'paren' ? q.slice(2, 4) : (() => { const [ax, ay, bx, by] = sh.pts, L = Math.hypot(bx - ax, by - ay) || 1; return [(ax + bx) / 2 + (by - ay) / L * sh.d, (ay + by) / 2 - (bx - ax) / L * sh.d]; })();
+    return [{ id: 0, x: sh.pts[0], y: sh.pts[1] }, { id: 1, x: sh.pts[2], y: sh.pts[3] }, { id: 'depth', x: m[0], y: m[1] }, { id: 'move', x: (sh.pts[0] + sh.pts[2]) / 2, y: (sh.pts[1] + sh.pts[3]) / 2 }];
+  }
   const hs = [];
   for (let i = 0; i < sh.pts.length; i += 2) hs.push({ id: i / 2, x: sh.pts[i], y: sh.pts[i + 1] });
   let cx = 0, cy = 0; const n = sh.pts.length / 2; for (let i = 0; i < sh.pts.length; i += 2) { cx += sh.pts[i]; cy += sh.pts[i + 1]; }
   hs.push({ id: 'move', x: cx / n, y: cy / n });
   return hs;
 }
-export function moveHandle(orig, id, x, y) {
+export function moveHandle(orig, id, x, y, { lock = true } = {}) {
   const sh = JSON.parse(JSON.stringify(orig));
   if (id === 'move') {
     const hs = shapeHandles(orig), m = hs[hs.length - 1], dx = x - m.x, dy = y - m.y;
@@ -349,6 +405,28 @@ export function moveHandle(orig, id, x, y) {
     if (sh.rx === sh.ry) { /* keep circle */ }
     return sh;
   }
+  // project (x,y) onto the line through (ax,ay) with direction (ux,uy)
+  const proj = (ax, ay, ux, uy, x, y) => { const L = Math.hypot(ux, uy) || 1; ux /= L; uy /= L; const t = (x - ax) * ux + (y - ay) * uy; return [ax + ux * t, ay + uy * t]; };
+  if (sh.k === 'bracket') {
+    const [ax, ay, bx, by] = sh.pts;
+    if (id === 'depth') { const L = Math.hypot(bx - ax, by - ay) || 1, nx = (by - ay) / L, ny = -(bx - ax) / L; sh.d = (x - (ax + bx) / 2) * nx + (y - (ay + by) / 2) * ny; if (Math.abs(sh.d) < 4) sh.d = 4 * (Math.sign(sh.d) || 1); return sh; }
+    // an end slides along the spine (lock) so the bracket just gets taller or shorter; free: any direction
+    const o = id === 0 ? [bx, by] : [ax, ay];
+    let q = lock ? proj(o[0], o[1], (id === 0 ? ax : bx) - o[0], (id === 0 ? ay : by) - o[1], x, y) : [x, y];
+    if (Math.hypot(q[0] - o[0], q[1] - o[1]) < 12) return sh;
+    sh.pts[id * 2] = q[0]; sh.pts[id * 2 + 1] = q[1]; return sh;
+  }
+  if (sh.radical && lock && sh.pts.length >= 8) { // radical: the bar end slides along the bar, the first point along its own stroke
+    const n = sh.pts.length / 2;
+    if (id === n - 1) { const cx = sh.pts[(n - 2) * 2], cy = sh.pts[(n - 2) * 2 + 1]; sh.pts[id * 2] = Math.max(cx + 8, x); sh.pts[id * 2 + 1] = cy; return sh; }
+    if (id === 0) { const q = proj(sh.pts[2], sh.pts[3], sh.pts[0] - sh.pts[2], sh.pts[1] - sh.pts[3], x, y); sh.pts[0] = q[0]; sh.pts[1] = q[1]; return sh; }
+  }
+  if (!sh.closed && sh.pts.length === 4 && lock) { // a straight line / arrow: the end slides along the line itself (length changes, direction and width don't)
+    const o = id === 0 ? 1 : 0, ox = sh.pts[o * 2], oy = sh.pts[o * 2 + 1];
+    const q = proj(ox, oy, orig.pts[id * 2] - ox, orig.pts[id * 2 + 1] - oy, x, y);
+    if (Math.hypot(q[0] - ox, q[1] - oy) >= 6) { sh.pts[id * 2] = q[0]; sh.pts[id * 2 + 1] = q[1]; }
+    return sh;
+  }
   sh.pts[id * 2] = x; sh.pts[id * 2 + 1] = y;
   if (!sh.closed && sh.pts.length === 4) { // keep line snapping while editing
     const o = id === 0 ? 1 : 0; const sn = snapLine(sh.pts[o * 2], sh.pts[o * 2 + 1], x, y); sh.pts[id * 2] = sn[2]; sh.pts[id * 2 + 1] = sn[3];
@@ -359,6 +437,7 @@ export function moveHandle(orig, id, x, y) {
 // force a specific open shape (used by the "change to…" chips after hold-to-shape)
 export function shapeAs(p, kind) {
   if (kind === 'radical') return recognizeRadical(p, { force: true });
+  if (kind === 'paren' || kind === 'square' || kind === 'brace') return recognizeBracket(p, { force: kind });
   p = trimRest(p);
   const R = resample(p, 96); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
   if (P.length < 3) return null;

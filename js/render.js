@@ -1,7 +1,7 @@
 // Stroke + page rendering (Canvas 2D). Coordinates are page points (1/72 in).
 import { drawImageObj } from './images.js';
 import { pdfDetail, pdfBitmap } from './pdfdoc.js';
-import { circle3 } from './shapes.js';
+import { circle3, bracketPts } from './shapes.js';
 export const PAGE = { P: { w: 595.28, h: 841.89 }, L: { w: 841.89, h: 595.28 } };
 export const STRIDE = 4;
 export const dims = (p) => (p && p.pw) ? { w: p.pw, h: p.ph } : PAGE[(p && p.size) || 'P'];
@@ -166,6 +166,7 @@ export function quadPts(sh, steps = 48) {
 }
 export function shapePolyline(sh, steps = 72) {
   if (sh.k === 'quad') return quadPts(sh, steps);
+  if (sh.k === 'bracket') return bracketPts(sh, steps);
   if (sh.k === 'arc3') return arcPts(sh, steps);
   if (sh.k === 'curve') return curvePts(sh, Math.max(4, Math.round(steps / 8)));
   if (sh.k === 'ellipse') {
@@ -178,7 +179,7 @@ export function shapePolyline(sh, steps = 72) {
   return out;
 }
 function arrowHead(sh, w) {
-  const q = sh.k === 'quad' || sh.k === 'arc3' || sh.k === 'curve' ? shapePolyline(sh, 48) : sh.pts, n = q.length;
+  const q = sh.k === 'quad' || sh.k === 'arc3' || sh.k === 'curve' || sh.k === 'bracket' ? shapePolyline(sh, 48) : sh.pts, n = q.length;
   const x1 = q[n - 2], y1 = q[n - 1]; let x0 = q[n - 4], y0 = q[n - 3];
   if (n >= 10 && q !== sh.pts) { x0 = q[n - 8]; y0 = q[n - 7]; }
   const a = Math.atan2(y1 - y0, x1 - x0), L = Math.max(w * 5, 12), sp = 0.48;
@@ -205,7 +206,7 @@ function roundedPoly(p, pts, closed, r) {
 function shapePath(sh, w) {
   const p = NewPath();
   if (sh.k === 'ellipse') { p.ellipse(sh.cx, sh.cy, Math.max(.1, sh.rx), Math.max(.1, sh.ry), sh.rot || 0, 0, Math.PI * 2); return p; }
-  if (sh.k === 'arc3' || sh.k === 'curve' || sh.k === 'quad') { const q = sh.k === 'arc3' ? arcPts(sh, 96) : sh.k === 'quad' ? quadPts(sh, 64) : curvePts(sh, 16); p.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) p.lineTo(q[i], q[i + 1]); }
+  if (sh.k === 'arc3' || sh.k === 'curve' || sh.k === 'quad' || sh.k === 'bracket') { const q = sh.k === 'arc3' ? arcPts(sh, 96) : sh.k === 'quad' ? quadPts(sh, 64) : sh.k === 'bracket' ? bracketPts(sh, 64) : curvePts(sh, 16); p.moveTo(q[0], q[1]); for (let i = 2; i < q.length; i += 2) p.lineTo(q[i], q[i + 1]); }
   else if (sh.rr > 0 && sh.pts.length >= 6) roundedPoly(p, sh.pts, !!sh.closed, sh.rr);
   else {
     p.moveTo(sh.pts[0], sh.pts[1]);

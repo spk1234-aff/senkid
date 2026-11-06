@@ -86,10 +86,37 @@ export class Recorder {
     };
     fillMics(true);
     refreshBtn.onclick = () => fillMics(true);
+    if (audioOnly) {
+      // teacher camera: off / a camera; shape; live preview of the exact size and place it will take
+      const camSel = h('select', { class: 'sel', style: { flex: 1 } });
+      const camShape = seg([['circle', 'วงกลม'], ['round', 'สี่เหลี่ยมมน']], prefs.rec.camShape || 'circle', v => { prefs.rec.camShape = v; savePrefs(); for (const el of document.querySelectorAll('video.campip')) el.className = 'campip ' + v; });
+      const camSize = seg([['110', 'เล็ก'], ['150', 'กลาง'], ['210', 'ใหญ่']], String(prefs.rec.camSize || 150), v => { prefs.rec.camSize = +v; savePrefs(); if (this.camTest) startCamPreview(); });
+      const camSub = h('div', { class: 'sub', style: { marginTop: '4px' } }, 'ปิดอยู่ · จะอัดเสียงกับลายมืออย่างเดียว');
+      body.append(h('div', { class: 'lbl' }, 'กล้องครู (ภาพเล็กที่มุม)'), h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, camSel), camSub,
+        h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '8px', alignItems: 'center' } }, h('span', { class: 'sub' }, 'รูปทรง'), camShape, h('span', { class: 'sub' }, 'ขนาด'), camSize),
+        h('p', { class: 'sub', style: { margin: '6px 0 0' } }, 'เปิดแล้ว: ระหว่างอัดจะเห็นตัวเองเล็ก ๆ ที่มุมกระดาน ลากย้ายได้ ไม่ฉายขึ้นทีวี · ตอนเล่นย้อน/ส่งออกวิดีโอจะมีภาพครูซ้อนที่มุมนั้น · ไฟล์ ≈ 6–8 MB/นาที'));
+      const fillCams = async (askPerm = false) => {
+        let devs = await listCams();
+        if (askPerm && devs.length && devs.every(d => !d.label) && prefs.rec.cam) { try { const st = await navigator.mediaDevices.getUserMedia({ video: true }); st.getTracks().forEach(t => t.stop()); devs = await listCams(); } catch { } }
+        camSel.innerHTML = ''; camSel.append(h('option', { value: '' }, 'ปิด (ไม่อัดกล้อง)'));
+        if (!devs.length) { camSel.append(h('option', { value: 'user' }, 'กล้องหน้า'), h('option', { value: 'environment' }, 'กล้องหลัง')); }
+        devs.forEach((d, i) => camSel.append(h('option', { value: d.deviceId }, camName(d, i))));
+        const cur = devs.find(x => x.deviceId === prefs.rec.cam) || (prefs.rec.camLabel && devs.find(x => x.label === prefs.rec.camLabel));
+        camSel.value = cur ? cur.deviceId : (prefs.rec.cam === 'user' || prefs.rec.cam === 'environment') && !devs.length ? prefs.rec.cam : prefs.rec.cam && !cur ? '' : '';
+        if (prefs.rec.cam && !cur && devs.length) { camSel.value = ''; }
+        camSub.textContent = camSel.value ? `เปิด: ${camSel.selectedOptions[0]?.textContent}` : prefs.rec.cam ? `ไม่พบกล้อง "${prefs.rec.camLabel || prefs.rec.cam}" ตอนนี้ · เสียบแล้วเลือกใหม่` : 'ปิดอยู่ · จะอัดเสียงกับลายมืออย่างเดียว';
+      };
+      const startCamPreview = async () => { stopCamPreview(); if (!prefs.rec.cam) return; const st = await openCam(); if (!st) { camSub.textContent = 'เปิดกล้องไม่ได้ · ตรวจการอนุญาตกล้องใน Safari'; return; } this.camTest = st; const stage = ed?.stage || document.body; showCamPip(stage, st, {}); };
+      const stopCamPreview = () => { hideCamPip(); this.camTest?.getTracks().forEach(t => t.stop()); this.camTest = null; };
+      camSel.onchange = () => { prefs.rec.cam = camSel.value; prefs.rec.camLabel = camSel.value ? (camSel.selectedOptions[0]?.textContent || '') : ''; savePrefs(); fillCams(); startCamPreview(); };
+      fillCams(true); if (prefs.rec.cam) startCamPreview();
+      const onDevC = () => fillCams(); try { navigator.mediaDevices.addEventListener('devicechange', onDevC); } catch { }
+      this._camCleanup = () => { stopCamPreview(); try { navigator.mediaDevices.removeEventListener('devicechange', onDevC); } catch { } };
+    }
     const onDev = () => { fillMics(); if (!this.testStream) toast('อุปกรณ์เสียงเปลี่ยน · อัปเดตรายการไมค์แล้ว', 2000); };
     try { navigator.mediaDevices.addEventListener('devicechange', onDev); } catch { }
     micSel.onchange = () => { prefs.rec.mic = micSel.value; prefs.rec.micLabel = micSel.value ? (micSel.selectedOptions[0]?.textContent || '') : ''; savePrefs(); fillMics(); if (this.testStream) startMeter(); };
-    const stopMeter = () => { try { navigator.mediaDevices.removeEventListener('devicechange', onDev); } catch { } cancelAnimationFrame(this.meterRaf); this.testStream?.getTracks().forEach(t => t.stop()); this.testStream = null; this.testCtx?.close?.(); this.testCtx = null; };
+    const stopMeter = () => { try { this._camCleanup?.(); this._camCleanup = null; } catch { } try { navigator.mediaDevices.removeEventListener('devicechange', onDev); } catch { } cancelAnimationFrame(this.meterRaf); this.testStream?.getTracks().forEach(t => t.stop()); this.testStream = null; this.testCtx?.close?.(); this.testCtx = null; };
     const startMeter = async () => {
       stopMeter();
       try {
@@ -212,8 +239,8 @@ export class Recorder {
     const tf = ed?.recFloat?.querySelector('.t'); if (tf) tf.textContent = t;
     if (prefs.rec.warn25 && !this.warned && this.elapsed() > 25 * 60 * 1000) { this.warned = true; toast('อัดมาเกิน 25 นาทีแล้ว คลิปยาวอาจแชร์หรืออัปโหลดลำบาก', 6000, 'warn'); }
   }
-  pause() { if (this.state !== 'recording') return; try { this.mr.pause(); } catch { } this.state = 'paused'; this.pauseAt = performance.now(); this.syncButton(); }
-  resume() { if (this.state !== 'paused') return; try { this.mr.resume(); } catch { } this.pausedTotal += performance.now() - this.pauseAt; this.state = 'recording'; this.syncButton(); }
+  pause() { if (this.state !== 'recording') return; try { this.mr.pause(); } catch { } try { this.cam?.mr.pause(); } catch { } this.state = 'paused'; this.pauseAt = performance.now(); this.syncButton(); }
+  resume() { if (this.state !== 'paused') return; try { this.mr.resume(); } catch { } try { this.cam?.mr.resume(); } catch { } this.pausedTotal += performance.now() - this.pauseAt; this.state = 'recording'; this.syncButton(); }
   async stop() {
     if (this.state === 'idle') return;
     const bz = busy('กำลังบันทึกคลิป…', 'รอสักครู่ อย่าเพิ่งปิดแอป');
@@ -252,6 +279,49 @@ export async function resolveMic() {
   return d || null;
 }
 export function micName(label) { return label || 'ไมค์เริ่มต้นของเครื่อง'; }
+// ---- teacher camera (small picture-in-picture while recording a lesson) ----
+export async function listCams() {
+  try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && d.deviceId && d.deviceId !== 'default'); } catch { return []; }
+}
+export const camName = (d, i) => d.label || (i === 0 ? 'กล้องหน้า' : i === 1 ? 'กล้องหลัง' : `กล้อง ${i + 1}`);
+export async function openCam() {
+  const want = prefs.rec.cam; if (!want) return null;
+  const vid = { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 } };
+  const devs = await listCams();
+  let d = devs.find(x => x.deviceId === want); if (!d && prefs.rec.camLabel) d = devs.find(x => x.label && x.label === prefs.rec.camLabel);
+  const tries = [];
+  if (d) tries.push({ ...vid, deviceId: { exact: d.deviceId } });
+  if (want === 'user' || want === 'environment' || !d) tries.push({ ...vid, facingMode: want === 'environment' ? 'environment' : 'user' });
+  tries.push(vid);
+  for (const c of tries) { try { return await navigator.mediaDevices.getUserMedia({ video: c, audio: false }); } catch (e) { console.warn('cam', e); } }
+  return null;
+}
+export function pickCamMime() {
+  if (typeof MediaRecorder === 'undefined') return '';
+  for (const m of ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch { } }
+  return '';
+}
+// the floating camera preview (draggable, shape = circle / rounded square); position is remembered as a fraction of the stage
+export function showCamPip(stage, stream, { shape = prefs.rec.camShape || 'circle', mirror = true } = {}) {
+  hideCamPip();
+  const v = h('video', { class: 'campip ' + shape, autoplay: true, muted: true, playsinline: true, 'data-nomirror': '1' });
+  v.muted = true; v.srcObject = stream; v.play?.().catch(() => { });
+  if (mirror) v.style.transform = 'scaleX(-1)';
+  const pos = prefs.rec.camPos || { x: 0.985, y: 0.985 }; // bottom-right by default
+  const size = prefs.rec.camSize || 150;
+  v.style.width = v.style.height = size + 'px';
+  const place = () => { const W = stage.clientWidth, H = stage.clientHeight; v.style.left = Math.max(0, Math.min(W - size, pos.x * W - size)) + 'px'; v.style.top = Math.max(0, Math.min(H - size, pos.y * H - size)) + 'px'; };
+  place(); stage.append(v);
+  let drag = null;
+  v.addEventListener('pointerdown', (e) => { drag = { id: e.pointerId, dx: e.clientX - v.offsetLeft, dy: e.clientY - v.offsetTop }; v.setPointerCapture(e.pointerId); e.stopPropagation(); e.preventDefault(); });
+  v.addEventListener('pointermove', (e) => { if (!drag || drag.id !== e.pointerId) return; const W = stage.clientWidth, H = stage.clientHeight; const l = Math.max(0, Math.min(W - size, e.clientX - drag.dx)), t = Math.max(0, Math.min(H - size, e.clientY - drag.dy)); v.style.left = l + 'px'; v.style.top = t + 'px'; pos.x = (l + size) / W; pos.y = (t + size) / H; e.stopPropagation(); });
+  const up = (e) => { if (drag && drag.id === e.pointerId) { drag = null; prefs.rec.camPos = { x: pos.x, y: pos.y }; savePrefs(); } };
+  v.addEventListener('pointerup', up); v.addEventListener('pointercancel', up);
+  v._place = place; addEventListener('resize', place);
+  return v;
+}
+export function hideCamPip() { for (const v of document.querySelectorAll('video.campip')) { removeEventListener('resize', v._place); v.srcObject = null; v.remove(); } }
+
 async function openMic() {
   const base = { echoCancellation: true, noiseSuppression: true };
   const want = await resolveMic();
@@ -301,11 +371,23 @@ export class AudioRecorder {
     const mime = pickAudioMime();
     let mr; try { mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : undefined); } catch { mr = new MediaRecorder(stream); }
     this.stream = stream; this.mr = mr; this.recId = uid(); this.seq = 0; this.bytes = 0; this.writes = [];
+    // teacher camera (optional): its own recorder + chunk stream, kept as a hidden companion record
+    this.cam = null;
+    if (prefs.rec.cam) {
+      const cs = await openCam();
+      if (!cs) toast('เปิดกล้องครูไม่ได้ · อัดเสียง + ลายมืออย่างเดียว', 3000, 'warn');
+      else {
+        const cmime = pickCamMime(); let cmr; try { cmr = new MediaRecorder(cs, cmime ? { mimeType: cmime, videoBitsPerSecond: 900e3 } : { videoBitsPerSecond: 900e3 }); } catch { cmr = new MediaRecorder(cs); }
+        this.cam = { stream: cs, mr: cmr, id: this.recId + '-cam', seq: 0, bytes: 0, writes: [], mime: cmr.mimeType || cmime || 'video/mp4' };
+        showCamPip(ed.stage, cs, {});
+      }
+    }
     const d = new Date();
     this.meta = { id: this.recId, kind: 'audio', name: `${ed.nb.name} · เสียง ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')} น.`, nb: ed.nb.id, page: ed.currentPage()?.id, created: Date.now(), mime: mr.mimeType || mime || 'audio/webm', duration: 0, size: 0, done: false };
     await db.put('recs', this.meta);
     mr.ondataavailable = (e) => { if (e.data && e.data.size) { this.bytes += e.data.size; this.writes.push(db.addChunk(this.recId, this.seq++, e.data).catch(console.error)); } };
     mr.start(3000);
+    if (this.cam) { const C = this.cam; await db.put('recs', { id: C.id, kind: 'cam', parent: this.recId, nb: ed.nb.id, name: this.meta.name + ' · กล้อง', created: Date.now(), mime: C.mime, done: false, hidden: true }); C.mr.ondataavailable = (e) => { if (e.data && e.data.size) { C.bytes += e.data.size; C.writes.push(db.addChunk(C.id, C.seq++, e.data).catch(console.error)); } }; C.mr.start(3000); this.meta.cam = C.id; this.meta.camShape = prefs.rec.camShape || 'circle'; this.meta.camPos = prefs.rec.camPos || { x: 0.985, y: 0.985 }; this.meta.camSize = prefs.rec.camSize || 150; this.meta.camStageW = ed.stage.clientWidth; await db.put('recs', this.meta); }
     this.state = 'recording'; this.t0 = performance.now(); this.pausedTotal = 0;
     try { this.app.timeline?.start(ed, this.recId); } catch (e) { console.warn('timeline', e); }
     try { this.wake = await navigator.wakeLock?.request('screen'); } catch { }
@@ -313,8 +395,8 @@ export class AudioRecorder {
     this.syncButton();
     toast(`เริ่มอัดเสียงแล้ว · ไมค์: ${micName(stream._micLabel)} · แตะปุ่มไมค์เพื่อหยุด`, 3000);
   }
-  pause() { if (this.state !== 'recording') return; try { this.mr.pause(); } catch { } this.state = 'paused'; this.app.timeline?.pause(); this.pauseAt = performance.now(); this.syncButton(); }
-  resume() { if (this.state !== 'paused') return; try { this.mr.resume(); } catch { } this.pausedTotal += performance.now() - this.pauseAt; this.state = 'recording'; this.app.timeline?.resume(); this.syncButton(); }
+  pause() { if (this.state !== 'recording') return; try { this.mr.pause(); } catch { } try { this.cam?.mr.pause(); } catch { } this.state = 'paused'; this.app.timeline?.pause(); this.pauseAt = performance.now(); this.syncButton(); }
+  resume() { if (this.state !== 'paused') return; try { this.mr.resume(); } catch { } try { this.cam?.mr.resume(); } catch { } this.pausedTotal += performance.now() - this.pauseAt; this.state = 'recording'; this.app.timeline?.resume(); this.syncButton(); }
   async stop() {
     if (this.state === 'idle') return;
     const dur = this.elapsed();
@@ -322,6 +404,7 @@ export class AudioRecorder {
     try { if (this.mr.state !== 'inactive') this.mr.stop(); } catch { }
     await stopped; clearInterval(this.tick);
     this.stream.getTracks().forEach(t => t.stop());
+    if (this.cam) { const C = this.cam; const cst = new Promise(r => { C.mr.onstop = r; setTimeout(r, 3000); }); try { if (C.mr.state !== 'inactive') C.mr.stop(); } catch { } await cst; C.stream.getTracks().forEach(t => t.stop()); hideCamPip(); await Promise.all(C.writes); await db.put('recs', { id: C.id, kind: 'cam', parent: this.recId, nb: this.meta.nb, name: this.meta.name + ' · กล้อง', created: this.meta.created, mime: C.mime, duration: dur, size: C.bytes, done: true, hidden: true }); this.meta.camPos = prefs.rec.camPos || this.meta.camPos; this.cam = null; }
     try { await this.wake?.release(); } catch { }
     this.state = 'idle'; this.syncButton();
     await Promise.all(this.writes);
@@ -390,7 +473,7 @@ export async function recBlob(meta) {
 }
 function fileName(meta) {
   const d = new Date(meta.created), p = (n) => String(n).padStart(2, '0');
-  return `senkid-${meta.kind === 'audio' ? 'audio' : 'clip'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${extOf(meta.mime)}`;
+  return `senkid-${meta.kind === 'audio' ? 'audio' : meta.kind === 'cam' ? 'cam' : 'clip'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${extOf(meta.mime)}`;
 }
 export async function saveRecording(meta) { const bz = busy('กำลังเตรียมไฟล์…'); let b; try { b = await recBlob(meta); } finally { bz.done(); } downloadBlob(b, fileName(meta)); }
 export async function shareRecording(meta) {
@@ -419,10 +502,10 @@ export async function showRecording(meta, fresh, blob) {
 }
 
 export async function recordingCounts() {
-  const c = {}; for (const r of await db.getAll('recs')) if (r.nb) c[r.nb] = (c[r.nb] || 0) + 1; return c;
+  const c = {}; for (const r of await db.getAll('recs')) if (r.nb && !r.hidden) c[r.nb] = (c[r.nb] || 0) + 1; return c;
 }
 export async function openRecordings(nb, app) {
-  const recs = (await db.getAll('recs')).filter(r => !nb || r.nb === nb).sort((a, b) => b.created - a.created);
+  const recs = (await db.getAll('recs')).filter(r => !r.hidden && (!nb || r.nb === nb)).sort((a, b) => b.created - a.created);
   const nbRec = nb ? await db.get('notebooks', nb) : null;
   const pageNo = (m) => { const i = nbRec?.pages?.indexOf(m.page); return i >= 0 ? i + 1 : 0; };
   const list = h('div', { class: 'reclist' });
@@ -448,7 +531,7 @@ export async function openRecordings(nb, app) {
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
       else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
-        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } if (m.drive) { const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[m.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); scheduleSync(3000); } await db.deleteRec(m.id); if (m.lesson) (await import('./lesson.js')).deleteLesson(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
+        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } if (m.drive) { const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[m.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); scheduleSync(3000); } await db.deleteRec(m.id); if (m.cam) { try { const cm = await db.get('recs', m.cam); if (cm?.drive) { await deleteDriveFile(cm.drive).catch(() => { }); const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[cm.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); } await db.deleteRec(m.cam); } catch { } } if (m.lesson) (await import('./lesson.js')).deleteLesson(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
       list.append(it);
     }
   };

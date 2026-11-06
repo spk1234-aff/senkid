@@ -722,3 +722,12 @@ body.present #toasts .toast:not(.warn):not(.keep){display:none}
 /* recorded-lesson badge on library covers */
 .nb .cover .recbadge{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;gap:4px;height:30px;padding:0 10px 0 7px;border-radius:15px;border:0;background:rgba(32,34,39,.82);color:#fff;font-size:17px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .nb .cover .recbadge svg{width:16px;height:16px}
+
+.snapthumb{width:110px;height:auto;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.2);background:#fff;flex:none}
+.reclist .item .acts{display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end}
+
+/* teacher camera picture-in-picture (while recording, and in the lesson player) */
+video.campip{position:absolute;z-index:30;object-fit:cover;background:#222;box-shadow:0 4px 16px rgba(0,0,0,.35),0 0 0 3px #fff;touch-action:none;cursor:move}
+video.campip.circle{border-radius:50%}
+video.campip.round{border-radius:18%}
+.lp-stage{position:relative}

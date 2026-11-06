@@ -12,8 +12,19 @@ const pages = new Map();
 let mirror = null, mStage = null, mScale = 1, mW = 0, mH = 0;
 let tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
 
-function size() { if (mirror) return; const d = Math.min(3, devicePixelRatio || 1); cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d); dirty = true; }
+// canvas size is capped: a 4K TV at 3× pixel ratio would need a ~75 MB canvas, which Safari silently fails to keep in a
+// background window (the page goes white). ~8 M pixels (2× on a 1080p/4K window) is plenty for a TV and always fits.
+function dprFor(w, hgt) { const d = Math.min(2, devicePixelRatio || 1); return Math.min(d, Math.sqrt(8e6 / Math.max(1, w * hgt)), 4096 / Math.max(w, hgt)); }
+function size() { if (mirror) return; const d = dprFor(innerWidth, innerHeight); cv.width = Math.round(innerWidth * d); cv.height = Math.round(innerHeight * d); dirty = true; }
 addEventListener('resize', () => { size(); mirrorLayout(); }); size();
+// when iPadOS pauses this window and brings it back, the canvas may have been purged: redraw at once, and keep a slow
+// steady redraw so a purged canvas never stays white for long
+const wake = () => { dirty = true; if (!mirror) size(); else mirrorLayout(); };
+addEventListener('pageshow', wake); addEventListener('focus', wake); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') wake(); });
+setInterval(() => { dirty = true; }, 4000);
+// keep the display awake while the class watches
+let wl = null; const keepAwake = async () => { try { if (!wl && navigator.wakeLock && document.visibilityState === 'visible') { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => { wl = null; }); } } catch { } };
+keepAwake(); document.addEventListener('visibilitychange', keepAwake); addEventListener('pointerdown', keepAwake, { passive: true });
 setPdfReadyHook(() => dirty = true); setImageReadyHook(() => dirty = true);
 
 const onMsg = (m) => {
@@ -37,14 +48,19 @@ ch.onmessage = (e) => onMsg(e.data);
 ch.postMessage({ type: 'hello' });
 setInterval(() => send({ type: 'alive' }), 1500);
 setInterval(() => { if (performance.now() - lastMsg > 6000 && view) { wait.style.display = 'flex'; wait.querySelector('p').textContent = rtc ? 'ขาดการเชื่อมต่อกับแอปเส้นคิด · กลับไปที่แอปแล้วกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง' : 'ขาดการเชื่อมต่อกับหน้าจอครู · เปิดเส้นคิดค้างไว้ในเบราว์เซอร์เดียวกัน'; } }, 2000);
+// the teacher's app hands this window its Google token (in the link on first open, then over the data channel whenever it
+// renews), so the TV window never has to sign in to Google itself and never expires while the app is running
+function takeToken(t) { try { if (t && t.exp > Date.now()) localStorage.setItem('senkid.gtoken', JSON.stringify(t)); } catch { } }
+try { const m = /tok=([^&]+)/.exec(location.hash); if (m) { takeToken(JSON.parse(decodeURIComponent(m[1]))); history.replaceState(null, '', location.pathname + '#pair'); } } catch { }
+const onMsg0 = onMsg; const onMsgT = (m) => { if (m && m.type === 'tok') { takeToken(m.t); return; } onMsg0(m); };
 // opened from the home-screen app: pair through Drive, then talk directly
 if (location.hash.includes('pair')) (async () => {
   const msg = (t) => { wait.style.display = 'flex'; wait.querySelector('p').textContent = t; };
   try {
     const { RtcLink, studentPair, canPair } = await import('./pair.js');
-    if (!canPair()) { msg('ต้องเชื่อมต่อ Google ใน Safari ก่อน (เปิดเส้นคิดใน Safari → ตั้งค่า → ซิงก์ผ่าน Google Drive)'); return; }
+    if (!canPair()) { msg('ยังไม่ได้รับสิทธิ์จากแอปเส้นคิด · ในแอปกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง'); }
     let answered = 0, open = false;
-    rtc = new RtcLink({ onMsg, onState: (v) => { open = v; if (v) { send({ type: 'hello' }); msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } else { view = null; msg('หลุดการเชื่อมต่อ · ในแอปเส้นคิดกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง หน้านี้จะต่อให้เอง'); } } });
+    rtc = new RtcLink({ onMsg: onMsgT, onState: (v) => { open = v; if (v) { send({ type: 'hello' }); msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } else { view = null; msg('หลุดการเชื่อมต่อ · ในแอปเส้นคิดกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง หน้านี้จะต่อให้เอง'); } } });
     msg('กำลังจับคู่กับแอปเส้นคิด…');
     // keep this window alive on the TV: whenever the app publishes a new pairing code, answer it again
     while (true) {
@@ -73,7 +89,7 @@ function mirrorLayout() {
   mScale = Math.min(innerWidth / mW, innerHeight / mH);
   mirror.style.width = mW + 'px'; mirror.style.height = mH + 'px';
   mirror.style.transform = `translate(${(innerWidth - mW * mScale) / 2}px,${(innerHeight - mH * mScale) / 2}px) scale(${mScale})`;
-  const d = Math.min(3, devicePixelRatio || 1) * mScale, sw = mStage.clientWidth, sh = mStage.clientHeight;
+  const sw = mStage.clientWidth, sh = mStage.clientHeight, d = dprFor(sw * mScale, sh * mScale) * mScale;
   cv.width = Math.max(1, Math.round(sw * d)); cv.height = Math.max(1, Math.round(sh * d));
 }
 // random-name picker overlay (big, on the TV)

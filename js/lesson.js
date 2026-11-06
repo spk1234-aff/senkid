@@ -154,6 +154,10 @@ export async function openPlayer(meta, audioBlob) {
   const root = h('div', { class: 'lplayer' });
   const cv = h('canvas'); const ctx = cv.getContext('2d', { alpha: false });
   const audio = audioBlob ? h('audio', { src: URL.createObjectURL(audioBlob), preload: 'auto' }) : null;
+  // teacher camera recorded alongside: a small video that follows the audio clock
+  let camBlob = null, camV = null;
+  if (meta.cam) { try { const { recBlob } = await import('./recorder.js'); const cm = await db.get('recs', meta.cam); if (cm) camBlob = await recBlob(cm); } catch (e) { console.warn('cam', e); } }
+  if (camBlob) { camV = h('video', { class: 'campip ' + (meta.camShape || 'circle'), src: URL.createObjectURL(camBlob), muted: true, playsinline: true, preload: 'auto', style: { transform: 'scaleX(-1)', cursor: 'default' } }); camV.muted = true; }
   const title = h('div', { class: 'lp-title' }, meta.name || 'บทเรียน');
   const tEl = h('span', { class: 'lp-t' }, '0:00 / ' + fmtTime(dur));
   const bar = h('input', { type: 'range', min: 0, max: Math.round(dur), value: 0, step: 50, class: 'lp-bar' });
@@ -161,8 +165,11 @@ export async function openPlayer(meta, audioBlob) {
   const speed = seg([['1', '1×'], ['1.5', '1.5×'], ['2', '2×']], '1', v => { rate = +v; if (audio) audio.playbackRate = rate; });
   const close = h('button', { class: 'btn sq', title: 'ปิด' }, icon('close'));
   const exp = h('button', { class: 'pill sec' }, icon('film'), 'ส่งออกเป็นวิดีโอ');
-  root.append(h('div', { class: 'lp-head' }, title, h('span', { class: 'grow' }), exp, close), h('div', { class: 'lp-stage' }, cv), h('div', { class: 'lp-ctl' }, play, bar, tEl, speed));
+  const stageEl = h('div', { class: 'lp-stage' }, cv);
+  root.append(h('div', { class: 'lp-head' }, title, h('span', { class: 'grow' }), exp, close), stageEl, h('div', { class: 'lp-ctl' }, play, bar, tEl, speed));
   document.body.append(root);
+  const placeCam = () => { if (!camV) return; const r = stageEl.getBoundingClientRect(), k = r.width / (meta.camStageW || r.width); const size = Math.max(60, (meta.camSize || 150) * k), pos = meta.camPos || { x: 0.985, y: 0.985 }; camV.style.width = camV.style.height = size + 'px'; camV.style.left = Math.max(0, Math.min(r.width - size, pos.x * r.width - size)) + 'px'; camV.style.top = Math.max(0, Math.min(r.height - size, pos.y * r.height - size)) + 'px'; };
+  if (camV) { stageEl.append(camV); placeCam(); addEventListener('resize', placeCam); }
   let playing = false, rate = 1, t = 0, base = 0, startAt = 0, raf = 0, dirty = true;
   const size = () => { const r = cv.parentElement.getBoundingClientRect(); const d = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); cv._w = r.width; cv._h = r.height; cv._d = d; dirty = true; };
   size(); addEventListener('resize', size); setImageReadyHook(() => dirty = true); setPdfReadyHook(() => dirty = true);
@@ -170,21 +177,22 @@ export async function openPlayer(meta, audioBlob) {
   const loop = () => {
     raf = requestAnimationFrame(loop);
     const nt = Math.min(dur, curT());
-    if (nt !== t || dirty) { t = nt; st.seek(t); st.draw(ctx, cv._w, cv._h, cv._d); dirty = false; bar.value = Math.round(t); tEl.textContent = fmtTime(t) + ' / ' + fmtTime(dur); }
+    if (nt !== t || dirty) { t = nt; st.seek(t); st.draw(ctx, cv._w, cv._h, cv._d); dirty = false; bar.value = Math.round(t); tEl.textContent = fmtTime(t) + ' / ' + fmtTime(dur); if (playing && camV && (raf & 31) === 0) camSync(); }
     if (playing && t >= dur) stop();
   };
-  const stop = () => { playing = false; base = t; audio?.pause(); play.replaceChildren(icon('play')); };
-  const go = () => { if (t >= dur - 50) { t = 0; base = 0; if (audio) audio.currentTime = 0; } playing = true; startAt = performance.now(); if (audio) { audio.playbackRate = rate; audio.play().catch(() => { }); } play.replaceChildren(icon('pause')); };
+  const camSync = () => { if (!camV) return; const want = t / 1000; if (Math.abs((camV.currentTime || 0) - want) > 0.35) { try { camV.currentTime = want; } catch { } } };
+  const stop = () => { playing = false; base = t; audio?.pause(); camV?.pause(); play.replaceChildren(icon('play')); };
+  const go = () => { if (t >= dur - 50) { t = 0; base = 0; if (audio) audio.currentTime = 0; if (camV) camV.currentTime = 0; } playing = true; startAt = performance.now(); if (audio) { audio.playbackRate = rate; audio.play().catch(() => { }); } if (camV) { camV.playbackRate = rate; camSync(); camV.play().catch(() => { }); } play.replaceChildren(icon('pause')); };
   play.onclick = () => playing ? stop() : go();
-  bar.oninput = () => { const v = +bar.value; if (audio) audio.currentTime = v / 1000; base = v; startAt = performance.now(); t = -1; dirty = true; };
-  close.onclick = () => { cancelAnimationFrame(raf); audio?.pause(); removeEventListener('resize', size); root.remove(); };
-  exp.onclick = () => exportVideo(meta, data, audioBlob, dur);
+  bar.oninput = () => { const v = +bar.value; if (audio) audio.currentTime = v / 1000; if (camV) { try { camV.currentTime = v / 1000; } catch { } } base = v; startAt = performance.now(); t = -1; dirty = true; };
+  close.onclick = () => { cancelAnimationFrame(raf); audio?.pause(); camV?.pause(); removeEventListener('resize', size); removeEventListener('resize', placeCam); root.remove(); };
+  exp.onclick = () => exportVideo(meta, data, audioBlob, dur, camBlob);
   loop();
   return root;
 }
 
 // ---------- export to video (real-time render + audio) ----------
-export async function exportVideo(meta, data, audioBlob, dur) {
+export async function exportVideo(meta, data, audioBlob, dur, camBlob = null) {
   if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return toast('เบราว์เซอร์นี้ส่งออกวิดีโอไม่ได้', 3000, 'warn');
   let pick = '1920';
   const res = await new Promise(r => dialog('ส่งออกเป็นวิดีโอ', h('div', {}, h('p', {}, `ความยาว ${fmtTime(dur)} · การแปลงใช้เวลาเท่าความยาวจริง ต้องเปิดหน้านี้ค้างไว้จนเสร็จ`), h('div', { class: 'lbl' }, 'ความละเอียด'), seg([['1280', '720p'], ['1920', '1080p'], ['2560', '1440p']], '1920', v => { pick = v; })), [{ label: 'ยกเลิก', action: () => r(null) }, { label: 'เริ่มแปลง', cls: 'prim', flex: 2, action: () => r(pick) }]));
@@ -199,23 +207,38 @@ export async function exportVideo(meta, data, audioBlob, dur) {
     ac = new (window.AudioContext || window.webkitAudioContext)(); audioEl = h('audio', { src: URL.createObjectURL(audioBlob) }); document.body.append(audioEl);
     const src = ac.createMediaElementSource(audioEl), dest = ac.createMediaStreamDestination(); src.connect(dest); for (const tr of dest.stream.getAudioTracks()) stream.addTrack(tr);
   }
+  let camEl = null;
+  if (camBlob) { camEl = h('video', { src: URL.createObjectURL(camBlob), muted: true, playsinline: true, preload: 'auto', style: { position: 'fixed', left: '-9999px', top: 0, width: '160px' } }); camEl.muted = true; document.body.append(camEl); await new Promise(r => { camEl.onloadeddata = r; setTimeout(r, 2500); }); }
+  const drawCam = () => {
+    if (!camEl) return; if (camEl.readyState < 2) return;
+    const k = W / (meta.camStageW || W), size = Math.max(40, (meta.camSize || 150) * k), pos = meta.camPos || { x: 0.985, y: 0.985 };
+    const x = Math.max(0, Math.min(W - size, pos.x * W - size)), y = Math.max(0, Math.min(H - size, pos.y * H - size));
+    const vw = camEl.videoWidth || 640, vh = camEl.videoHeight || 480, sq = Math.min(vw, vh), sx = (vw - sq) / 2, sy = (vh - sq) / 2;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.beginPath();
+    if ((meta.camShape || 'circle') === 'circle') ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2); else { const r = size * 0.18; ctx.roundRect ? ctx.roundRect(x, y, size, size, r) : ctx.rect(x, y, size, size); }
+    ctx.closePath(); ctx.lineWidth = Math.max(3, size * 0.03); ctx.strokeStyle = '#fff'; ctx.stroke(); ctx.clip();
+    ctx.translate(x + size, y); ctx.scale(-1, 1); // mirrored like the live preview
+    try { ctx.drawImage(camEl, sx, sy, sq, sq, 0, 0, size, size); } catch { }
+    ctx.restore();
+  };
   const { pickMime, showRecording } = await import('./recorder.js');
   const mime = pickMime(); let mr; try { mr = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: W >= 2560 ? 12e6 : W >= 1920 ? 8e6 : 4e6 } : undefined); } catch { mr = new MediaRecorder(stream); }
   const chunks = []; mr.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
   const bz = busy('กำลังแปลงเป็นวิดีโอ…', fmtTime(0) + ' / ' + fmtTime(dur), 0);
   let cancelled = false; const cancelBtn = h('button', { class: 'pill ghost', style: { marginTop: '10px', pointerEvents: 'auto' } }, 'ยกเลิก'); cancelBtn.onclick = () => { cancelled = true; }; document.querySelector('.busy .busy-box')?.append(cancelBtn);
-  mr.start(1000); const t0 = performance.now(); if (audioEl) { await ac.resume(); audioEl.play().catch(() => { }); }
+  mr.start(1000); const t0 = performance.now(); if (audioEl) { await ac.resume(); audioEl.play().catch(() => { }); } if (camEl) camEl.play().catch(() => { });
   await new Promise(res2 => {
     const tick = () => {
       const wall = performance.now() - t0, at = audioEl ? audioEl.currentTime * 1000 : 0;
       const t = at > 200 ? at : wall; // audio clock when it runs, wall clock otherwise
-      st.seek(Math.min(dur, t)); st.draw(ctx, W, H, 1);
+      st.seek(Math.min(dur, t)); st.draw(ctx, W, H, 1); drawCam();
+      if (camEl && Math.abs(camEl.currentTime * 1000 - t) > 400) { try { camEl.currentTime = t / 1000; } catch { } }
       bz.set('กำลังแปลงเป็นวิดีโอ…', fmtTime(t) + ' / ' + fmtTime(dur), t / dur);
       if (wall >= dur + 300 || cancelled) return res2(); requestAnimationFrame(tick);
     }; tick();
   });
   const stopped = new Promise(r => { mr.onstop = r; setTimeout(r, 3000); }); mr.stop(); await stopped;
-  audioEl?.pause(); try { ac?.close(); } catch { } cv.remove(); audioEl?.remove(); bz.done();
+  audioEl?.pause(); camEl?.pause(); try { ac?.close(); } catch { } cv.remove(); audioEl?.remove(); camEl?.remove(); bz.done();
   if (cancelled) return toast('ยกเลิกการแปลงแล้ว', 1500);
   let blob = new Blob(chunks, { type: (mime || 'video/webm').split(';')[0] });
   if (blob.type.includes('mp4')) { try { const { defragMp4 } = await import('./mp4fix.js'); const fixed = await defragMp4(blob); if (fixed) blob = new Blob([fixed], { type: blob.type }); } catch { } }

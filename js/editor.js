@@ -7,7 +7,7 @@ import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
-import { recognize, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical } from './shapes.js';
+import { recognize, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical, recognizeBracket } from './shapes.js';
 import * as db from './db.js';
 import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
 import { makeDraggable } from './ui.js';
@@ -31,6 +31,7 @@ export class Editor {
   constructor(app, nb, pages) {
     this.app = app; this.nb = nb;
     this.pageMap = new Map(pages.map(p => [p.id, p]));
+    for (const p of pages) p._ids = new Set((p.strokes || []).map(x => x.id).filter(Boolean));
     for (const p of pages) for (const s of p.strokes) if (s.pts && !(s.pts instanceof Float32Array)) s.pts = Float32Array.from(s.pts);
     this.tool = 'pen'; // pen | hl | eraser
     this.undoStack = []; this.redoStack = [];
@@ -613,6 +614,7 @@ export class Editor {
     if (prefs.studentUI) mi('upload', 'ส่งงานให้ครู', () => openExportDialog(this, { submit: true }));
     if (!prefs.studentUI) mi('screen', 'หน้าจอนักเรียน', () => this.app.studentMenu(anchor));
     mi('mic', 'บทเรียนที่อัดในเล่มนี้', () => this.app.openRecordings(this.nb.id));
+    mi('undo', 'กู้เส้นที่หาย (หน้านี้)', () => import('./recover.js').then(m => m.openRecover(this)));
     if (!prefs.studentUI) mi('film', 'คลิปที่อัดไว้ (ทุกเล่ม)', () => this.app.openRecordings());
     if (!prefs.studentUI) mi('download', 'สำรองสมุดเล่มนี้', async () => { await this.flush(); this.app.exportNotebooks([this.nb.id]); });
     mi('gear', 'ตั้งค่าทั้งหมด', () => this.app.openSettings());
@@ -992,6 +994,7 @@ export class Editor {
     let sh = recognize(xy);
     // a stroke shaped down-up-right is a square-root sign even when it misses the strict match: never flatten it into a line
     if ((!sh || (!sh.closed && !sh.radical)) && looksLikeRadical(xy)) sh = shapeAs(xy, 'radical') || sh;
+    else if (!sh || (!sh.closed && !sh.radical && sh.k !== 'ellipse')) { const br = recognizeBracket(xy); if (br) sh = br; }
     else if (sh && !sh.closed && !sh.radical && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh; // (a square-root sign keeps its three straight segments)
     if (sh) { L.shape = sh; L.rawXY = xy; L.rawPts = Array.from(L.pts.slice(0, upto)); this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
   }
@@ -1058,7 +1061,7 @@ export class Editor {
     if (this.drag && this.drag.id === e.pointerId) {
       const r = this.rects.get(this.drag.page.id);
       const [wx, wy] = this.toWorld(sx, sy);
-      const sh = moveHandle(this.drag.orig.shape, this.drag.hid, wx - r.x, wy - r.y);
+      const sh = moveHandle(this.drag.orig.shape, this.drag.hid, wx - r.x, wy - r.y, { lock: !this.handleFree });
       const ns = { ...this.drag.orig, shape: sh, bb: null };
       const st = this.drag.page.strokes, i = st.indexOf(this.drag.cur);
       if (i >= 0) st[i] = ns; this.drag.cur = ns; this.sel = { pid: this.drag.page.id, sid: ns.id };
@@ -1369,9 +1372,9 @@ export class Editor {
     const closed = sel.s.shape.closed || sel.s.shape.k === 'ellipse';
     if (!closed) {
       bar.append(h('div', { class: 'brk' }), sec('รูปแบบ'));
-      const k0 = sel.s.shape.radical ? 'radical' : sel.s.shape.k === 'arrow' ? 'line' : sel.s.shape.k === 'curve' ? 'quad' : sel.s.shape.k;
-      for (const [k, l] of [['line', 'เส้นตรง'], ['radical', '√ รูด'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
-        const b = h('button', { class: 'chip' + (k === k0 ? ' on' : '') }, l);
+      const k0 = sel.s.shape.radical ? 'radical' : sel.s.shape.k === 'bracket' ? sel.s.shape.kind : sel.s.shape.k === 'arrow' ? 'line' : sel.s.shape.k === 'curve' ? 'quad' : sel.s.shape.k;
+      for (const [k, l] of [['line', 'เส้นตรง'], ['radical', '√ รูด'], ['paren', '( )'], ['square', '[ ]'], ['brace', '{ }'], ['quad', 'เส้นโค้ง'], ['arc3', 'ส่วนโค้งวงกลม'], ['free', 'ตามมือ']]) {
+        const b = h('button', { class: 'chip' + (k === k0 ? ' on' : ''), title: k === 'paren' ? 'วงเล็บ' : k === 'square' ? 'วงเล็บเหลี่ยม' : k === 'brace' ? 'วงเล็บปีกกา' : '' }, l);
         b.onclick = () => {
           const cur = this.selStroke(); if (!cur) return; const st = cur.s;
           const raw = st.raw && st.raw.length >= 8 ? st.raw : (() => { const pl = shapePolyline(st.shape, 40), o = []; for (let i = 0; i < pl.length; i += 2) o.push(pl[i], pl[i + 1], 0.5, 0); return o; })();
@@ -1382,6 +1385,17 @@ export class Editor {
         };
         bar.append(b);
       }
+    }
+    if (sel.s.shape.k === 'bracket') {
+      // the matching bracket, flipped, placed to the right (or left) — drag it into place after
+      const pb = h('button', { class: 'chip' }, icon('dup'), h('span', {}, 'สร้างคู่'));
+      pb.onclick = () => { const cur = this.selStroke(); if (!cur) return; const sh = JSON.parse(JSON.stringify(cur.s.shape)); const gap = Math.max(70, Math.abs(sh.d) * 4); const dx = sh.d < 0 ? gap : -gap; sh.pts[0] += dx; sh.pts[2] += dx; sh.d = -sh.d; const before = cur.page.strokes.slice(); const ns = { ...cur.s, id: uid(), shape: sh, bb: null }; delete ns.raw; cur.page.strokes.push(ns); this.pushHistory({ k: 'str', items: [{ pid: cur.page.id, before, after: cur.page.strokes.slice() }] }); this.markDirty(cur.page); this.sel = { pid: cur.page.id, sid: ns.id }; this.need.main = this.need.ui = true; this.buildShapeBar(); toast('สร้างวงเล็บคู่แล้ว · ลากจุดกลางเพื่อย้าย ดึงปลายเพื่อยืด', 2500); };
+      bar.append(pb);
+    }
+    if (!closed) {
+      const lb = h('button', { class: 'chip' + (this.handleFree ? '' : ' on'), title: 'ดึงปลายแล้วเส้นยืด-หดตามแนวเดิม (ปิดเพื่อย้ายปลายได้อิสระ)' }, icon('ruler'), h('span', {}, 'ยืดตามแนว'));
+      lb.onclick = () => { this.handleFree = !this.handleFree; this.buildShapeBar(); };
+      bar.append(lb);
     }
     if (sel.s.shape.k === 'poly' && sel.s.shape.pts.length >= 6) {
       const rb = h('button', { class: 'chip' + (sel.s.shape.rr ? ' on' : '') }, icon('shround'), h('span', {}, 'มุมมน'));
@@ -1674,13 +1688,33 @@ export class Editor {
     const L = this.lassoDraw; this.lassoDraw = null; this.need.ui = true;
     if (!L || L.pts.length < 8) return;
     const poly = L.pts, inside = (x, y) => { let c = false; for (let i = 0, j = poly.length - 2; i < poly.length; j = i, i += 2) { const xi = poly[i], yi = poly[i + 1], xj = poly[j], yj = poly[j + 1]; if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) c = !c; } return c; };
+    // a loose lasso is enough: an object is selected when a good part of it is inside the loop OR the loop's line runs
+    // through it (so circling half a word, or just cutting across a stroke, picks it up — no need to enclose it fully)
+    const segX = (ax, ay, bx, by, cx, cy, dx, dy) => { const d = (bx - ax) * (dy - cy) - (by - ay) * (dx - cx); if (!d) return false; const t = ((cx - ax) * (dy - cy) - (cy - ay) * (dx - cx)) / d, u = ((cx - ax) * (by - ay) - (cy - ay) * (bx - ax)) / d; return t >= 0 && t <= 1 && u >= 0 && u <= 1; };
+    const lx0 = Math.min(...poly.filter((_, i) => i % 2 === 0)), lx1 = Math.max(...poly.filter((_, i) => i % 2 === 0)), ly0 = Math.min(...poly.filter((_, i) => i % 2 === 1)), ly1 = Math.max(...poly.filter((_, i) => i % 2 === 1));
+    const lstep = Math.max(2, Math.floor(poly.length / 2 / 60) * 2);
+    const crosses = (xy, st) => { // does the lasso line cross this polyline?
+      const step = Math.max(1, Math.floor(xy.length / st / 60)) * st;
+      for (let i = 0; i + step < xy.length; i += step) {
+        const ax = xy[i], ay = xy[i + 1], bx = xy[i + step], by = xy[i + step + 1];
+        if (Math.max(ax, bx) < lx0 || Math.min(ax, bx) > lx1 || Math.max(ay, by) < ly0 || Math.min(ay, by) > ly1) continue;
+        for (let j = 0; j < poly.length; j += lstep) { const k2 = (j + lstep) % poly.length; if (segX(ax, ay, bx, by, poly[j], poly[j + 1], poly[k2], poly[k2 + 1])) return true; }
+      }
+      return false;
+    };
     const ids = new Set();
     for (const s of L.page.strokes) {
-      if (s.t === 'img' || s.t === 'text') { if (inside(s.x + s.w / 2, s.y + s.h / 2)) ids.add(s.id); continue; }
+      if (s.t === 'img' || s.t === 'text') {
+        const cs = [[s.x + s.w / 2, s.y + s.h / 2], [s.x, s.y], [s.x + s.w, s.y], [s.x, s.y + s.h], [s.x + s.w, s.y + s.h]];
+        const kin = cs.filter(([x, y]) => inside(x, y)).length;
+        if (kin >= 2 || inside(cs[0][0], cs[0][1]) || crosses([s.x, s.y, s.x + s.w, s.y, s.x + s.w, s.y + s.h, s.x, s.y + s.h, s.x, s.y], 2)) ids.add(s.id);
+        continue;
+      }
       const xy = s.shape ? shapePolyline(s.shape, 24) : s.pts, st = s.shape ? 2 : STRIDE;
       let n = 0, k = 0; const step = Math.max(1, Math.floor(xy.length / st / 40));
       for (let i = 0; i < xy.length; i += st * step) { n++; if (inside(xy[i], xy[i + 1])) k++; }
-      if (n && k / n >= 0.5) ids.add(s.id);
+      if (n && (k / n >= 0.3 || (k > 0 && crosses(xy, st)) || (n <= 3 && k > 0))) ids.add(s.id);
+      else if (n && k === 0 && crosses(xy, st)) ids.add(s.id);
     }
     if (!ids.size) { toast('ไม่มีอะไรอยู่ในวงที่วาด', 1200); return; }
     this.lsel = { pid: L.page.id, ids };
@@ -2212,7 +2246,7 @@ export class Editor {
   applyRemotePage(np) {
     const p = this.pageMap.get(np.id); if (!p) return false;
     if (this.dirty.has(p.id) || (this.live && this.live.page === p)) return false; // being written here right now
-    p.strokes = np.strokes; p.bg = np.bg; p.size = np.size; p.pw = np.pw; p.ph = np.ph; p.pdf = np.pdf; p.updated = np.updated; p._ver = (p._ver || 0) + 1;
+    p.strokes = np.strokes; p.bg = np.bg; p.size = np.size; p.pw = np.pw; p.ph = np.ph; p.pdf = np.pdf; p.del = np.del; p.updated = np.updated; p._ver = (p._ver || 0) + 1; p._ids = new Set(p.strokes.map(x => x.id).filter(Boolean)); this.lastShot?.set(p.id, p.strokes.slice());
     this.app.broadcast?.pageChanged(p);
     this.thumbCache?.delete(p.id); this.need.main = true;
     if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 300); }
@@ -2360,13 +2394,29 @@ export class Editor {
   }
 
   // ---------- persistence ----------
+  // strokes erased on this device get a tombstone (page.del[id] = when) so that a stale copy from another device
+  // can never "un-erase" them, and — the other way round — a stale copy can never make ink written here disappear:
+  // the sync merge only drops a stroke when the other side carries its tombstone.
+  trackDeletions(p) {
+    const now = Date.now(), ids = new Set((p.strokes || []).map(x => x.id).filter(Boolean));
+    if (!p._ids) { p._ids = ids; return; }
+    p.del ||= {};
+    const gone = [...p._ids].filter(id => !ids.has(id));
+    for (const id of gone) p.del[id] = now;
+    for (const st of p.strokes) if (st.id && p.del[st.id]) { delete p.del[st.id]; st.rev = now; } // brought back (undo) after an erase
+    const keys = Object.keys(p.del); if (keys.length > 1500) { keys.sort((a, b) => p.del[a] - p.del[b]); for (const k of keys.slice(0, keys.length - 1500)) delete p.del[k]; }
+    if (gone.length) { db.journal({ pid: p.id, nb: p.nb, n: gone.length, left: ids.size, why: this.delWhy || 'user', dev: deviceTag() }); db.snapshot({ ...p, strokes: this.lastShot?.get(p.id) || [] }, 'before-erase'); }
+    this.lastShot ||= new Map(); this.lastShot.set(p.id, (p.strokes || []).slice());
+    if (!gone.length && ids.size) db.snapshot(p, 'edit');
+    p._ids = ids; this.delWhy = null;
+  }
   markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.hooks?.dirty?.(p); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
   saveNb() { this.nbDirty = true; this.scheduleSave(); }
   scheduleSave() { clearTimeout(this.saveT); this.saveT = setTimeout(() => this.flush(), 700); }
   async flush() {
     clearTimeout(this.saveT);
     if (!this.dirty.size && !this.nbDirty && !this.deleted.size) return;
-    const pages = [...this.dirty].filter(id => this.nb.pages.includes(id)).map(id => serializePage(this.pageMap.get(id)));
+    const pages = [...this.dirty].filter(id => this.nb.pages.includes(id)).map(id => { const p = this.pageMap.get(id); this.trackDeletions(p); return serializePage(p); });
     this.dirty.clear(); this.nbDirty = false;
     this.nb.updated = Date.now(); this.nb.count = this.nb.pages.length;
     const nbRec = { ...this.nb };
@@ -2488,8 +2538,11 @@ function splitStroke(s, x, y, r) {
 
 // point (page coords) into an image/text object's own unrotated frame
 export function objLocal(s, x, y) { if (!s.rot) return [x, y]; const cx = s.x + s.w / 2, cy = s.y + s.h / 2, c = Math.cos(-s.rot), sn = Math.sin(-s.rot), dx = x - cx, dy = y - cy; return [cx + dx * c - dy * sn, cy + dx * sn + dy * c]; }
+export function deviceTag() {
+  try { let t = localStorage.getItem('senkid.dev'); if (!t) { t = (navigator.standalone ? 'app' : 'web') + '-' + Math.random().toString(36).slice(2, 6); localStorage.setItem('senkid.dev', t); } return t; } catch { return '?'; }
+}
 export function serializePage(p) {
-  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, rot: s.rot || undefined }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, meta: s.meta, rot: s.rot || undefined }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.hs) o.hs = s.hs; if (s.fill) o.fill = s.fill; if (s.fc) o.fc = s.fc; if (s.raw) o.raw = s.raw; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
+  return { id: p.id, nb: p.nb, size: p.size || 'P', bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, del: p.del && Object.keys(p.del).length ? p.del : undefined, strokes: p.strokes.map(s => { if (s.t === 'text') return { id: s.id, t: 'text', text: s.text, size: s.size, bold: s.bold, c: s.c, a: s.a, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, rot: s.rot || undefined }; if (s.t === 'img') return { id: s.id, t: 'img', blob: s.blob, iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, meta: s.meta, rot: s.rot || undefined }; const o = { id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w }; if (s.ts) o.ts = s.ts; if (s.rev) o.rev = s.rev; if (s.hs) o.hs = s.hs; if (s.fill) o.fill = s.fill; if (s.fc) o.fc = s.fc; if (s.raw) o.raw = s.raw; if (s.shape) o.shape = s.shape; else o.pts = s.pts; return o; }) };
 }
 
 // affine transform of any page object (M = [a,b,c,d,e,f]; sc = uniform scale; ang = rotation)
@@ -2506,6 +2559,7 @@ export function transformStroke(s, M, sc, ang) {
     const sh = JSON.parse(JSON.stringify(s.shape));
     if (sh.k === 'ellipse') { const nx = X(sh.cx, sh.cy), ny = Y(sh.cx, sh.cy); sh.cx = nx; sh.cy = ny; sh.rx *= sc; sh.ry *= sc; sh.rot = (sh.rot || 0) + ang; }
     else for (let i = 0; i < sh.pts.length; i += 2) { const x = sh.pts[i], y = sh.pts[i + 1]; sh.pts[i] = X(x, y); sh.pts[i + 1] = Y(x, y); }
+    if (sh.k === 'bracket') sh.d *= sc;
     const o = { ...s, shape: sh, w: s.w * sc, bb: null };
     if (s.raw) { const r = s.raw.slice(); for (let i = 0; i < r.length; i += 4) { const x = r[i], y = r[i + 1]; r[i] = X(x, y); r[i + 1] = Y(x, y); } o.raw = r; }
     return o;
