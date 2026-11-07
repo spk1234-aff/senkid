@@ -1120,6 +1120,8 @@ export class Editor {
 
   move(e) {
     const [sx, sy] = this.local(e);
+    // any real movement cancels a pending long-press (must run before the tool branches below return)
+    if (this.lp && this.lp.id === e.pointerId && Math.hypot(sx - this.lp.sx, sy - this.lp.sy) > 8) { clearTimeout(this.lp.t); this.lp = null; }
     if (this.shDraw && this.shDraw.id === e.pointerId) { const D = this.shDraw, [wx, wy] = this.toWorld(sx, sy), r0 = this.rects.get(D.page.id); D.x1 = wx - r0.x; D.y1 = wy - r0.y; if (Math.hypot(sx - D.sx, sy - D.sy) > 6) D.moved = true; this.need.ui = true; return; }
     if (this.rgrab && this.rgrab.pts.has(e.pointerId)) { this.rulerMove(e, sx, sy); return; }
     if (this.cdrag && this.cdrag.id === e.pointerId) { const r = this.rects.get(this.curtain.pid), P = dims(this.pageMap.get(this.curtain.pid)); this.curtain.y = Math.max(0, Math.min(P.h, this.cdrag.y0 + (sy - this.cdrag.sy) / this.z)); this.need.main = true; return; }
@@ -1128,7 +1130,6 @@ export class Editor {
     if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { const [wx, wy] = this.toWorld(sx, sy); const L = this.lassoDraw; L.pts.push(wx - L.rx, wy - L.ry); this.need.ui = true; return; }
     if (this.lxf && this.lxf.id === e.pointerId) { this.lassoDrag(sx, sy); return; }
     if (this.textTap && this.textTap.id === e.pointerId) { if (Math.hypot(sx - this.textTap.sx, sy - this.textTap.sy) > 10) this.textTap = null; return; }
-    if (this.lp && this.lp.id === e.pointerId && Math.hypot(sx - this.lp.sx, sy - this.lp.sy) > 8) { clearTimeout(this.lp.t); this.lp = null; }
     // handle drag
     if (this.drag && this.drag.id === e.pointerId) {
       const r = this.rects.get(this.drag.page.id);
