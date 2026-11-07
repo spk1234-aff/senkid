@@ -426,7 +426,7 @@ export class Editor {
     const bar = h('div', { class: 'ctxbar' });
     const c = this.cur();
     if (['lasso', 'laser', 'text'].includes(t)) {
-      const tips = { lasso: 'วาดวงล้อมสิ่งที่ต้องการเลือก แล้วลากเพื่อย้าย ลากมุมเพื่อย่อขยาย ลากจุดด้านบนเพื่อหมุน', laser: 'ลากเพื่อชี้ เส้นจะจางหายเอง และแสดงบนหน้าจอนักเรียนและในคลิป', text: 'แตะบนกระดาษเพื่อพิมพ์ข้อความ · กดค้างที่ข้อความเพื่อแก้ไข' };
+      const tips = { lasso: 'วาดวงล้อมเพื่อเลือก · ลากเพื่อย้าย ลากมุมย่อขยาย ลากจุดบนเพื่อหมุน · กดค้างเพื่อเปิดเมนู', laser: 'ลากเพื่อชี้ เส้นจะจางหายเอง และแสดงบนหน้าจอนักเรียนและในคลิป', text: 'แตะบนกระดาษเพื่อพิมพ์ข้อความ · กดค้างที่ข้อความเพื่อแก้ไข' };
       bar.append(h('span', { class: 'chip', style: { cursor: 'default' } }, icon(t), tips[t]));
       if (t === 'laser') this.laserBar(bar);
       if (t === 'lasso' && this.app.clip?.items.length) { const pb = h('button', { class: 'chip on' }, icon('copy'), `วาง (${this.app.clip.items.length})`); pb.onclick = () => this.paste(); bar.append(h('div', { class: 'vsep' }), pb); }
@@ -979,7 +979,7 @@ export class Editor {
     if (!page) { if (e.pointerType !== 'touch') this.pointers.set(e.pointerId, { x: sx, y: sy, sx, sy }); this.startGesture(); return; }
     if (this.tool === 'eraser' || eraserBtn) { this.startErase(e, page, sx, sy); return; }
     if (this.tool === 'laser') { this.laserSeq = (this.laserSeq || 0) + 1; this.lasering = { id: e.pointerId, s: this.laserSeq }; this.laserAdd(sx, sy); return; }
-    if (this.tool === 'lasso') { const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return; } this.startLasso(e, page, sx, sy); return; }
+    if (this.tool === 'lasso') { const hit = this.shapeAt(page, sx, sy); if (hit) { this.selectShape(page, hit); return; } this.startLasso(e, page, sx, sy); this.armLongPress(e, sx, sy); return; }
     if (this.tool === 'shapes') { const r0 = this.rects.get(page.id); this.shDraw = { id: e.pointerId, page, x0: wx - r0.x, y0: wy - r0.y, x1: wx - r0.x, y1: wy - r0.y, sx, sy, moved: false }; return; }
     if (this.tool === 'text') { const r0 = this.rects.get(page.id); this.textTap = { id: e.pointerId, page, x: wx - r0.x, y: wy - r0.y, sx, sy }; this.armLongPress(e, sx, sy); return; }
     this.armLongPress(e, sx, sy);
@@ -1219,8 +1219,8 @@ export class Editor {
     const [wx, wy] = this.toWorld(sx, sy); const page = this.pageAt(wx, wy); if (!page) { this.lp = null; return; }
     const r = this.rects.get(page.id); const img = this.imgAt(page, wx - r.x, wy - r.y);
     if (!img) {
-      if (e.pointerType === 'touch' && this.app.clip?.items.length) {
-        this.lp = { id: e.pointerId, sx, sy, t: setTimeout(() => { if (!this.lp) return; this.lp = null; this.pan = null; this.gesture = null; this.pointers.delete(e.pointerId); navigator.vibrate?.(10); this.pasteMenu(page, wx - r.x, wy - r.y, sx, sy); }, 520) };
+      if (e.pointerType === 'touch' || this.tool === 'lasso') {
+        this.lp = { id: e.pointerId, sx, sy, t: setTimeout(() => { if (!this.lp) return; this.lp = null; this.pan = null; this.gesture = null; this.pointers.delete(e.pointerId); if (this.lassoDraw) { this.lassoDraw = null; this.need.ui = true; } if (this.live && this.live.id === e.pointerId) this.cancelLive(); navigator.vibrate?.(10); this.emptyMenu(page, wx - r.x, wy - r.y, sx, sy); }, 520) };
       } else this.lp = null;
       return;
     }
@@ -1908,6 +1908,39 @@ export class Editor {
     menu(anchor, [{ icon: 'copy', label: `วาง (${this.app.clip.items.length} ชิ้น)`, action: () => this.paste(page, px, py) }], { onClose: () => anchor.remove() });
     setTimeout(() => anchor.remove(), 8000);
   }
+  // Goodnotes-style long-press menus
+  ctxMenu(items, sx, sy) {
+    const anchor = h('div', { style: { position: 'absolute', left: sx + 'px', top: sy + 'px', width: '1px', height: '1px' } }); this.stage.append(anchor);
+    menu(anchor, items, { onClose: () => anchor.remove() });
+    setTimeout(() => anchor.remove(), 15000);
+  }
+  emptyMenu(page, px, py, sx, sy) {
+    const n = this.app.clip?.items.length || 0, items = [];
+    if (n) items.push({ icon: 'copy', label: `วางตรงนี้ (${n} ชิ้น)`, action: () => this.paste(page, px, py) });
+    items.push({ icon: 'text', label: 'พิมพ์ข้อความตรงนี้', action: () => { this.setTool('text'); this.editTextInline(page, null, px, py); } });
+    items.push({ icon: 'fit', label: 'ซูมพอดีหน้า', action: () => this.fit(true) });
+    this.ctxMenu(items, sx, sy);
+  }
+  selMenu(sx, sy) {
+    if (!this.lsel) return;
+    this.ctxMenu([
+      { icon: 'scissors', label: 'ตัด', action: () => this.copySel(true) },
+      { icon: 'copy', label: 'คัดลอก', action: () => this.copySel(false) },
+      { icon: 'dup', label: 'ทำสำเนา', action: () => this.lassoDup() },
+      { icon: 'search', label: 'ซูมไปที่นี่', action: () => this.zoomToSel() },
+      { icon: 'trash', label: 'ลบ', danger: true, action: () => { this.lassoEdit((page) => { page.strokes = page.strokes.filter(s => !this.lsel.ids.has(s.id)); }); this.clearLasso(); } },
+    ], sx, sy);
+  }
+  lassoDup() { this.lassoEdit((page) => { const ids = new Set(); const copies = this.lassoItems().map(s => { const n = transformStroke(s, [1, 0, 0, 1, 18, 18], 1, 0); n.id = uid(); ids.add(n.id); return n; }); page.strokes.push(...copies); this.lsel.ids = ids; }); }
+  // fill the screen with the selection (handy on the TV)
+  zoomToSel() {
+    if (!this.lsel?.bb) return;
+    const r = this.rects.get(this.lsel.pid), b = this.lsel.bb, w = Math.max(40, b[2] - b[0]), hh = Math.max(40, b[3] - b[1]);
+    const z = Math.min(this.W * 0.82 / w, this.H * 0.72 / hh, this.fitZ * 4);
+    const cx = r.x + (b[0] + b[2]) / 2, cy = r.y + (b[1] + b[3]) / 2;
+    this.z = z; this.fitMode = false; this.ox = this.W / 2 - cx * z; this.oy = this.H / 2 - cy * z;
+    this.viewChanged(); this.placeLassoBar(); this.showZoom?.();
+  }
   lassoItems() { const p = this.pageMap.get(this.lsel?.pid); return p ? p.strokes.filter(s => this.lsel.ids.has(s.id)) : []; }
   updateLassoBB() {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -1930,12 +1963,19 @@ export class Editor {
     else for (const [c, x, y] of [['tl', X0, Y0], ['tr', X1, Y0], ['bl', X0, Y1], ['br', X1, Y1]]) if (Math.hypot(sx - x, sy - y) < tol) { kind = 'scale'; corner = c; }
     if (!kind && sx > X0 - 6 && sx < X1 + 6 && sy > Y0 - 6 && sy < Y1 + 6) kind = 'move';
     if (!kind) { this.clearLasso(); return false; }
-    this.lxf = { ...base, kind, corner };
+    this.lxf = { ...base, kind, corner, ssx: sx, ssy: sy };
+    if (kind === 'move') this.lxf.hold = setTimeout(() => {
+      const X = this.lxf; if (!X || X.id !== e.pointerId) return;
+      X.page.strokes = X.before; this.lxf = null; this.pointers.delete(e.pointerId); this.updateLassoBB(); this.need.main = true;
+      navigator.vibrate?.(10); this.selMenu(sx, sy);
+    }, 520);
     this.imgBar.classList.add('hidden');
     try { this.stage.setPointerCapture(e.pointerId); } catch { }
     return true;
   }
   lassoDrag(sx, sy) {
+    if (this.lxf.hold && Math.hypot(sx - this.lxf.ssx, sy - this.lxf.ssy) > 8) { clearTimeout(this.lxf.hold); this.lxf.hold = null; }
+    if (this.lxf.hold) return;
     const X = this.lxf, r = this.rects.get(X.page.id), [wx, wy] = this.toWorld(sx, sy), px = wx - r.x, py = wy - r.y, b = X.bb;
     let M, sc = 1, ang = 0;
     if (X.kind === 'move') M = [1, 0, 0, 1, px - X.sx, py - X.sy];
@@ -1953,7 +1993,8 @@ export class Editor {
     this.updateLassoBB(); this.need.main = true;
   }
   endLassoDrag() {
-    const X = this.lxf; this.lxf = null;
+    const X = this.lxf; this.lxf = null; clearTimeout(X.hold);
+    if (X.hold) { this.buildLassoBar(); return; } // a tap inside the selection: nothing moved
     this.pushHistory({ k: 'str', items: [{ pid: X.page.id, before: X.before, after: X.page.strokes.slice() }] });
     this.markDirty(X.page); this.updateLassoBB(); this.buildLassoBar();
   }
@@ -1966,15 +2007,20 @@ export class Editor {
   }
   buildLassoBar() {
     const bar = this.imgBar; bar.innerHTML = ''; bar.classList.remove('hidden'); bar.dataset.kind = 'lasso';
-    const B = (ic, label, fn, danger) => { const b = h('button', { class: 'chip' + (danger ? ' danger' : '') }, icon(ic), h('span', {}, label)); b.onclick = fn; return b; };
-    for (const col of prefs.favorites.slice(0, 6)) {
+    const B = (ic, label, fn, danger) => { const b = h('button', { class: 'chip ico' + (danger ? ' danger' : ''), title: label, 'aria-label': label }, icon(ic)); b.onclick = fn; return b; };
+    const recolor = (col) => this.lassoEdit((page) => { page.strokes = page.strokes.map(s => this.lsel.ids.has(s.id) && s.t !== 'img' && s.t !== 'hl' ? { ...s, c: col, bb: null } : s); });
+    for (const col of prefs.favorites.slice(0, 5)) {
       const b = h('button', { class: 'sw', title: 'เปลี่ยนสีเป็น ' + col }, h('i', { style: { background: col } }));
-      b.onclick = () => this.lassoEdit((page) => { page.strokes = page.strokes.map(s => this.lsel.ids.has(s.id) && s.t !== 'img' && s.t !== 'hl' ? { ...s, c: col, bb: null } : s); });
-      bar.append(b);
+      b.onclick = () => recolor(col); bar.append(b);
     }
+    const wheel = h('input', { type: 'color', class: 'lasso-wheel', title: 'สีอื่น', 'aria-label': 'สีอื่น', value: (this.lassoItems().find(s => s.c)?.c || '#1E2A55').slice(0, 7) });
+    wheel.onchange = () => recolor(wheel.value.toUpperCase());
+    bar.append(h('label', { class: 'sw wheelsw', title: 'สีอื่น' }, wheel));
     bar.append(h('div', { class: 'vsep', style: { width: '1px', height: '26px', background: 'rgba(255,255,255,.2)', margin: '0 4px' } }),
-      B('dup', 'ทำสำเนา', () => this.lassoEdit((page) => { const ids = new Set(); const copies = this.lassoItems().map(s => { const n = transformStroke(s, [1, 0, 0, 1, 18, 18], 1, 0); n.id = uid(); ids.add(n.id); return n; }); page.strokes.push(...copies); this.lsel.ids = ids; })),
-      B('copy', 'คัดลอก', () => this.copySel(false)), B('scissors', 'ตัด', () => this.copySel(true)),
+      B('scissors', 'ตัด', () => this.copySel(true)),
+      B('copy', 'คัดลอก', () => this.copySel(false)),
+      B('dup', 'ทำสำเนา', () => this.lassoDup()),
+      B('search', 'ซูมไปที่นี่', () => this.zoomToSel()),
       B('trash', 'ลบ', () => { this.lassoEdit((page) => { page.strokes = page.strokes.filter(s => !this.lsel.ids.has(s.id)); }); this.clearLasso(); }, true),
       B('check', 'เสร็จ', () => this.clearLasso()));
     this.placeLassoBar();

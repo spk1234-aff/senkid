@@ -936,3 +936,7 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .hub-page .hub-ri{background:color-mix(in srgb,var(--tile,var(--acc)) 14%,transparent);color:var(--tile,var(--acc))}
 .hub-top .hub-tile{width:40px;height:40px;border-radius:12px;background:var(--tile,var(--acc));color:#fff;display:flex;align-items:center;justify-content:center}
 .hub-top .hub-tile svg.i{width:24px;height:24px;--ico-in:var(--tile,var(--acc))}
+/* วงล้อสีในแถบบ่วงบาศ */
+.wheelsw{position:relative;width:34px;height:34px;border-radius:50%;background:conic-gradient(#f33,#fc3,#3c3,#3cf,#33f,#c3f,#f33);cursor:pointer;flex:none;border:2px solid rgba(255,255,255,.7)}
+.wheelsw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:0;padding:0}
+.imgbar .chip.ico{padding:0 10px;min-width:44px;justify-content:center}
