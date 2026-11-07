@@ -1944,5 +1944,8 @@
 "ขีดค้างเป็นเส้นตรง/รูปทรง ปิดอยู่ · เปิดได้ที่ รูปทรง › ปุ่ม “แปลงอัตโนมัติ” หรือ เมนู › ตั้งค่า": "Hold-to-shape is off · turn it on in Shapes › \"Auto-shape\" or Menu › Settings",
 "แปลงอัตโนมัติ: เปิด": "Auto-shape: on",
 "แปลงอัตโนมัติ: ปิด": "Auto-shape: off",
-"ขีดแล้วกดค้าง แปลงเป็นเส้นตรง/รูปทรงอัตโนมัติ (ใช้กับปากกา)": "Draw and hold to turn into a straight line/shape (pen)"
+"ขีดแล้วกดค้าง แปลงเป็นเส้นตรง/รูปทรงอัตโนมัติ (ใช้กับปากกา)": "Draw and hold to turn into a straight line/shape (pen)",
+"รูปจาก iCloud หรือไฟล์ใหญ่ เครื่องต้องดาวน์โหลด/แปลงก่อน อาจใช้เวลาสักครู่": "Photos on iCloud or big files must download/convert first — this can take a moment",
+"ผ่านไป {0} วินาที": "{0} s",
+"พื้นที่ว่างของแอป/iPad เหลือน้อย การเลือกรูปและไฟล์จะช้า · ลบคลิปที่ไม่ใช้ในคลังวิดีโอได้": "Little free space left — picking photos and files will be slow · delete unused clips in the Video library"
 }

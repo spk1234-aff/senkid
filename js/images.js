@@ -6,8 +6,9 @@ const cache = new WeakMap(); // blob -> ImageBitmap | HTMLImageElement | Promise
 let readyHook = null;
 export function setImageReadyHook(fn) { readyHook = fn; }
 
-function loadEl(blob) {
-  return new Promise((res, rej) => { const u = URL.createObjectURL(blob); const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = u; });
+// never wait forever on a picture that will not decode
+function loadEl(blob, ms = 30000) {
+  return new Promise((res, rej) => { const u = URL.createObjectURL(blob); const im = new Image(); const to = setTimeout(() => { im.src = ''; rej(new Error('timeout')); }, ms); im.onload = () => { clearTimeout(to); res(im); }; im.onerror = (e) => { clearTimeout(to); rej(e); }; im.src = u; });
 }
 async function decode(blob) {
   try { if (window.createImageBitmap) return await createImageBitmap(blob); } catch { }

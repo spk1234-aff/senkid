@@ -234,23 +234,37 @@ export function downloadBlob(blob, name) {
 }
 
 export function pickFile(accept, { hint } = {}) {
-  // iPad: the system file picker can take a while to appear and to copy the file (iCloud) — show a message the whole time
+  // iPad: the system file picker can take a while to appear and to copy the file (iCloud download, photo conversion) —
+  // show what is happening and for how long, so a slow copy never looks like a frozen app
   return new Promise((res) => {
-    const i = h('input', { type: 'file', accept, style: { display: 'none' } });
-    let done = false, ov = null;
+    const i = h('input', { type: 'file', accept, style: { position: 'fixed', left: '50%', top: '40%', width: '1px', height: '1px', opacity: '0', pointerEvents: 'none' } });
+    let done = false, ov = null, back = 0, tick = 0;
+    const t0 = Date.now();
     const msg = h('div', { class: 'busy-msg' }, 'กำลังเปิดหน้าเลือกไฟล์…');
     const sub = h('div', { class: 'busy-sub' }, hint || 'เลือกไฟล์ในหน้าต่างของเครื่อง');
+    const clock = h('div', { class: 'busy-sub', style: { opacity: '.75' } });
     const cancel = h('button', { class: 'pill sec', style: { marginTop: '14px', height: '42px' } }, 'ยกเลิก');
-    const finish = (f) => { if (done) return; done = true; ov?.remove(); window.removeEventListener('focus', onFocus); i.remove(); res(f); };
-    const onFocus = () => setTimeout(() => { if (done) return; msg.textContent = 'กำลังโหลดไฟล์จากเครื่อง…'; sub.textContent = 'ไฟล์ใหญ่ หรือไฟล์ที่อยู่บน iCloud / Drive อาจใช้เวลาสักครู่'; }, 400);
+    const finish = (f) => { if (done) return; done = true; clearInterval(tick); ov?.remove(); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onVis); i.remove(); res(f); };
+    const loading = () => { if (done || back) return; back = Date.now(); msg.textContent = 'กำลังโหลดไฟล์จากเครื่อง…'; sub.textContent = 'รูปจาก iCloud หรือไฟล์ใหญ่ เครื่องต้องดาวน์โหลด/แปลงก่อน อาจใช้เวลาสักครู่'; };
+    const onFocus = () => setTimeout(loading, 400);
+    const onVis = () => { if (document.visibilityState === 'visible') setTimeout(loading, 400); };
+    tick = setInterval(() => {
+      if (done) return;
+      const sec = Math.round((Date.now() - (back || t0)) / 1000);
+      if (back && sec >= 3) clock.textContent = `ผ่านไป ${sec} วินาที` + (sec >= 25 ? ' · ถ้านานผิดปกติ กดยกเลิกแล้วเลือกใหม่ หรือตรวจพื้นที่ว่างของ iPad / สัญญาณเน็ต (ไฟล์บน iCloud)' : '');
+    }, 1000);
     cancel.onclick = () => finish(null);
     i.onchange = () => finish(i.files[0] || null);
     i.addEventListener('cancel', () => finish(null));
     window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
     document.body.append(i);
-    ov = h('div', { class: 'busy picking' }, h('div', { class: 'busy-box' }, h('div', { class: 'spin' }), msg, sub, cancel));
-    setTimeout(() => { if (!done) document.body.append(ov); }, 250);
+    ov = h('div', { class: 'busy picking' }, h('div', { class: 'busy-box' }, h('div', { class: 'spin' }), msg, sub, clock, cancel));
+    // the overlay waits a little, so the system picker is never held up by our own drawing
+    setTimeout(() => { if (!done) document.body.append(ov); }, 700);
     i.click();
+    // very little free space makes iPad slow to copy photos and files in: say so once
+    try { navigator.storage?.estimate?.().then(e => { const free = e && e.quota ? e.quota - e.usage : Infinity; if (free < 500e6 && !done) toast('พื้นที่ว่างของแอป/iPad เหลือน้อย การเลือกรูปและไฟล์จะช้า · ลบคลิปที่ไม่ใช้ในคลังวิดีโอได้', 5000, 'warn'); }).catch(() => { }); } catch { }
   });
 }
 
