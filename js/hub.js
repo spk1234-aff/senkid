@@ -1,7 +1,7 @@
 // เมนูหลัก: one button on the board opens a page of big cards; each card opens its own page.
 // Everything that used to sit in the toolbar or the ⋯ menu lives in exactly one of these pages.
 import { h, icon, toast, seg, toggle } from './ui.js';
-import { prefs, savePrefs, applyTheme, COLOR_THEMES } from './prefs.js';
+import { prefs, savePrefs, flushPrefs, applyTheme, COLOR_THEMES } from './prefs.js';
 
 let root = null;
 export const hubOpen = () => !!root?.isConnected;
@@ -74,7 +74,7 @@ export function openHub(ed, anchor, page = null) {
       S('แสดง 2 หน้าคู่ (เล่มนี้)', null, toggle(prefs.twoPage && !ed.nb.single, (v) => { ed.nb.single = !v; if (v && !prefs.twoPage) { prefs.twoPage = true; savePrefs(); } ed.saveNb(); ed.relayout(true); })),
       T('หน้าตา'),
       h('div', { class: 'hub-row set', style: { flexDirection: 'column', alignItems: 'stretch' } }, h('div', { class: 'hub-rt' }, h('b', {}, 'ธีมสี')), colorPicker(() => ed.need.main = true)),
-      S('ภาษา / Language', 'ตั้งแยกแต่ละเครื่อง', seg([['th', 'ไทย'], ['en', 'English']], prefs.lang === 'en' ? 'en' : 'th', (v) => { prefs.lang = v; savePrefs(); location.reload(); })),
+      S('ภาษา / Language', 'ตั้งแยกแต่ละเครื่อง', seg([['th', 'ไทย'], ['en', 'English']], prefs.lang === 'en' ? 'en' : 'th', (v) => { prefs.lang = v; savePrefs(); flushPrefs(); location.reload(); })),
       S('สว่าง / มืด', null, seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, (v) => { prefs.theme = v; savePrefs(); applyTheme(); ed.need.main = true; })),
       S('ตำแหน่งแถบเครื่องมือ', null, seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, (v) => { prefs.toolbarPos = v; savePrefs(); ed.applyPos(); ed.buildToolbar(); })),
       S('ใช้งานแบบ', 'โหมดนักเรียนซ่อนเครื่องมือของครู', seg([['t', 'ครู'], ['s', 'นักเรียน']], student ? 's' : 't', async (v) => { if (v === 't' && !(await (await import('./lock.js')).requireTeacher())) return; prefs.studentUI = v === 's'; savePrefs(); ed.buildToolbar(); closeHub(); })),

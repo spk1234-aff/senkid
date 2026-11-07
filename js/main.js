@@ -1,7 +1,7 @@
 // เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // App shell: routing between library and editor, settings, help, onboarding, backup
 import { h, icon, toast, dialog, seg, toggle, downloadBlob, pickFile, fmtBytes, uid, logoMark, brandWord, busy, shareFileDialog, $, nobr } from './ui.js';
-import { prefs, savePrefs, applyTheme } from './prefs.js';
+import { prefs, savePrefs, flushPrefs, applyTheme } from './prefs.js';
 import * as db from './db.js';
 import { Library } from './library.js';
 import { Editor } from './editor.js';
@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.55';
+export const VERSION = '1.9.56';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -221,7 +221,7 @@ class App {
       h('div', { class: 'sec-t' }, 'หน้าตา'),
       card(
         row('สว่าง / มืด', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
-        row('ภาษา / Language', seg([['th', 'ไทย'], ['en', 'English']], prefs.lang === 'en' ? 'en' : 'th', v => { prefs.lang = v; savePrefs(); location.reload(); }), 'ตั้งแยกแต่ละเครื่อง'),
+        row('ภาษา / Language', seg([['th', 'ไทย'], ['en', 'English']], prefs.lang === 'en' ? 'en' : 'th', v => { prefs.lang = v; savePrefs(); flushPrefs(); location.reload(); }), 'ตั้งแยกแต่ละเครื่อง'),
         h('div', { class: 'row', style: { flexDirection: 'column', alignItems: 'stretch', gap: '8px' } }, h('div', {}, 'ธีมสี'), colorPicker(() => { if (this.editor) this.editor.need.main = true; })),
         row('ฟอนต์ของแอป', (() => { const cur = UI_FONTS.find(f => f[0] === (prefs.uiFont || 'sarabun')) || UI_FONTS[0]; const b = h('button', { class: 'pill sec', style: { height: '42px', fontFamily: familyOf(cur[0]) } }, cur[1], icon('down')); b.onclick = () => this.fontPicker(b); return b; })(), 'ปุ่มและเมนู · ข้อความบนกระดาษไม่เปลี่ยน'),
         row('โหมดนักเรียน', toggle(!!prefs.studentUI, async (v, t) => { if (!v && !(await requireTeacher())) { t?.set?.(true); prefs.studentUI = true; savePrefs(); return; } prefs.studentUI = v; if (v) setUnlocked(false); savePrefs(); refreshEd(); }), (accountRule() && !isTeacherDevice() ? 'เครื่องนี้เป็นเครื่องนักเรียน · โหมดครูเปิดได้เฉพาะเครื่องที่เชื่อม Google ด้วยบัญชีครู' : 'ซ่อนเครื่องมือของครู (ฉายจอ สุ่มชื่อ ม่านบังคำตอบ) ให้แถบเรียบง่าย')),

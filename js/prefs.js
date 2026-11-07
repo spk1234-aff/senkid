@@ -57,6 +57,9 @@ export function savePrefs() {
   t = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { } }, 150);
   subs.forEach(f => f());
 }
+// write now (before a reload, or when the page is going away)
+export function flushPrefs() { clearTimeout(t); try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { } }
+addEventListener('pagehide', flushPrefs);
 export function onPrefs(f) { subs.add(f); return () => subs.delete(f); }
 
 export function pushRecent(color) {
