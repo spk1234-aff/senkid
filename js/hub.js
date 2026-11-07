@@ -15,11 +15,15 @@ const T = (t) => h('div', { class: 'hub-sec' }, t);
 export function openHub(ed, anchor, page = null) {
   closeHub();
   const app = ed.app, student = !!prefs.studentUI;
+  const TVK = [['page', 'เฉพาะกระดาษ ทั้งหน้า', 'ไม่ซูมตามครู', 'pages'], ['present', 'กระดาษ ซูมตามครู', 'เห็นส่วนที่ครูซูมอยู่', 'fit'], ['screen', 'ทั้งหน้าจอเหมือนครู', 'เห็นเครื่องมือและเมนูด้วย', 'screen']];
+  const tvCur = prefs.presentKind || (app.broadcast?.mode === 'page' ? 'page' : 'present');
   // run something that needs a popover anchor: close the hub, then anchor it to the menu button
   const go = (fn) => () => { closeHub(); requestAnimationFrame(() => fn(ed.menuBtn || anchor)); };
   const PAGES = [
     !student && { id: 'tv', ic: 'tv', title: 'ต่อทีวี', sub: 'ฉายจอให้นักเรียนดู', rows: () => [
-      R('tv', app.broadcast?.connected ? 'ทีวีต่ออยู่ · ตั้งค่า / เลิกใช้' : 'เชื่อมทีวี', 'สแกน QR หรือเปิดลิงก์บนทีวี แล้วเลือกว่าทีวีแสดงอะไร', go(a => app.studentMenu(a))),
+      R('tv', app.broadcast?.connected ? 'ทีวีต่ออยู่ · ตั้งค่า / เลิกใช้' : 'เชื่อมทีวี', 'สแกน QR หรือเปิดลิงก์บนทีวี', go(a => app.studentMenu(a))),
+      T('ทีวีแสดงอะไร'),
+      ...TVK.map(([id, label, sub, ic]) => R(ic, (tvCur === id ? '✓ ' : '') + label, sub, () => { import('./broadcast.js').then(B => B.setTvKind(app, id)); closeHub(); })),
     ] },
     { id: 'rec', ic: 'mic', title: student ? 'อัดเสียง' : 'อัดบทเรียน', sub: student ? 'เสียงพร้อมเส้นที่เขียน' : 'เสียง เส้น กล้อง', rows: () => [
       R('mic', app.audio?.active ? 'กำลังอัด · หยุด / พัก' : 'เริ่มอัด', student ? 'อัดเสียงอธิบายพร้อมเส้นที่เขียน' : 'อัดเสียงพร้อมลายมือ (และกล้องครูถ้าเปิดไว้)', go(a => app.audioClick(ed, ed.micBtn || a))),
@@ -27,6 +31,7 @@ export function openHub(ed, anchor, page = null) {
       R('history', student ? 'เสียงที่อัดในเล่มนี้' : 'บทเรียนที่อัดในเล่มนี้', student ? 'ฟังย้อนพร้อมดูเส้น' : 'ฟังย้อน แชร์ ดาวน์โหลด', () => { closeHub(); app.openRecordings(ed.nb.id); }),
     ] },
     !student && { id: 'video', ic: 'film', title: 'ทำวิดีโอ', sub: '3 ขั้น จบ', direct: () => { closeHub(); import('./makevideo.js').then(m => m.openMakeVideo(app)); } },
+    { id: 'vlib', ic: 'play', title: student ? 'เสียงที่อัดไว้' : 'คลังวิดีโอ', sub: student ? 'ฟังย้อน แชร์' : 'วิดีโอ บทเรียน โปรเจกต์ตัดต่อ', direct: () => { closeHub(); app.openRecordings(); } },
     { id: 'teach', ic: 'teach', title: student ? 'เครื่องมือ' : 'เครื่องมือสอน', sub: student ? 'จับเวลา คณิต' : 'ใช้ระหว่างคาบ', rows: () => student ? [
       R('timer', 'นาฬิกาจับเวลา', null, go(a => app.timer.panel(a))),
       R('equation', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์', null, go(a => ed.mathMenu(a))),
@@ -34,7 +39,7 @@ export function openHub(ed, anchor, page = null) {
       R('timer', 'นาฬิกาจับเวลา', null, go(a => app.timer.panel(a))),
       R('dice', 'สุ่มชื่อนักเรียน / จัดกลุ่ม', null, go(a => app.picker.open(a))),
       R('laser', 'เลเซอร์พอยเตอร์', 'ชี้แล้วหายเอง', () => { closeHub(); ed.setTool('laser'); }),
-      R('curtain', ed.curtain ? 'ปิดม่านบังคำตอบ' : 'ม่านบังคำตอบ', 'ค่อย ๆ เลื่อนเปิดทีละขั้น', () => { closeHub(); ed.toggleCurtain(); }),
+      R('cover', 'ปากกาบังคำตอบ', 'ระบายทับคำตอบ แตะเพื่อเปิดดู', () => { closeHub(); ed.setTool('cover'); }),
       R('dice', 'สุ่มโจทย์ฝึก', 'โจทย์ + เฉลย พิมพ์สวยด้วย LaTeX', go(a => import('./problems.js').then(m => m.openProblems(ed, a)))),
       R('pages', ed.splitPane ? 'ปิดเทียบสองหน้า' : 'เทียบสองหน้า', 'ดูอีกหน้าด้านขวา เขียนต่อด้านซ้าย', () => { closeHub(); import('./split.js').then(m => m.toggleSplit(ed)); }),
       R('history', 'ย้อนดูขั้นก่อนหน้า', 'ดูว่าเขียนอะไรไปบ้าง โดยไม่ลบ', go(a => ed.openPeek(a))),
@@ -62,7 +67,7 @@ export function openHub(ed, anchor, page = null) {
       R('save', 'บันทึกไฟล์ลงเครื่อง', null, go(a => ed.saveFileMenu(a))),
       ...(student ? [] : [
         R('share', 'ส่งออก / สำรอง', 'รูปภาพ ไฟล์สำรองสมุด', go(a => ed.exportMenu(a))),
-        R('film', 'คลิปที่อัดไว้ (ทุกเล่ม)', 'ดู แชร์ ส่งขึ้น YouTube', () => { closeHub(); app.openRecordings(); }),
+        R('film', 'คลังวิดีโอ', 'วิดีโอ บทเรียนที่อัด โปรเจกต์ตัดต่อ', () => { closeHub(); app.openRecordings(); }),
         R('scissors', 'โปรเจกต์ตัดต่อ (ปรับละเอียด)', 'สำหรับตัดหัว‑ท้าย แบ่งคลิป ความเร็ว', () => { closeHub(); import('./cut.js').then(m => m.openProjects(app)); }),
       ]),
     ] },
@@ -77,6 +82,7 @@ export function openHub(ed, anchor, page = null) {
       S('ภาษา / Language', 'ตั้งแยกแต่ละเครื่อง', seg([['th', 'ไทย'], ['en', 'English']], prefs.lang === 'en' ? 'en' : 'th', (v) => { prefs.lang = v; savePrefs(); flushPrefs(); location.reload(); })),
       S('สว่าง / มืด', null, seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, (v) => { prefs.theme = v; savePrefs(); applyTheme(); ed.need.main = true; })),
       S('ตำแหน่งแถบเครื่องมือ', null, seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, (v) => { prefs.toolbarPos = v; savePrefs(); ed.applyPos(); ed.buildToolbar(); })),
+      ...(student ? [] : [S('ปุ่มเลือกแบบทีวีบนแถบ', null, seg([['conn', 'เฉพาะตอนต่อทีวี'], ['always', 'แสดงตลอด']], prefs.tvBtn === 'always' ? 'always' : 'conn', (v) => { prefs.tvBtn = v; savePrefs(); ed.buildToolbar(); }))]),
       S('ใช้งานแบบ', 'โหมดนักเรียนซ่อนเครื่องมือของครู', seg([['t', 'ครู'], ['s', 'นักเรียน']], student ? 's' : 't', async (v) => { if (v === 't' && !(await (await import('./lock.js')).requireTeacher())) return; prefs.studentUI = v === 's'; savePrefs(); ed.buildToolbar(); closeHub(); })),
       T('อื่น ๆ'),
       R('gear', 'ตั้งค่าทั้งหมด', 'บัญชี Google / YouTube, ห้องเรียน, ตรวจความพร้อม, สถิติ', () => { closeHub(); app.openSettings(); }),
@@ -87,15 +93,17 @@ export function openHub(ed, anchor, page = null) {
     }).concat([R('help', 'คู่มือฉบับเต็ม', null, () => { closeHub(); app.openHelp(); })]) },
   ].filter(Boolean);
 
-  root = h('div', { class: 'hub', 'data-nomirror': '1' });
+  // a side panel over the right part of the screen; the board stays visible on the left
+  root = h('div', { class: 'hubwrap' });
+  const panel = h('div', { class: 'hub' });
   const top = h('div', { class: 'hub-top' }), main = h('div', { class: 'hub-main' });
-  root.append(top, main); document.body.append(root);
-  root.addEventListener('pointerdown', (e) => { if (e.target === root) closeHub(); });
+  panel.append(top, main); root.append(panel); (document.getElementById('layer') || document.body).append(root);
+  root.addEventListener('pointerdown', (e) => { if (e.target === root) { e.preventDefault(); closeHub(); } });
   const home = () => {
-    top.replaceChildren(h('button', { class: 'pill sec hub-back' }, icon('back'), 'กลับไปกระดาน'), h('div', { class: 'hub-title' }, 'เมนู'));
-    top.firstChild.onclick = closeHub; root.style.removeProperty('--tile');
+    top.replaceChildren(h('div', { class: 'hub-title' }, 'เมนู'), h('span', { style: { flex: 1 } }), h('button', { class: 'btn sq hub-x', title: 'ปิดเมนู', 'aria-label': 'ปิดเมนู' }, icon('close')));
+    top.lastChild.onclick = closeHub; root.style.removeProperty('--tile');
     const grid = h('div', { class: 'hub-grid' });
-    for (const p of PAGES) { const c = h('button', { class: 'hub-card', 'data-id': p.id }, h('span', { class: 'hub-ci' }, icon(p.ic)), h('b', {}, p.title), h('span', {}, p.sub)); c.onclick = () => p.direct ? p.direct() : open(p); grid.append(c); }
+    for (const p of PAGES) { const c = h('button', { class: 'hub-card', 'data-id': p.id }, h('span', { class: 'hub-ci' }, icon(p.ic)), h('div', { class: 'hub-ct' }, h('b', {}, p.title), h('span', {}, p.sub))); c.onclick = () => p.direct ? p.direct() : open(p); grid.append(c); }
     main.replaceChildren(grid);
   };
   const open = (p) => {
@@ -122,7 +130,7 @@ const HOWTO = [
   { q: 'อยากต่อทีวีให้นักเรียนดู', a: ['เมนู > <b>ต่อทีวี</b> > เชื่อมทีวี', 'บนทีวีเปิดลิงก์หรือสแกน QR ที่ขึ้น', 'เลือกว่าทีวีแสดงเฉพาะกระดาน หรือทั้งจอ'] },
   { q: 'อยากอัดบทเรียนไว้ให้นักเรียนดูย้อนหลัง', a: ['กดปุ่ม<b>ไมค์</b>บนแถบ (หรือ เมนู > อัดบทเรียน > เริ่มอัด)', 'สอนตามปกติ เสียงและลายมือถูกเก็บพร้อมกัน', 'กดไมค์อีกครั้ง > หยุดและบันทึก'] },
   { q: 'อยากทำคลิปขึ้น YouTube', a: ['เมนู > <b>ทำวิดีโอ</b> > เลือกบทเรียน > ถัดไป', 'ดูตัวอย่าง (ช่วงเงียบถูกตัดให้แล้ว) > ถัดไป', 'กด<b>ทำวิดีโอ</b> รอจนเสร็จ แล้วกด<b>ส่งขึ้น YouTube</b>'] },
-  { q: 'อยากบังคำตอบแล้วค่อย ๆ เปิด', a: ['เมนู > เครื่องมือสอน > <b>ม่านบังคำตอบ</b>', 'ลากขอบม่านลงทีละนิด', 'ลากลงสุดหน้า ม่านจะหายเอง'] },
+  { q: 'อยากบังคำตอบแล้วค่อย ๆ เปิด', a: ['แถบเครื่องมือ > <b>บังคำตอบ</b> แล้วระบายทับคำตอบ', 'แตะแถบทึบเพื่อเปิดดู แตะอีกครั้งเพื่อบัง (ใช้ได้ทุกเครื่องมือ)', 'ปุ่ม <b>เปิดทั้งหมด / บังทั้งหมด</b> อยู่ที่แถบด้านบนตอนเลือกบังคำตอบ'] },
   { q: 'อยากจับเวลาทำแบบฝึก', s: true, a: ['กดปุ่ม<b>นาฬิกา</b>บนแถบ', 'เลือกเวลา หรือกดนับขึ้น', 'ลากนาฬิกาไปวางมุมไหนก็ได้'] },
   { q: 'อยากส่งงานให้ครู', s: true, a: ['เมนู > <b>ส่งงาน / ส่งออก</b> > ส่งงานให้ครู', 'เลือกหน้าที่จะส่ง', 'กดส่ง'] },
   { q: 'เส้นหาย / ลบผิด', s: true, a: ['กดปุ่ม<b>ย้อนกลับ</b> (ลูกศรวน) ซ้ำได้หลายครั้ง', 'ถ้ายังไม่กลับ: เมนู > หน้าและสมุด > <b>กู้เส้นที่หาย</b>', 'เลือกสำเนาที่ต้องการแล้วกดกู้'] },

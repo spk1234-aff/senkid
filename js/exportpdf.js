@@ -1,7 +1,8 @@
 // เส้นคิด (Senkid) © 2026 นายศาสตราวุฒิ อาชนะชัย · โรงเรียนโซ่พิสัยพิทยาคม · สงวนลิขสิทธิ์ ดู LICENSE.md
 // Export pages to PDF with vector ink (pdf-lib, offline). PDF-backed pages keep their original vector content.
 import { h, icon, toast, dialog, seg, toggle, downloadBlob, busy, nobr } from './ui.js';
-import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo } from './render.js';
+import { dims, PAPERS, strokeVector, drawStroke, strokeBB, inkFor, hexToRgb, renderPageTo, setCoverSolid, drawShapeText } from './render.js';
+import { ensurePageFonts } from './textfonts.js';
 import { pdfBytes } from './pdfdoc.js';
 import { prefs } from './prefs.js';
 export const CREDIT = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
@@ -23,6 +24,15 @@ export function parseRanges(str, n) {
 
 const rgb = (hex, L) => { const [r, g, b] = hexToRgb(hex); return L.rgb(r / 255, g / 255, b / 255); };
 
+// text typed inside a shape: drawn as a picture over the vector outline
+async function rasterShapeText(s) {
+  const b = strokeBB(s), pad = (s.tx.size || 24) * 2, x0 = b[0] - pad, y0 = b[1] - pad, w = b[2] - b[0] + pad * 2, hh = b[3] - b[1] + pad * 2, k = 3;
+  const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w * k)); c.height = Math.max(1, Math.ceil(hh * k));
+  const ctx = c.getContext('2d'); ctx.setTransform(k, 0, 0, k, -x0 * k, -y0 * k);
+  drawShapeText(ctx, s, false);
+  const png = await new Promise(r => c.toBlob(r, 'image/png'));
+  return { bytes: new Uint8Array(await png.arrayBuffer()), x: x0, y: y0, w, h: hh };
+}
 async function rasterize(s) {
   const b = strokeBB(s), w = b[2] - b[0], hh = b[3] - b[1];
   let k = 3;
@@ -30,7 +40,7 @@ async function rasterize(s) {
   const c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w * k)); c.height = Math.max(1, Math.ceil(hh * k));
   const ctx = c.getContext('2d'); ctx.setTransform(k, 0, 0, k, -b[0] * k, -b[1] * k);
   if (s.t === 'img') { const { bitmapAsync } = await import('./images.js'); await bitmapAsync(s.blob); }
-  drawStroke(ctx, s, k, false, true);
+  setCoverSolid(true); try { drawStroke(ctx, s, k, false, true); } finally { setCoverSolid(false); }
   const png = await new Promise(r => c.toBlob(r, 'image/png'));
   return { bytes: new Uint8Array(await png.arrayBuffer()), x: b[0], y: b[1], w, h: hh };
 }
@@ -74,6 +84,7 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
   const dark = !!PAPERS[paperKey]?.dark && withBg;
   let creditImg = null, creditAr = 1;
   if (credit) { const cp = await creditPng(credit); creditImg = await out.embedPng(cp.bytes); creditAr = cp.ar; }
+  await ensurePageFonts(pages);
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i], D = dims(page);
     let pg, ox = 0, oy = 0, sc = 1, H;
@@ -88,7 +99,7 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
     if (!pg) { pg = out.addPage([D.w, D.h]); H = D.h; if (withBg) drawPaperVector(L, pg, page, paperKey, D.w, D.h); }
     const place = { x: ox, y: oy + H, scale: sc };
     // layers: images & text (raster), highlighter, ink
-    const order = [...page.strokes.filter(s => s.t === 'img'), ...page.strokes.filter(s => s.t === 'hl'), ...page.strokes.filter(s => s.t !== 'img' && s.t !== 'hl')];
+    const order = [...page.strokes.filter(s => s.t === 'img'), ...page.strokes.filter(s => s.t === 'hl' && !s.cv), ...page.strokes.filter(s => s.t !== 'img' && s.t !== 'hl'), ...page.strokes.filter(s => s.cv)];
     for (const s of order) {
       if (s.t === 'img' || s.t === 'text') {
         const r = await rasterize(s);
@@ -99,10 +110,11 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
       const v = strokeVector(s); if (!v.d) continue;
       const color = rgb(s.t === 'hl' ? s.c : inkFor(s.c, dark && !page.pdf), L);
       const alpha = (s.a ?? 1) * (v.alpha ?? 1);
-      const blend = s.t === 'hl' ? L.BlendMode.Multiply : undefined;
+      const blend = s.t === 'hl' && !s.cv ? L.BlendMode.Multiply : undefined;
       if (s.shape && s.fill && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse')) pg.drawSvgPath(v.d, { ...place, color: s.fc ? rgb(inkFor(s.fc, dark && !page.pdf), L) : color, opacity: Math.min(1, alpha * s.fill) });
-      if (v.kind === 'fill') pg.drawSvgPath(v.d, { ...place, color, opacity: s.t === 'hl' ? Math.min(1, (s.a ?? .4) * (v.alpha ?? 1)) : alpha, blendMode: blend });
-      else pg.drawSvgPath(v.d, { ...place, borderColor: color, borderWidth: v.w * sc, borderOpacity: s.t === 'hl' ? (s.a ?? .4) : alpha, borderLineCap: v.cap === 'butt' ? L.LineCapStyle.Butt : L.LineCapStyle.Round, borderDashArray: v.dash ? v.dash.map(x => x * sc) : undefined, blendMode: blend });
+      if (v.kind === 'fill') pg.drawSvgPath(v.d, { ...place, color, opacity: s.cv ? 1 : s.t === 'hl' ? Math.min(1, (s.a ?? .4) * (v.alpha ?? 1)) : alpha, blendMode: blend });
+      else pg.drawSvgPath(v.d, { ...place, borderColor: color, borderWidth: v.w * sc, borderOpacity: s.cv ? 1 : s.t === 'hl' ? (s.a ?? .4) : alpha, borderLineCap: v.cap === 'butt' ? L.LineCapStyle.Butt : L.LineCapStyle.Round, borderDashArray: v.dash ? v.dash.map(x => x * sc) : undefined, blendMode: blend });
+      if (s.tx?.text && s.shape) { const r = await rasterShapeText(s); const im = await out.embedPng(r.bytes); pg.drawImage(im, { x: ox + r.x * sc, y: oy + H - (r.y + r.h) * sc, width: r.w * sc, height: r.h * sc }); }
     }
     if (creditImg) { // ~7pt high, bottom-right corner
       const hh = 9 * sc, ww = hh * creditAr, W = D.w * sc;

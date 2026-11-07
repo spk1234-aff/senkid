@@ -64,7 +64,7 @@ export class Library {
     walk('');
     const side = h('div', { class: 'lib-side' },
       h('div', { class: 'brand' }, logoMark(44), brandWord(32)),
-      h('div', { class: 'folders' }, fbtn('*', 'ทั้งหมด', 'lib'), fbtn('~recent', 'ล่าสุด', 'pages'), ...tree));
+      h('div', { class: 'folders' }, fbtn('*', 'ทั้งหมด', 'lib'), fbtn('~recent', 'ล่าสุด', 'pages'), (() => { const b = h('button', { class: 'fold vidbtn' }, icon('film'), h('span', {}, prefs.studentUI ? 'เสียงที่อัด' : 'วิดีโอ')); b.onclick = () => this.app.openRecordings(); return b; })(), ...tree));
     const nf = h('button', { class: 'fold', style: { color: 'var(--muted)' } }, icon('plus'), this.folder !== '*' && this.folder !== '~recent' ? 'โฟลเดอร์ย่อยใหม่' : 'โฟลเดอร์ใหม่');
     nf.onclick = () => this.newFolder(this.folder !== '*' && this.folder !== '~recent' ? this.folder : '');
     side.querySelector('.folders').append(nf);
@@ -94,7 +94,7 @@ export class Library {
     more.onclick = () => menu(more, [
       { icon: 'download', label: 'สำรองสมุดทั้งหมด', action: () => this.app.exportNotebooks(this.nbs.map(n => n.id)) },
       { icon: 'folder', label: 'เปิดไฟล์สมุด / ไฟล์สำรอง', action: () => this.app.openFile() },
-      { icon: 'film', label: 'คลิปที่อัดไว้', action: () => this.app.openRecordings() },
+      { icon: 'film', label: prefs.studentUI ? 'เสียงที่อัดไว้' : 'คลังวิดีโอ', action: () => this.app.openRecordings() },
       '-',
       { icon: 'gear', label: 'ตั้งค่า', action: () => this.app.openSettings() },
       { icon: 'user', label: prefs.studentUI ? 'เปลี่ยนเป็นโหมดครู' : 'เปลี่ยนเป็นโหมดนักเรียน', action: async () => { if (prefs.studentUI && !(await requireTeacher())) return; prefs.studentUI = !prefs.studentUI; if (prefs.studentUI) setUnlocked(false); savePrefs(); this.render(); } },

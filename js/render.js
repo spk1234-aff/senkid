@@ -3,6 +3,7 @@ import { MATH_BGS, drawMathPaper } from './papers.js';
 import { drawImageObj } from './images.js';
 import { pdfDetail, pdfBitmap } from './pdfdoc.js';
 import { circle3, bracketPts } from './shapes.js';
+import { familyFor } from './textfonts.js';
 export const PAGE = { P: { w: 595.28, h: 841.89 }, L: { w: 841.89, h: 595.28 } };
 export const STRIDE = 4;
 export const dims = (p) => (p && p.pw) ? { w: p.pw, h: p.ph } : PAGE[(p && p.size) || 'P'];
@@ -303,6 +304,10 @@ export function buildGeom(s, pen, minW, final) {
 
 // ---------- draw one stroke ----------
 // ctx is in page coordinates. k = device pixels per page point. final: stroke finished (for tapers)
+// PDF / picture export always shows answer covers closed
+let coverSolid = false;
+export function setCoverSolid(v) { coverSolid = !!v; }
+
 export function drawStroke(ctx, s, k, darkPaper, final = true) {
   if (s.t === 'img' || s.t === 'text') {
     if (s.rot) { ctx.save(); const cx = s.x + s.w / 2, cy = s.y + s.h / 2; ctx.translate(cx, cy); ctx.rotate(s.rot); ctx.translate(-cx, -cy); }
@@ -314,7 +319,8 @@ export function drawStroke(ctx, s, k, darkPaper, final = true) {
   const minW = 0.8 / k;
   ctx.save();
   ctx.globalAlpha = s.a ?? 1;
-  if (s.t === 'hl') { ctx.globalAlpha = s.a ?? .4; if (!darkPaper) ctx.globalCompositeOperation = 'multiply'; }
+  if (s.cv) ctx.globalAlpha = s.op && !coverSolid ? 0.16 : 1; // answer cover: opaque until tapped open
+  else if (s.t === 'hl') { ctx.globalAlpha = s.a ?? .4; if (!darkPaper) ctx.globalCompositeOperation = 'multiply'; }
   ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   if (s.shape) {
     ctx.lineWidth = Math.max(minW, s.w);
@@ -324,7 +330,9 @@ export function drawStroke(ctx, s, k, darkPaper, final = true) {
     const sp = shapePath(s.shape, s.w);
     if (s.fill && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse')) { const a0 = ctx.globalAlpha; ctx.globalAlpha = a0 * s.fill; if (s.fc) ctx.fillStyle = inkFor(s.fc, darkPaper); ctx.fill(sp); ctx.fillStyle = color; ctx.globalAlpha = a0; }
     ctx.stroke(sp);
-    ctx.restore(); return;
+    ctx.restore();
+    if (s.tx) drawShapeText(ctx, s, darkPaper);
+    return;
   }
   const n = s.pts.length / STRIDE | 0;
   if (!n) { ctx.restore(); return; }
@@ -381,7 +389,60 @@ function drawBrushHl(ctx, s, G, color, darkPaper) {
 
 // ---------- text boxes ----------
 export const TEXT_LH = 1.32;
-export function textFont(s) { return `${s.bold ? '700 ' : ''}${s.size}px "TH Sarabun New", sans-serif`; }
+export function textFont(s) { return `${s.bold ? '700 ' : ''}${s.size}px ${familyFor(s.f)}`; }
+
+// ---------- text inside a closed shape: centred, wrapped, turns and scales with the shape ----------
+export function shapeTextBox(sh) {
+  if (sh.k === 'ellipse') return { cx: sh.cx, cy: sh.cy, w: sh.rx * 2 * 0.74, h: sh.ry * 2 * 0.74, ang: sh.rot || 0 };
+  const P = sh.pts || [], n = P.length / 2 | 0; if (n < 3) return null;
+  let cx = 0, cy = 0; for (let i = 0; i < n; i++) { cx += P[i * 2]; cy += P[i * 2 + 1]; } cx /= n; cy /= n;
+  if (n === 4) {
+    const e0 = Math.hypot(P[2] - P[0], P[3] - P[1]), e1 = Math.hypot(P[4] - P[2], P[5] - P[3]);
+    let ang = Math.atan2(P[3] - P[1], P[2] - P[0]);
+    // keep the writing upright: use whichever side is closest to horizontal
+    let w = e0, hh = e1;
+    if (Math.abs(Math.sin(ang)) > Math.SQRT1_2) { ang = Math.atan2(P[5] - P[3], P[4] - P[2]); w = e1; hh = e0; }
+    if (Math.cos(ang) < 0) ang += Math.PI;
+    return { cx, cy, w: w * 0.9, h: hh * 0.9, ang };
+  }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < n; i++) { x0 = Math.min(x0, P[i * 2]); x1 = Math.max(x1, P[i * 2]); y0 = Math.min(y0, P[i * 2 + 1]); y1 = Math.max(y1, P[i * 2 + 1]); }
+  return { cx, cy, w: (x1 - x0) * (n === 3 ? 0.55 : 0.72), h: (y1 - y0) * (n === 3 ? 0.5 : 0.72), ang: 0 };
+}
+let seg = null;
+function words(t) {
+  try { seg ||= new Intl.Segmenter('th', { granularity: 'word' }); return [...seg.segment(t)].map(x => x.segment); } catch { return t.split(/(\s+)/); }
+}
+export function wrapText(ctx, text, maxW) {
+  const out = [];
+  for (const para of String(text || '').split('\n')) {
+    let line = '';
+    for (const w of words(para)) {
+      const t = line + w;
+      if (line && ctx.measureText(t).width > maxW) { out.push(line.replace(/\s+$/, '')); line = w.replace(/^\s+/, ''); }
+      else line = t;
+      // a single word longer than the box: break it by characters
+      while (ctx.measureText(line).width > maxW && line.length > 1) {
+        let k = line.length - 1; while (k > 1 && ctx.measureText(line.slice(0, k)).width > maxW) k--;
+        out.push(line.slice(0, k)); line = line.slice(k);
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+export function drawShapeText(ctx, s, dark) {
+  const T = s.tx; if (!T || !T.text || !s.shape) return;
+  const B = shapeTextBox(s.shape); if (!B) return;
+  ctx.save();
+  ctx.translate(B.cx, B.cy); if (B.ang) ctx.rotate(B.ang);
+  ctx.font = textFont(T); ctx.fillStyle = inkFor(T.c || s.c || '#1E2A55', dark); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const lines = wrapText(ctx, T.text, Math.max(T.size, B.w)), lh = T.size * 1.22;
+  const y0 = -(lines.length - 1) * lh / 2;
+  lines.forEach((l, i) => ctx.fillText(l, 0, y0 + i * lh + T.size * 0.06));
+  ctx.restore();
+}
 export function measureText(s) {
   const c = measureText.c || (measureText.c = document.createElement('canvas').getContext('2d'));
   c.font = textFont(s);
@@ -449,10 +510,10 @@ export function drawPaper(ctx, page, paperKey, k) {
 // strokes of a page within an optional clip rect [x0,y0,x1,y1] (page coords)
 export function drawStrokes(ctx, page, k, darkPaper, clip) {
   const st = page.strokes;
-  // images first, then highlighters, then ink on top
-  for (let pass = 0; pass < 3; pass++) {
+  // images first, then highlighters, then ink, then the answer covers on top of everything
+  for (let pass = 0; pass < 4; pass++) {
     for (const s of st) {
-      const layer = s.t === 'img' ? 0 : s.t === 'hl' ? 1 : 2;
+      const layer = s.t === 'img' ? 0 : s.cv ? 3 : s.t === 'hl' ? 1 : 2;
       if (layer !== pass) continue;
       if (clip) { const b = strokeBB(s); if (b[2] < clip[0] || b[0] > clip[2] || b[3] < clip[1] || b[1] > clip[3]) continue; }
       drawStroke(ctx, s, k, darkPaper, true);
@@ -533,27 +594,3 @@ export function drawLaserTrail(ctx, pts, headOn, opt = {}) {
   ctx.restore();
 }
 
-// answer curtain: an opaque sheet over the lower part of a page (page coordinates)
-// step markers (where the curtain stops) as small flags in the left margin
-export function drawMarks(ctx, page, k) {
-  const st = page.steps; if (!st?.length) return;
-  ctx.save(); ctx.fillStyle = '#F5B83D'; ctx.strokeStyle = 'rgba(245,184,61,.55)'; ctx.lineWidth = Math.max(1, 1.2 / k); ctx.setLineDash([6, 6]);
-  const P = dims(page);
-  for (const y of st) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(14, y - 6); ctx.lineTo(14, y + 6); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(14, y); ctx.lineTo(P.w, y); ctx.stroke(); }
-  ctx.restore();
-}
-export function drawCurtain(ctx, page, y, k) {
-  const P = dims(page); if (y >= P.h) return;
-  ctx.save();
-  ctx.fillStyle = '#2B3040'; ctx.fillRect(0, y, P.w, P.h - y);
-  ctx.globalAlpha = .07; ctx.fillStyle = '#fff';
-  for (let yy = y + 14; yy < P.h; yy += 14) ctx.fillRect(0, yy, P.w, 1 / k);
-  ctx.globalAlpha = 1;
-  // grip
-  ctx.fillStyle = '#F5B83D'; ctx.fillRect(0, y, P.w, Math.max(2.5, 3 / k));
-  const gw = 46, gh = 9, gx = P.w / 2 - gw / 2, gy = y - gh / 2;
-  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(gx, gy, gw, gh, gh / 2) : ctx.rect(gx, gy, gw, gh); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = `14px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-  if (P.h - y > 40) ctx.fillText('ลากขอบสีเหลืองลงเพื่อเปิดทีละส่วน', P.w / 2, y + 12);
-  ctx.restore();
-}

@@ -49,7 +49,8 @@ const P = {
   cloud: '<path d="M7 18.5 a4.2 4.2 0 0 1 -.5 -8.4 A5.8 5.8 0 0 1 17.5 8.3 a4 4 0 0 1 .3 10.2 Z" fill="currentColor" stroke="none"/>',
   sync: '<path d="M20 11 a8 8 0 0 0 -14.5 -3.5 M4 13 a8 8 0 0 0 14.5 3.5 M4 4 v5 h5 M20 20 v-5 h-5" stroke-width="2.4"/>',
   user: '<circle cx="12" cy="7.5" r="4.2" fill="currentColor" stroke="none"/><path d="M4 21 c0-4.5 3.5-7.5 8-7.5 s8 3 8 7.5 Z" fill="currentColor" stroke="none"/>',
-  curtain: '<rect x="3.5" y="3" width="17" height="18" rx="2.5" fill="currentColor" stroke="none"/><path d="M3.5 12 H20.5" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.6"/><path d="M4.5 12.5 H19.5 V18.5 a2 2 0 0 1 -2 2 H6.5 a2 2 0 0 1 -2 -2 Z" fill="var(--ico-in,#fff)" stroke="none" fill-opacity=".35"/><path d="M9.8 9 L12 6.8 L14.2 9" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.6"/>',
+  cover: '<path d="M4 8.5 H11" stroke-width="2"/><path d="M4 12 H9" stroke-width="2"/><rect x="3" y="14" width="13" height="6" rx="1.5" fill="currentColor" stroke="none"/><path d="M13.5 13 L19 5.5 L22 8 L16.5 15.5 Z" fill="currentColor" stroke="none"/>',
+  eye: '<path d="M2.5 12 C5 7.5 8.3 5.5 12 5.5 S19 7.5 21.5 12 C19 16.5 15.7 18.5 12 18.5 S5 16.5 2.5 12 Z"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>',
   equation: '<rect x="2.5" y="3" width="19" height="18" rx="4" fill="currentColor" stroke="none"/><path d="M6 8 H11 L8.5 12 L11 16 H6" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.6"/><path d="M13.5 10.5 l4 4 M17.5 10.5 l-4 4" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.6"/>',
   graph: '<path d="M4 20 V4 M4 20 H20" stroke-width="2.4"/><path d="M6 17 C 9 6, 12 6, 14 11 S 18 16, 19 7" stroke-width="2.4"/>',
   protractor: '<path d="M2.5 17.5 A9.5 9.5 0 0 1 21.5 17.5 Z" fill="currentColor" stroke="none"/><path d="M12 17 L12 12.5 M7 13 l1.6 1.4 M17 13 l-1.6 1.4" stroke="var(--ico-in,#fff)" fill="none" stroke-width="1.6"/>',
@@ -158,8 +159,8 @@ export function menu(anchor, items, opts = {}) {
     if (!it) continue;
     if (it === '-') { box.append(h('hr')); continue; }
     if (it.header) { box.append(h('div', { class: 'mh' }, it.header)); continue; }
-    const b = h('button', { class: 'mi' + (it.danger ? ' danger' : '') },
-      it.icon ? icon(it.icon) : null, h('span', {}, it.label), it.right ? h('span', { class: 'r' }, it.right) : null);
+    const b = h('button', { class: 'mi' + (it.danger ? ' danger' : ''), ...(it.style ? { style: it.style } : {}) },
+      it.icon ? icon(it.icon) : null, h('span', {}, it.label, it.sub ? h('small', { class: 'msub' }, it.sub) : null), it.right ? h('span', { class: 'r' }, it.right) : null);
     b.addEventListener('click', () => { if (!it.keep) close(); it.action && it.action(b); });
     box.append(b);
   }

@@ -624,7 +624,19 @@ export function chainOf(m, recs) {
   for (;;) { const n = recs.find(r => r.continues === cur.id && !out.includes(r)); if (!n) break; out.push(n); cur = n; }
   return out;
 }
-export async function openRecordings(nb, app) {
+// delete a clip everywhere (this device, Google Drive, its camera track, its lesson ink); asks first
+export async function deleteRecording(m, { ask = true } = {}) {
+  if (ask && !(await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true }))) return false;
+  if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return false; } }
+  if (m.drive) { const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[m.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); scheduleSync(3000); }
+  await db.deleteRec(m.id);
+  if (m.cam) { try { const cm = await db.get('recs', m.cam); if (cm?.drive) { await deleteDriveFile(cm.drive).catch(() => { }); const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[cm.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); } await db.deleteRec(m.cam); } catch { } }
+  if (m.lesson) (await import('./lesson.js')).deleteLesson(m.id);
+  try { await db.del('kv', 'cover:' + m.id); await db.del('kv', 'vthumb:' + m.id); } catch { }
+  return true;
+}
+// the old list view (kept for reference); the app now opens the video library instead
+export async function openRecordingsList(nb, app) {
   const recs = (await db.getAll('recs')).filter(r => !r.hidden && (!nb || r.nb === nb)).sort((a, b) => b.created - a.created);
   const nbRec = nb ? await db.get('notebooks', nb) : null;
   const pageNo = (m) => { const i = nbRec?.pages?.indexOf(m.page); return i >= 0 ? i + 1 : 0; };
@@ -657,7 +669,7 @@ export async function openRecordings(nb, app) {
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
       else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
-        B('trash', 'ลบ', async () => { if (await confirmBox('ลบคลิปนี้?', m.drive ? 'จะลบออกจาก Google Drive ด้วย กู้คืนไม่ได้' : 'ลบแล้วกู้คืนไม่ได้', { ok: 'ลบ', danger: true })) { if (m.drive) { try { await deleteDriveFile(m.drive); } catch (e) { toast('ลบจาก Drive ไม่ได้: ' + e.message, 3000, 'warn'); return; } } if (m.drive) { const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[m.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); scheduleSync(3000); } await db.deleteRec(m.id); if (m.cam) { try { const cm = await db.get('recs', m.cam); if (cm?.drive) { await deleteDriveFile(cm.drive).catch(() => { }); const v = (await db.get('kv', 'sync:recdel'))?.v || {}; v[cm.id] = Date.now(); await db.put('kv', { k: 'sync:recdel', v }); } await db.deleteRec(m.cam); } catch { } } if (m.lesson) (await import('./lesson.js')).deleteLesson(m.id); recs.splice(recs.indexOf(m), 1); render(); } }));
+        B('trash', 'ลบ', async () => { if (await deleteRecording(m)) { recs.splice(recs.indexOf(m), 1); render(); } }));
       list.append(it);
     }
   };

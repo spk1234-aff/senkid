@@ -3,14 +3,14 @@ const KEY = 'senkid.prefs.v1';
 
 export const PEN_TYPES = [
   // id, label, default size, presets
-  ['ball', 'ลูกลื่น', 1.2, [0.5, 0.8, 1.2, 2, 4]],
-  ['fount', 'หมึกซึม', 2, [1, 1.5, 2, 3, 5]],
-  ['calli', 'คอแร้ง', 4, [2, 3, 4, 6, 10]],
-  ['brush', 'พู่กัน', 5, [2, 3.5, 5, 9, 16]],
-  ['marker', 'มาร์กเกอร์', 4, [2, 3, 4, 7, 12]],
-  ['pencil', 'ดินสอ', 1.6, [0.7, 1.1, 1.6, 2.5, 4]],
-  ['dash', 'เส้นประ', 1.5, [0.8, 1.2, 1.5, 2.5, 4]],
-  ['dot', 'เส้นจุด', 2, [1, 1.5, 2, 3, 5]],
+  ['ball', 'ลูกลื่น', 1.2, [0.5, 1.2, 4]],
+  ['fount', 'หมึกซึม', 2, [1, 2, 5]],
+  ['calli', 'คอแร้ง', 4, [2, 4, 10]],
+  ['brush', 'พู่กัน', 5, [2, 5, 16]],
+  ['marker', 'มาร์กเกอร์', 4, [2, 4, 12]],
+  ['pencil', 'ดินสอ', 1.6, [0.7, 1.6, 4]],
+  ['dash', 'เส้นประ', 1.5, [0.8, 1.5, 4]],
+  ['dot', 'เส้นจุด', 2, [1, 2, 5]],
 ];
 export const PEN_LABEL = Object.fromEntries(PEN_TYPES.map(p => [p[0], p[1]]));
 PEN_LABEL.hl = 'ไฮไลต์';
@@ -19,8 +19,8 @@ const defaults = () => ({
   penType: 'fount',
   pens: Object.fromEntries(PEN_TYPES.map(([id, , s, pr]) => [id, { size: s, presets: pr.slice() }])),
   penColor: '#1E2A55', penAlpha: 1,
-  hl: { size: 14, presets: [8, 11, 14, 20, 28], color: '#F5B83D', alpha: 0.4, straight: false, style: 'brush' },
-  eraser: { mode: 'stroke', size: 14, presets: [6, 10, 14, 24, 40] },
+  hl: { size: 14, presets: [8, 14, 28], color: '#F5B83D', alpha: 0.4, straight: false, style: 'brush' },
+  eraser: { mode: 'stroke', size: 14, presets: [6, 14, 40] },
   favorites: ['#1E2A55', '#2F5BEA', '#D64545', '#1E9E5A', '#F5B83D', '#7A4BD6', '#000000', '#E06B2D'],
   hlFavorites: ['#F5B83D', '#7FE07A', '#7CC7FF', '#FF8FB1', '#C9A7FF'],
   recent: [],
@@ -58,6 +58,8 @@ export function savePrefs() {
   subs.forEach(f => f());
 }
 // write now (before a reload, or when the page is going away)
+// answer-cover pen settings (opaque strip, tap to reveal)
+export function coverPrefs() { return (state.cover ||= { size: 22, presets: [14, 22, 36], color: '#5B6B82', straight: true }); }
 export function flushPrefs() { clearTimeout(t); try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { } }
 addEventListener('pagehide', flushPrefs);
 export function onPrefs(f) { subs.add(f); return () => subs.delete(f); }

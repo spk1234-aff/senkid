@@ -1,6 +1,7 @@
 // ทำวิดีโอจากบทเรียน — three plain steps: pick lessons → look (silence already cut) → make the video.
 // Everything finer (trim, split, speed, title cards) lives behind "ปรับละเอียด", which opens the full cut editor.
-import { h, icon, toast, fmtTime, fmtBytes, uid } from './ui.js';
+import { h, icon, toast, fmtTime, fmtBytes, uid, confirmBox } from './ui.js';
+import { defaultDesign, openTitleDesigner, loadAssets, drawTitleCard } from './titlecard.js';
 import * as db from './db.js';
 import { prefs, savePrefs } from './prefs.js';
 
@@ -14,10 +15,14 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
   const body = h('div', { class: 'body mv-body' });
   root.append(h('div', { class: 'top' }, back, h('div', { class: 'title' }, 'ทำวิดีโอจากบทเรียน'), h('span', { class: 'grow' }), steps), body);
   document.body.append(root);
-  let eng = null, raf = 0, pr = null, orig = null, cuts = null, title = '', addTitle = true, cutOn = prefs.mv?.cut !== false, picked = [];
+  let eng = null, raf = 0, pr = null, orig = null, cuts = null, title = '', addTitle = true, cutOn = prefs.mv?.cut !== false, picked = [], design = null, coverOn = !!prefs.mv?.cover, stage = 1, finished = false;
   const cleanup = () => { cancelAnimationFrame(raf); try { eng?.pauseAll(); eng?.dispose(); } catch { } eng = null; };
-  back.onclick = () => { cleanup(); root.remove(); };
-  const setSteps = (n) => steps.replaceChildren(step(1, 'เลือกบทเรียน', n), step(2, 'ดูก่อน', n), step(3, 'ทำวิดีโอ', n));
+  back.onclick = async () => {
+    if (stage >= 2 && !finished && !(await confirmBox('ออกจากการทำวิดีโอ?', stage === 3 && working ? 'วิดีโอยังทำต่อเบื้องหลัง ดูความคืบหน้าที่มุมขวาล่าง' : 'สิ่งที่เลือกไว้จะหายไป (บทเรียนต้นฉบับยังอยู่ครบ)', { ok: 'ออก' }))) return;
+    cleanup(); root.remove();
+  };
+  let working = false;
+  const setSteps = (n) => { stage = n; steps.replaceChildren(step(1, 'เลือกบทเรียน', n), step(2, 'ดูก่อน', n), step(3, 'ทำวิดีโอ', n)); };
 
   // ---------- step 1 ----------
   const step1 = async () => {
@@ -57,7 +62,8 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
     try {
       orig = { id: uid(), name: '', created: Date.now(), clips: [], fade: true, res: '1920' };
       for (const r of chosen) await C.addRecClip(orig, r);
-      title = (chosen[0].name || 'บทเรียน').replace(/ · (เสียง.*|ตอนที่ \d+)$/, '');
+      title = (chosen[0].name || 'บทเรียน').replace(/ · (เสียง.*|ตอนที่ \d+)$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
+      design = defaultDesign(title);
       // find dead air once, keep the result so the switch is instant
       const tmp = new C.Engine(orig); await tmp.loadAll();
       cuts = new Map();
@@ -67,7 +73,7 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
     const build = () => {
       const p = { ...orig, id: pr?.id || uid(), name: title + ' · วิดีโอ', clips: orig.clips.map(c => ({ ...c, id: uid(), _from: c.id })) };
       if (cutOn) for (const c of p.clips.slice()) { const rs = cuts.get(c._from) || []; if (rs.length) C.applyCuts(p, c, rs.map(r => ({ ...r }))); }
-      if (addTitle && title.trim()) p.clips.unshift({ id: uid(), kind: 'title', text: title.trim(), name: title.trim(), hold: 3000, bg: '#1E2A55', fg: '#fff' });
+      if (addTitle && title.trim()) { design.lines[0] = title.trim(); p.clips.unshift({ id: uid(), kind: 'title', text: title.trim(), sub: design.lines[1] || '', name: title.trim(), hold: design.hold || 3000, design: JSON.parse(JSON.stringify(design)) }); }
       return p;
     };
     const before = C.totalDur(orig);
@@ -80,7 +86,7 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
     const restart = async () => {
       cancelAnimationFrame(raf); try { eng?.pauseAll(); eng?.dispose(); } catch { }
       pr = build(); eng = new C.Engine(pr); await eng.loadAll(); t = 0; playing = false; play.replaceChildren(icon('play'));
-      const after = C.totalDur(pr), saved = before - after + (addTitle ? 3000 : 0);
+      const after = C.totalDur(pr), saved = before - after + (addTitle ? (design.hold || 3000) : 0);
       sum.replaceChildren(cutOn && saved > 1000 ? h('span', {}, 'จาก ', h('b', {}, fmtTime(before)), ' เหลือ ', h('b', {}, fmtTime(after)), ` · ตัดช่วงเงียบออก ${fmtTime(saved)}`) : h('span', {}, 'ความยาว ', h('b', {}, fmtTime(after)), cutOn ? ' · ไม่พบช่วงเงียบยาว ๆ' : ''));
       raf = requestAnimationFrame(frame);
     };
@@ -95,7 +101,14 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
     play.onclick = () => { if (playing) { playing = false; eng.pauseAll(); play.replaceChildren(icon('play')); } else { if (t >= C.totalDur(pr) - 50) t = 0; playing = true; lastWall = 0; eng.cur = -1; play.replaceChildren(icon('pause')); } };
     bar.oninput = () => { playing = false; eng.pauseAll(); play.replaceChildren(icon('play')); t = +bar.value / 1000 * C.totalDur(pr); };
     const sw = (on, label, sub, fn) => { const b = h('button', { class: 'mv-switch' + (on ? ' on' : '') }, h('span', { class: 'knob' }), h('div', {}, h('b', {}, label), h('span', {}, sub))); b.onclick = () => { b.classList.toggle('on'); fn(b.classList.contains('on')); }; return b; };
-    const tIn = h('input', { class: 'field', value: title, placeholder: 'ชื่อวิดีโอ' }); tIn.onchange = () => { title = tIn.value; restart(); };
+    const tIn = h('input', { class: 'field', value: title, placeholder: 'ชื่อวิดีโอ' }); tIn.onchange = () => { title = tIn.value.replace(/_+/g, ' '); tIn.value = title; restart(); paintCard(); };
+    // the title card: small preview + designer
+    const card = h('canvas', { class: 'mv-card', width: 320, height: 180 });
+    const paintCard = async () => { design.lines[0] = title; drawTitleCard(card.getContext('2d'), 320, 180, design, await loadAssets(design)); };
+    const designBtn = h('button', { class: 'pill sec' }, icon('edit'), 'ออกแบบหน้าแรก');
+    designBtn.onclick = async () => { design.lines[0] = title; const d2 = await openTitleDesigner(design, { nb: chosen[0]?.nb }); if (d2) { design = d2; title = d2.lines[0] || title; tIn.value = title; addTitle = true; titleSw.classList.add('on'); paintCard(); restart(); } };
+    card.onclick = () => designBtn.click();
+    const titleSw = sw(addTitle, 'ใส่หน้าแรก (ชื่อเรื่อง)', 'ขึ้นก่อนเริ่มบทเรียน 2–5 วินาที', (v) => { addTitle = v; restart(); });
     const fine = h('button', { class: 'pill ghost' }, icon('scissors'), 'ปรับละเอียด (ตัดหัว‑ท้าย แบ่งคลิป ความเร็ว)');
     fine.onclick = async () => { const p = build(); await C.saveProject(p); cleanup(); root.remove(); C.openCutEditor(app, { projectId: p.id }); };
     const nextBtn = h('button', { class: 'pill prim mv-big' }, 'ถัดไป', icon('chev')); nextBtn.onclick = () => { const p = build(); cleanup(); step3(p); };
@@ -106,10 +119,12 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
       h('div', { class: 'mv-player' }, cv, h('div', { class: 'mv-ctl' }, play, bar, tEl)),
       h('div', { class: 'lbl' }, 'ชื่อวิดีโอ'), tIn,
       sw(cutOn, 'ตัดช่วงเงียบอัตโนมัติ', 'ช่วงที่ไม่พูดและไม่เขียนนานเกิน 8 วินาทีจะถูกตัดออก', (v) => { cutOn = v; prefs.mv = { ...(prefs.mv || {}), cut: v }; savePrefs(); restart(); }),
-      sw(addTitle, 'ใส่หน้าชื่อเรื่องตอนต้น', 'ขึ้นชื่อวิดีโอ 3 วินาทีก่อนเริ่ม', (v) => { addTitle = v; restart(); }),
+      titleSw,
+      h('div', { class: 'mv-cardrow' }, card, h('div', {}, designBtn, h('div', { class: 'sub' }, 'เปลี่ยนสี รูปพื้นหลัง ฟอนต์ ข้อความ 3 บรรทัด โลโก้ · จำแบบล่าสุดไว้ให้'))),
+      sw(coverOn, 'ใช้หน้าแรกเป็นภาพปก YouTube', 'ช่องต้องยืนยันด้วยเบอร์โทรก่อน ถ้ายังไม่ได้ยืนยันจะข้ามให้เอง', (v) => { coverOn = v; prefs.mv = { ...(prefs.mv || {}), cover: v }; savePrefs(); }),
       h('div', { style: { margin: '10px 0' } }, fine),
       h('div', { class: 'mv-foot' }, backBtn, h('span', { class: 'grow' }), nextBtn)));
-    await restart();
+    await restart(); paintCard();
   };
 
   // ---------- step 3 ----------
@@ -131,12 +146,14 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
       const prog = h('div', { class: 'mv-prog' }, h('i')), lab = h('div', { class: 'mv-plab' }, 'กำลังเริ่ม…');
       box.replaceChildren(h('h2', {}, 'กำลังทำวิดีโอ…'), prog, lab, h('p', { class: 'sub' }, 'ปิดหน้านี้ได้ วิดีโอจะทำต่อเบื้องหลัง (ดูความคืบหน้าที่มุมขวาล่าง)'));
       const Q = await import('./exportq.js');
-      const job = { id: uid(), name: p.name.replace(/ · วิดีโอ$/, ''), project: JSON.parse(JSON.stringify(p)), res: 1920, dur: D };
+      const tc = p.clips.find(c => c.kind === 'title' && c.design);
+      const job = { id: uid(), name: p.name.replace(/ · วิดีโอ$/, ''), project: JSON.parse(JSON.stringify(p)), res: 1920, dur: D, cover: coverOn && tc ? tc.design : null };
+      working = true;
       const tick = setInterval(() => { if (!root.isConnected) return clearInterval(tick); const st = Q.queueState(); const j = st.running?.id === job.id ? st.running : null; if (j) { prog.firstChild.style.width = Math.round((j.pct || 0) * 100) + '%'; lab.textContent = `${Math.round((j.pct || 0) * 100)}% · ${fmtTime(j.at || 0)} / ${fmtTime(D)}`; } else if (st.pending.some(x => x.id === job.id)) lab.textContent = 'รอคิว (มีวิดีโออื่นกำลังทำอยู่)'; }, 500);
-      job.onError = (e) => { clearInterval(tick); if (!root.isConnected) return; box.replaceChildren(h('h2', {}, 'ทำวิดีโอไม่สำเร็จ'), h('p', {}, String(e.message || e)), backBtn); };
-      job.onCancel = () => { clearInterval(tick); if (root.isConnected) step3(p); };
+      job.onError = (e) => { clearInterval(tick); working = false; if (!root.isConnected) return; box.replaceChildren(h('h2', {}, 'ทำวิดีโอไม่สำเร็จ'), h('p', {}, String(e.message || e)), backBtn); };
+      job.onCancel = () => { clearInterval(tick); working = false; if (root.isConnected) step3(p); };
       job.onDone = (meta, blob) => {
-        clearInterval(tick);
+        clearInterval(tick); finished = true; working = false;
         if (!root.isConnected) { import('./recorder.js').then(R => R.showRecording(meta, true, blob)); return; }
         const R = import('./recorder.js');
         const yt = h('button', { class: 'pill prim mv-big' }, icon('upload'), 'ส่งขึ้น YouTube'); yt.onclick = () => import('./youtube.js').then(m => m.uploadToYouTube(meta, blob));

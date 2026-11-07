@@ -7,6 +7,7 @@ import { prefs, savePrefs } from './prefs.js';
 import { renderPageTo } from './render.js';
 import { lessonSource, drawCamFrame } from './lesson.js';
 import { CREDIT } from './exportpdf.js';
+import { loadAssets as titleAssets, drawTitleCard } from './titlecard.js';
 
 const KEY = (id) => 'proj:' + id;
 export async function listProjects() { return (await db.getAll('kv')).filter(x => x.k.startsWith('proj:')).map(x => x.v).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
@@ -76,11 +77,13 @@ class StillSrc extends Source {
   async load() {
     const c = this.clip;
     if (c.kind === 'image') { const blob = c.blob || (await db.get('kv', 'cutimg:' + c.src))?.v; this.img = await createImageBitmap(blob); }
+    else if (c.kind === 'title' && c.design) this.A = await titleAssets(c.design);
     else if (c.kind === 'page') { const pg = await db.get('pages', c.src.pid); const nb = await db.get('notebooks', c.src.nb); const cv = document.createElement('canvas'); if (pg) renderPageTo(cv, pg, nb?.paper || 'cream', 1600); this.img = cv; }
     this.ready = true;
   }
   draw(ctx, W, H, t) {
     const c = this.clip;
+    if (c.kind === 'title' && c.design) { drawTitleCard(ctx, W, H, c.design, this.A || {}); return; }
     if (c.kind === 'title') {
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = c.bg || '#1E2A55'; ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = c.fg || '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -183,11 +186,12 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
   const nameBtn = h('button', { class: 'lp-title', style: { background: 'transparent', border: 0, color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left' } }, pr.name);
   nameBtn.onclick = async () => { const v = await ask('ชื่อโปรเจกต์', { value: pr.name }); if (v) { pr.name = v; nameBtn.textContent = v; save(); } };
   const close = h('button', { class: 'btn', title: 'ปิด (บันทึกให้เอง)' }, icon('close'));
+  const undoBtn = h('button', { class: 'btn', title: 'ย้อนกลับ' }, icon('undo')), redoBtn = h('button', { class: 'btn', title: 'ทำซ้ำ' }, icon('redo'));
   const addBtn = h('button', { class: 'pill prim' }, icon('plus'), 'เพิ่มคลิป');
   const quietBtn = h('button', { class: 'pill sec' }, icon('mic'), 'ตัดช่วงเงียบ');
   const chapBtn = h('button', { class: 'pill sec' }, icon('edit'), 'สารบัญ');
   const expBtn = h('button', { class: 'pill sec' }, icon('film'), 'ส่งออก');
-  const head = h('div', { class: 'lp-head' }, nameBtn, h('span', { class: 'grow' }), addBtn, quietBtn, chapBtn, expBtn, close);
+  const head = h('div', { class: 'lp-head' }, nameBtn, h('span', { class: 'grow' }), undoBtn, redoBtn, addBtn, quietBtn, chapBtn, expBtn, close);
   const stageEl = h('div', { class: 'lp-stage' }, cv);
   const play = h('button', { class: 'btn big' }, icon('play'));
   const bar = h('input', { type: 'range', class: 'lp-bar', min: 0, max: 1000, value: 0 });
@@ -200,13 +204,20 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
   let t = 0, playing = false, sel = null, raf = 0, dirty = true, lastWall = 0;
   const dur = () => totalDur(pr);
   const save = () => saveProject(pr).catch(() => { });
-  const size = () => { const r = stageEl.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1); cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d); cv._w = r.width; cv._h = r.height; cv._d = d; dirty = true; };
+  // the preview is always 16:9 (what the video will look like), centred in the stage with dark bars
+  const size = () => {
+    const r = stageEl.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1);
+    let w = r.width, hh = w * 9 / 16; if (hh > r.height) { hh = r.height; w = hh * 16 / 9; }
+    Object.assign(cv.style, { width: w + 'px', height: hh + 'px', left: (r.width - w) / 2 + 'px', top: (r.height - hh) / 2 + 'px', right: 'auto', bottom: 'auto' });
+    cv.width = Math.max(2, Math.round(w * d)); cv.height = Math.max(2, Math.round(hh * d)); cv._w = w; cv._h = hh; cv._d = d; dirty = true;
+  };
   size(); addEventListener('resize', size);
+  const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => size()) : null; ro?.observe(stageEl);
   const paintTime = () => { const D = dur(); bar.value = D ? Math.round(t / D * 1000) : 0; tEl.textContent = fmtTime(t) + ' / ' + fmtTime(D); };
   const frame = (now) => {
     raf = requestAnimationFrame(frame);
     if (playing) { const ck = eng.clockT(); const dt = lastWall ? now - lastWall : 0; lastWall = now; t = ck != null ? ck : t + dt; eng.sync(t); if (t >= dur()) { stop(); t = dur(); } dirty = true; }
-    if (dirty) { ctx.setTransform(cv._d, 0, 0, cv._d, 0, 0); const L = eng.draw(ctx, cv._w, cv._h, t); dirty = playing; paintTime(); markStrip(L); }
+    if (dirty) { ctx.setTransform(1, 0, 0, 1, 0, 0); const L = eng.draw(ctx, cv.width, cv.height, t); dirty = playing; paintTime(); markStrip(L); }
   };
   const stop = () => { playing = false; lastWall = 0; eng.pauseAll(); play.replaceChildren(icon('play')); dirty = true; };
   const go = () => { if (!pr.clips.length) return; if (t >= dur() - 50) t = 0; playing = true; lastWall = 0; play.replaceChildren(icon('pause')); };
@@ -240,10 +251,38 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
     const row = h('div', { class: 'cut-row' });
     if (c.kind === 'lesson' || c.kind === 'video') row.append(B('scissors', 'ตัดหัว‑ท้าย', () => trimDialog(c)), B('dup', 'แบ่งตรงนี้', () => splitAt()));
     else row.append(B('timer', `แสดง ${Math.round((c.hold || HOLD) / 1000)} วิ`, () => holdDialog(c)));
-    row.append(B('gear', 'ตั้งค่า', () => clipSettings(c)), B('back', 'ซ้าย', () => move(-1)), B('chev', 'ขวา', () => move(1)), B('copy', 'ทำสำเนา', () => { pr.clips.splice(i + 1, 0, { ...c, id: uid() }); changed(); }), B('trash', 'ลบ', () => { pr.clips.splice(i, 1); sel = null; changed(); }, 'ghost'));
+    row.append(B('history', 'คืนค่าคลิปนี้', () => resetClip(c)), B('gear', 'ตั้งค่า', () => clipSettings(c)), B('back', 'ซ้าย', () => move(-1)), B('chev', 'ขวา', () => move(1)), B('copy', 'ทำสำเนา', () => { pr.clips.splice(i + 1, 0, { ...c, id: uid() }); changed(); }), B('trash', 'ลบ', () => { pr.clips.splice(i, 1); sel = null; changed(); }, 'ghost'));
     tools.append(row);
   };
-  const changed = () => { save(); paintStrip(); paintTools(); dirty = true; eng.cur = -1; t = Math.min(t, dur()); };
+  // ---- undo / redo: snapshots of the clip list (up to 60 steps) ----
+  const snap = () => JSON.stringify({ clips: pr.clips, fade: pr.fade });
+  const hist = [snap()]; let hi = 0;
+  const syncUndo = () => { undoBtn.disabled = hi <= 0; redoBtn.disabled = hi >= hist.length - 1; };
+  const restore = (j) => {
+    hi = j; const S = JSON.parse(hist[j]), byId = new Map(pr.clips.map(c => [c.id, c]));
+    // keep the same clip objects where possible so the loaded sources stay attached
+    pr.clips = S.clips.map(sc => { const o = byId.get(sc.id); if (!o) return sc; for (const k of Object.keys(o)) delete o[k]; return Object.assign(o, sc); });
+    pr.fade = S.fade; sel = sel && pr.clips.includes(sel) ? sel : null;
+    save(); paintStrip(); paintTools(); dirty = true; eng.cur = -1; t = Math.min(t, dur()); syncUndo();
+  };
+  undoBtn.onclick = () => { if (hi > 0) { stop(); restore(hi - 1); toast('ย้อนกลับ', 800); } };
+  redoBtn.onclick = () => { if (hi < hist.length - 1) { stop(); restore(hi + 1); toast('ทำซ้ำ', 800); } };
+  const changed = () => {
+    const s2 = snap(); if (s2 !== hist[hi]) { hist.splice(hi + 1); hist.push(s2); if (hist.length > 61) hist.shift(); hi = hist.length - 1; }
+    save(); paintStrip(); paintTools(); dirty = true; eng.cur = -1; t = Math.min(t, dur()); syncUndo();
+  };
+  // undo everything done to this clip: join the pieces it was cut into, full length, normal speed and sound
+  const resetClip = (c) => {
+    const i = pr.clips.indexOf(c); if (i < 0) return;
+    if (c.kind === 'lesson' || c.kind === 'video') {
+      let a = i, b = i; const same = (x) => x && x.kind === c.kind && x.src === c.src;
+      while (same(pr.clips[a - 1])) a--; while (same(pr.clips[b + 1])) b++;
+      const D = c.dur || eng.src(c).dur || c.out;
+      Object.assign(c, { in: 0, out: D, speed: 1, mute: false }); delete c.cam;
+      pr.clips.splice(a, b - a + 1, c);
+    } else if (c.kind !== 'title') c.hold = HOLD;
+    sel = c; stop(); changed(); toast('คืนค่าคลิปนี้แล้ว (กดย้อนกลับได้)', 1800);
+  };
   const move = (d) => { const i = pr.clips.indexOf(sel), j = i + d; if (j < 0 || j >= pr.clips.length) return; pr.clips.splice(i, 1); pr.clips.splice(j, 0, sel); changed(); };
   const splitAt = () => { const L = eng.locate(t); if (!L || L.c !== sel) { toast('เลื่อนตัวเล่นไปตรงที่จะแบ่งภายในคลิปนี้ก่อน', 2500); return; } if (L.local < 500 || L.d - L.local < 500) { toast('ใกล้ขอบคลิปเกินไป', 1500); return; } const c = sel, at = L.srcT; const b = { ...c, id: uid(), in: at }; c.out = at; pr.clips.splice(pr.clips.indexOf(c) + 1, 0, b); sel = b; changed(); toast('แบ่งเป็น 2 คลิปแล้ว · ลบชิ้นที่ไม่เอาได้เลย', 2000); };
   const trimDialog = (c) => {
@@ -346,8 +385,12 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
     toast('เพิ่มในคิวส่งออกแล้ว · ดูความคืบหน้าที่มุมขวาล่าง', 3000);
   };
   addBtn.onclick = addMenu;
-  close.onclick = () => { cancelAnimationFrame(raf); stop(); eng.dispose(); removeEventListener('resize', size); save(); root.remove(); };
-  paintStrip(); paintTools(); raf = requestAnimationFrame(frame);
+  const shut = () => { ro?.disconnect(); cancelAnimationFrame(raf); stop(); eng.dispose(); removeEventListener('resize', size); save(); root.remove(); };
+  close.onclick = async () => {
+    if (hi > 0 && !(await confirmBox('ปิดหน้าตัดต่อ?', 'งานที่แก้บันทึกไว้ให้แล้ว เปิดทำต่อได้ที่ คลังวิดีโอ > โปรเจกต์ตัดต่อ', { ok: 'ปิด' }))) return;
+    shut();
+  };
+  paintStrip(); paintTools(); syncUndo(); raf = requestAnimationFrame(frame);
   return pr;
 }
 

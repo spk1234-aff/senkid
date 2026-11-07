@@ -940,3 +940,82 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .wheelsw{position:relative;width:34px;height:34px;border-radius:50%;background:conic-gradient(#f33,#fc3,#3c3,#3cf,#33f,#c3f,#f33);cursor:pointer;flex:none;border:2px solid rgba(255,255,255,.7)}
 .wheelsw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:0;padding:0}
 .imgbar .chip.ico{padding:0 10px;min-width:44px;justify-content:center}
+/* folder title must not be squeezed by the search box (search shrinks first) */
+.lib-top .title{flex:1 1 0;min-width:min(100%,330px)}
+.lib-top .search{flex:0 1 190px;min-width:120px}
+.lib-top .title .tcol{flex:1 1 auto}
+.menu .mi:has(.msub){padding-top:7px;padding-bottom:7px;line-height:1.15}
+.menu .mi .msub{display:block;font-size:15px;color:var(--muted);line-height:1.15;margin-top:2px}
+.tb2 .btn.tvmode{width:auto !important;padding:2px 8px 0}
+.tb2 .btn.tvmode .tvdot{display:none;position:absolute;top:4px;right:6px;width:10px;height:10px;border-radius:50%;background:#F5B83D;animation:tvpulse 1s infinite}
+.tb2 .btn.tvmode.pending .tvdot{display:block}
+.tb2 .btn.tvmode.off{opacity:.55}
+@keyframes tvpulse{50%{opacity:.25}}
+/* เมนูเป็นแผงด้านข้าง */
+.hubwrap{position:fixed;inset:0;z-index:58;background:rgba(15,18,30,.12);animation:fade .12s}
+.hubwrap .hub{position:absolute;top:0;right:0;bottom:0;left:auto;width:min(460px,94vw);inset:auto 0 0 auto;height:100%;background:var(--ui);display:flex;flex-direction:column;box-shadow:-12px 0 40px rgba(0,0,0,.18);border-left:1px solid var(--line);animation:hubin .18s var(--ease)}
+@keyframes hubin{from{transform:translateX(40px);opacity:.4}}
+.hubwrap .hub-top{padding:calc(10px + var(--safe-t)) 14px 10px 18px;gap:10px}
+.hubwrap .hub-title{font-size:26px}
+.hubwrap .hub-main{padding:14px 14px calc(24px + var(--safe-b))}
+.hubwrap .hub-grid{grid-template-columns:1fr;gap:8px;max-width:none}
+.hubwrap .hub-card{flex-direction:row;align-items:center;gap:14px;min-height:0;padding:10px 14px;border-radius:16px}
+.hubwrap .hub-card .hub-ci{width:50px;height:50px;margin:0;border-radius:14px;flex:none}
+.hubwrap .hub-card .hub-ci svg.i{width:28px;height:28px}
+.hubwrap .hub-card b{font-size:21px;display:block}
+.hubwrap .hub-ct>span{font-size:16px;color:var(--muted)}
+.hubwrap .hub-card .hub-ct{display:flex;flex-direction:column;min-width:0}
+.hubwrap .hub-page{max-width:none;border-radius:16px}
+.hubwrap .hub-row{padding:11px 14px;min-height:56px}
+.hubwrap .hub-rt b{font-size:19px}.hubwrap .hub-rt span{font-size:15px}
+.hubwrap .ctheme{grid-template-columns:repeat(2,1fr)}
+.hubwrap .hub-row.set{flex-wrap:wrap}
+.hubwrap .hub-row.set .seg{max-width:100%}
+.fontgrid{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+.fontgrid .fontchip{font-size:21px;padding:4px 12px;min-height:40px}
+.chip.fontpick{max-width:200px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;gap:4px}
+.stepper{display:flex;align-items:center;gap:8px}.stepper b{min-width:34px;text-align:center;font-size:21px}
+/* make-video: footer scrolls with the page (no longer covers the switches) */
+.mv-foot{position:static}
+.mv-cardrow{display:flex;gap:14px;align-items:center;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--bar)}
+.mv-cardrow .mv-card{width:176px;height:99px;border-radius:8px;cursor:pointer;flex:none;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.mv-cardrow .sub{margin-top:6px;font-size:16px}
+/* title-card designer */
+.tc-prev{display:flex;justify-content:center;margin-bottom:6px}.tc-cv{width:100%;max-width:640px;aspect-ratio:16/9;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.tc-tpls{display:flex;gap:8px;flex-wrap:wrap}.tc-tpl{border:2px solid transparent;border-radius:10px;padding:8px 14px;font-size:19px;cursor:pointer;min-width:96px}
+.tc-tpl.on{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-soft)}
+.tc .field{margin-bottom:6px}.tc-cols{display:flex;gap:2px;flex-wrap:wrap;margin-top:6px}
+.tc-rowx{display:flex;gap:10px;align-items:center;margin-top:6px;flex-wrap:wrap}
+/* cut editor: 16:9 preview on a dark stage */
+.cutter .lp-stage{background:#0b0d12}.cutter .lp-stage canvas{position:absolute}
+.lp-head .btn:disabled{opacity:.35}
+.hub-card[data-id=vlib]{--tile:#0E7490}.hub-card[data-id=vlib] .hub-ci{background:var(--tile);color:#fff}
+.lib-side .fold.vidbtn{color:var(--text)}
+/* video library */
+.vlib .vl-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px max(20px,var(--safe-r)) 8px max(20px,var(--safe-l));border-bottom:1px solid var(--line);background:var(--ui)}
+.vlib .vl-search{flex:1 1 220px;max-width:360px;height:44px;margin:0}
+.vlib .vl-usage{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 4px;padding:10px 14px;border-radius:12px;background:var(--bar);border:1px solid var(--line)}
+.vlib .vl-usage>div{flex:1;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}.vlib .vl-usage b{font-size:19px}
+.vlib .vl-scope:empty{display:none}.vlib .vl-scope{margin:8px 0}
+.vl-gh{font-size:21px;font-weight:700;margin:16px 2px 8px}.vl-gh span{font-weight:400;color:var(--muted)}
+.vl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.vl-card{position:relative;border-radius:14px;background:var(--bar);border:1px solid var(--line);overflow:hidden;cursor:pointer;display:flex;flex-direction:column;text-align:left;padding:0;font:inherit;color:var(--text)}
+.vl-card.bad{opacity:.65}
+.vl-thw{position:relative;aspect-ratio:16/9;background:#1b1f2a;display:flex;align-items:center;justify-content:center}
+.vl-thw.pj{background:linear-gradient(135deg,#2F5BEA22,#7C3AED33);color:var(--acc)}.vl-thw.pj svg{width:48px;height:48px}
+.vl-th{width:100%;height:100%;display:block;object-fit:cover}
+.vl-dur{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.72);color:#fff;font-size:15px;padding:0 7px;border-radius:6px;line-height:1.5}
+.vl-dur:empty{display:none}
+.vl-play{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.vl-play svg{width:26px;height:26px}
+.vl-badges{position:absolute;left:8px;top:8px;display:flex;gap:4px;flex-wrap:wrap}
+.vl-b{font-size:14px;line-height:1.55;padding:0 7px;border-radius:6px;color:#fff;background:rgba(0,0,0,.6)}
+.vl-b.yt{background:#E5302B}.vl-b.dr{background:#1F7AE0}.vl-b.lc{background:rgba(40,44,56,.82)}.vl-b.bad{background:#B45309}
+.vl-meta{padding:8px 44px 10px 12px;display:flex;flex-direction:column;min-width:0}
+.vl-meta b{font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vl-meta span{font-size:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vl-more{position:absolute;right:4px;bottom:6px}
+.vl-card.add{align-items:center;justify-content:center;gap:4px;min-height:200px;border-style:dashed;color:var(--acc);text-align:center;padding:12px}
+.vl-card.add svg{width:36px;height:36px}.vl-card.add .sub{color:var(--muted);font-size:15px}
+.sheet.mv,.sheet.vlib{z-index:48} /* below #layer so dialogs and menus open on top */
+.vlib .top .grow{flex:1}.vlib .top .title{font-size:24px;font-weight:700}
+.vl-play{left:8px;top:auto;bottom:8px;margin:0;width:44px;height:44px}

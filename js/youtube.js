@@ -93,6 +93,13 @@ export async function uploadToYouTube(meta, blob = null) {
     }
     const vid = result?.id; if (!vid) throw new Error('ไม่ได้รหัสวิดีโอกลับมา');
     meta.yt = vid; meta.ytLink = 'https://youtu.be/' + vid; await db.put('recs', meta);
+    // cover picture: only channels verified by phone may set one, so a refusal is not an error
+    if (meta.ytCover) {
+      try {
+        const jpg = (await db.get('kv', 'cover:' + meta.id))?.v;
+        if (jpg) { bz.set('กำลังตั้งภาพปก…'); await yfetch('https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=' + vid, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: jpg }); }
+      } catch (e) { if (e.auth) throw e; toast(e.status === 403 ? 'ตั้งภาพปกไม่ได้: ช่องยังไม่ได้ยืนยันเบอร์โทร · วิดีโอขึ้นแล้วตามปกติ (ยืนยันที่ youtube.com/verify แล้วตั้งปกใน YouTube Studio ได้)' : 'ตั้งภาพปกไม่สำเร็จ · วิดีโอขึ้นแล้วตามปกติ', 6000, 'warn'); }
+    }
     bz.done();
     const link = meta.ytLink;
     dialog('ขึ้น YouTube แล้ว', h('div', {}, h('p', { style: { marginTop: 0 } }, 'YouTube กำลังประมวลผล อีกสักครู่จะดูได้ที่'), h('a', { href: link, target: '_blank', rel: 'noopener', style: { fontSize: '22px', wordBreak: 'break-all' } }, link), h('p', { class: 'sub' }, privacy === 'unlisted' ? 'ไม่แสดงในรายการ: ใครมีลิงก์ก็ดูได้ ส่งลิงก์ให้นักเรียนได้เลย' : privacy === 'private' ? 'ส่วนตัว: เปลี่ยนการมองเห็นได้ใน YouTube Studio' : 'สาธารณะ')), [{ label: 'คัดลอกลิงก์', action: () => { navigator.clipboard?.writeText(link).then(() => toast('คัดลอกแล้ว', 1500)).catch(() => { }); return false; } }, { label: 'ปิด', cls: 'prim' }]);

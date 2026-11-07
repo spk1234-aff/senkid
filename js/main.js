@@ -5,7 +5,7 @@ import { prefs, savePrefs, flushPrefs, applyTheme } from './prefs.js';
 import * as db from './db.js';
 import { Library } from './library.js';
 import { Editor } from './editor.js';
-import { Recorder, AudioRecorder, openRecordings, canRecord, pickMime, uploadPendingRecordings } from './recorder.js';
+import { Recorder, AudioRecorder, canRecord, pickMime, uploadPendingRecordings } from './recorder.js';
 import { Picker } from './picker.js';
 import { Timeline } from './lesson.js';
 import { handleWorksheetHash } from './worksheet.js';
@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.59';
+export const VERSION = '1.9.60';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -136,7 +136,7 @@ class App {
   }
   recorderClick(ed, btn) { if (this.audio.active) { toast('หยุดอัดเสียงก่อน แล้วจึงอัดคลิป'); return; } this.recorder.click(ed, btn); }
   recorderSettings(ed, btn) { if (!this.recorder.active && !this.audio.active) this.recorder.settings(ed, btn, true); }
-  openRecordings(nb) { openRecordings(nb, this); }
+  openRecordings(nb) { import('./videolib.js').then(m => m.openVideoLibrary(this, { nb, tab: nb ? 'lessons' : null })); }
   studentMenu(anchor) { if (this.editor) studentMenu(this, anchor, this.editor); }
   audioClick(ed, btn) {
     if (this.recorder.active) { toast('กำลังอัดคลิปอยู่ เสียงจะอยู่ในคลิปแล้ว'); return; }
@@ -254,6 +254,7 @@ class App {
       ...(prefs.studentUI ? [] : [h('div', { class: 'sec-t' }, 'YouTube'), ytCard()]),
       ...(prefs.studentUI ? [] : [h('div', { class: 'sec-t' }, 'สำหรับห้องเรียน'),
         card(
+          row('ปุ่มเลือกแบบทีวีบนแถบเครื่องมือ', seg([['conn', 'เฉพาะตอนต่อทีวี'], ['always', 'แสดงตลอด']], prefs.tvBtn === 'always' ? 'always' : 'conn', v => { prefs.tvBtn = v; savePrefs(); this.editor?.buildToolbar(); }), 'สลับได้ 3 แบบ: เฉพาะกระดาษทั้งหน้า · กระดาษซูมตามครู · ทั้งหน้าจอเหมือนครู'),
           row('PIN ครู', h('button', { class: 'pill sec', onclick: async (e) => { if (await managePin()) { document.querySelector('.sheet .top button')?.click(); this.openSettings(); } } }, icon('lock'), hasPin() ? 'เปลี่ยน / ลบ PIN' : 'ตั้ง PIN'), hasPin() ? 'ตั้งแล้ว · การออกจากโหมดนักเรียนบนเครื่องนี้ต้องใส่ PIN' : 'เมื่อตั้งแล้ว การเปลี่ยนจากโหมดนักเรียนกลับเป็นโหมดครูต้องใส่ PIN (ต่อเครื่อง ไม่ซิงค์)'),
           row('ล็อกเครื่องนี้เป็นโหมดนักเรียน', h('button', { class: 'pill prim', onclick: () => lockThisDevice(this) }, icon('lock'), 'ล็อกเครื่องนี้'), 'สำหรับแอปที่นักเรียนติดตั้งไว้แล้ว: ใส่ PIN ครูครั้งเดียว เครื่องนี้จะอยู่ในโหมดนักเรียนตลอด สลับกลับได้เฉพาะคนที่รู้ PIN'),
           row('ลิงก์ติดตั้งสำหรับนักเรียน', h('button', { class: 'pill sec', onclick: () => showStudentLink() }, icon('qr'), 'แสดง QR / ลิงก์'), 'แอปที่เพิ่มจากลิงก์นี้เปิดเป็นโหมดนักเรียนเสมอ ไม่มีปุ่มสลับและไม่มีซิงค์ Google · ครูปลดล็อกชั่วคราวได้ด้วย PIN'),
@@ -361,7 +362,7 @@ class App {
         'ไม่ใช้ YouTube: คลิปที่อยู่ใน Drive แล้วกดปุ่ม<b>ลิงก์แชร์</b> (รูป QR) ได้ลิงก์ที่ใครมีลิงก์ก็ดูได้ ส่งในกลุ่มไลน์ห้องได้เลย'),
       sec('เทียบสองหน้า · สุ่มโจทย์ · สถิติ',
         'เมนู > <b>เทียบสองหน้า</b> เปิดหน้าใดก็ได้ (เล่มไหนก็ได้) ไว้ด้านขวาเพื่อดูอย่างเดียว เช่นตัวอย่าง/โจทย์ ขณะเขียนต่อทางซ้าย ปัดซ้าย-ขวาเพื่อเปลี่ยนหน้า ปุ่ม ↔ ขยายเป็นครึ่งจอ',
-        'เมนู > <b>สุ่มโจทย์ฝึก</b> เลือกเรื่อง (เศษส่วน สมการ แยกตัวประกอบ เลขยกกำลัง ลอการิทึม ตรีโกณ อนุพันธ์ ระบบสมการ) จำนวน ระดับ ดูตัวอย่าง กดสุ่มใหม่ได้ แล้ววางบนหน้า เฉลยไว้หน้าถัดไปหรือล่างหน้าให้ใช้ม่านบัง',
+        'เมนู > <b>สุ่มโจทย์ฝึก</b> เลือกเรื่อง (26 เรื่อง แบ่งเป็น ม.1–3 และ ม.4–6 เช่น จำนวนเต็ม ร้อยละ พีทาโกรัส อสมการ เมทริกซ์ ลำดับ จำนวนเชิงซ้อน สถิติ ลิมิต อินทิกรัล) จำนวน ระดับ ดูตัวอย่าง กดสุ่มใหม่ได้ แล้ววางบนหน้า เฉลยไว้หน้าถัดไป หรือล่างหน้า (บังไว้ แตะเปิดทีละข้อ)',
         'ตั้งค่า > <b>สถิติการใช้งาน</b> ดูเวลาเขียน เวลาต่อทีวี 14 วันล่าสุด และบทเรียนที่อัดแต่ละเดือน (นับในเครื่องนี้เท่านั้น)'),
       sec('การเชื่อม Google หมดอายุ',
         'Google ให้สิทธิ์ครั้งละ 1 ชั่วโมง แอปจะต่อให้เอง<b>เงียบ ๆ เฉพาะตอนว่าง</b> (ไม่เขียน 3 นาที ไม่อัด ไม่ได้ต่อทีวี) และ<b>ไม่มีทางเด้งหน้าระหว่างอัดหรือสอน</b> · ระหว่างที่ยังไม่ได้ต่อ ทุกเส้นเก็บในเครื่องและซิงก์ตามหลัง ไม่มีอะไรหาย',

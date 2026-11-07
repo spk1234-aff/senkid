@@ -3,7 +3,7 @@
 import { h, icon, toast, dialog, busy, fmtTime, fmtBytes, seg, uid, downloadBlob } from './ui.js';
 import * as db from './db.js';
 import { prefs, savePrefs } from './prefs.js';
-import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, drawCurtain, PAPERS, STRIDE } from './render.js';
+import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, PAPERS, STRIDE } from './render.js';
 import { blobToDataURL, dataURLToBlob, bitmapAsync, setImageReadyHook } from './images.js';
 import { setPdfReadyHook } from './pdfdoc.js';
 import { serializePage } from './editor.js';
@@ -67,9 +67,9 @@ export class Timeline {
     const vis = [], rects = {};
     for (const p of ed.pages) { const r = ed.rects.get(p.id); if (!r) continue; if (r.x > x1 + 100 || r.x + r.w < x0 - 100 || r.y > y1 + 100 || r.y + r.h < y0 - 100) continue; vis.push(p.id); rects[p.id] = { x: r.x, y: r.y, w: r.w, h: r.h }; }
     for (const pid of vis) { const p = ed.pageMap.get(pid); if (p) this.base(p); }
-    const key = [x0, y0, x1, y1].map(v => v.toFixed(1)).join(',') + vis.join('') + (ed.curtain ? ed.curtain.pid + ':' + ed.curtain.y.toFixed(0) : '');
+    const key = [x0, y0, x1, y1].map(v => v.toFixed(1)).join(',') + vis.join('');
     if (key === this.lastView && !force) return; this.lastView = key;
-    this.events.push([this.now(), 'view', { world: [x0, y0, x1, y1], vis, rects, paper: ed.paper, curtain: ed.curtain ? { ...ed.curtain } : null }]);
+    this.events.push([this.now(), 'view', { world: [x0, y0, x1, y1], vis, rects, paper: ed.paper }]);
   }
   frame() {
     if (!this.active || this.pauseAt) return;
@@ -131,7 +131,6 @@ export class State {
       if (p) {
         drawPaper(ctx, p, this.paper, k); drawStrokes(ctx, p, k, dark);
         if (this.partial && this.partial.pid === pid) { const s = this.partial.s, n = Math.max(1, Math.floor(s.pts.length / STRIDE * Math.min(1, this.partial.f))); drawStroke(ctx, { ...s, pts: s.pts.subarray(0, n * STRIDE), bb: null }, k, dark, false); }
-        if (v.curtain && v.curtain.pid === pid) drawCurtain(ctx, p, v.curtain.y, k);
       } else { ctx.fillStyle = PAPERS[this.paper]?.fill || '#fff'; ctx.fillRect(0, 0, r.w, r.h); }
       ctx.restore();
     }

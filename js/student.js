@@ -1,8 +1,9 @@
 // Student screen: shows only the paper, synced live from the teacher window (BroadcastChannel)
-import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, drawCurtain, PAPERS, STRIDE } from './render.js';
+import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, PAPERS, STRIDE } from './render.js';
 import { setPdfReadyHook } from './pdfdoc.js';
 import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { setImageReadyHook } from './images.js';
+import { onFontReady } from './textfonts.js';
 
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d', { alpha: false });
 const wait = document.getElementById('wait'), tm = document.getElementById('tm'), tmf = document.getElementById('tmf'), ov = document.getElementById('ov');
@@ -25,7 +26,7 @@ setInterval(() => { dirty = true; }, 4000);
 // keep the display awake while the class watches
 let wl = null; const keepAwake = async () => { try { if (!wl && navigator.wakeLock && document.visibilityState === 'visible') { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => { wl = null; }); } } catch { } };
 keepAwake(); document.addEventListener('visibilitychange', keepAwake); addEventListener('pointerdown', keepAwake, { passive: true });
-setPdfReadyHook(() => dirty = true); setImageReadyHook(() => dirty = true);
+setPdfReadyHook(() => dirty = true); setImageReadyHook(() => dirty = true); onFontReady(() => dirty = true);
 
 const onMsg = (m) => {
   if (!m) return; lastMsg = performance.now(); window.__senkidLast = lastMsg;
@@ -46,7 +47,7 @@ const onMsg = (m) => {
 };
 ch.onmessage = (e) => onMsg(e.data);
 ch.postMessage({ type: 'hello' });
-setInterval(() => send({ type: 'alive' }), 1500);
+setInterval(() => send({ type: 'alive', mode: view ? view.mode : null, ui: !!mirror }), 1500);
 setInterval(() => { if (performance.now() - lastMsg > 6000 && view) { wait.style.display = 'flex'; wait.querySelector('p').textContent = rtc ? 'ขาดการเชื่อมต่อกับแอปเส้นคิด · กลับไปที่แอปแล้วกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง' : 'ขาดการเชื่อมต่อกับหน้าจอครู · เปิดเส้นคิดค้างไว้ในเบราว์เซอร์เดียวกัน'; } }, 2000);
 // the teacher's app hands this window its Google token (in the link on first open, then over the data channel whenever it
 // renews), so the TV window never has to sign in to Google itself and never expires while the app is running
@@ -127,7 +128,7 @@ function frame() {
     const k = T.z * d;
     ctx.setTransform(k, 0, 0, k, (T.ox + r.x * T.z) * d, (T.oy + r.y * T.z) * d);
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, r.w, r.h); ctx.clip();
-    if (p) { drawPaper(ctx, p, paper, k); drawStrokes(ctx, p, k, dark); if (live && live.pid === id) drawStroke(ctx, live.s, k, dark, false); if (view.curtain && view.curtain.pid === id) drawCurtain(ctx, p, view.curtain.y, k); }
+    if (p) { drawPaper(ctx, p, paper, k); drawStrokes(ctx, p, k, dark); if (live && live.pid === id) drawStroke(ctx, live.s, k, dark, false); }
     else { ctx.fillStyle = PAPERS[paper]?.fill || '#fff'; ctx.fillRect(0, 0, r.w, r.h); }
     ctx.restore();
   }

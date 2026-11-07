@@ -61,6 +61,8 @@ async function render(job) {
   if (blob.type.includes('mp4')) { try { const { defragMp4 } = await import('./mp4fix.js'); const fixed = await defragMp4(blob); if (fixed) blob = new Blob([fixed], { type: blob.type }); } catch { } }
   const nb = pr.clips.find(c => c.kind === 'page')?.src?.nb || (await (async () => { const c = pr.clips.find(c => c.kind === 'lesson'); if (!c) return null; return (await db.get('recs', c.src))?.nb || null; })());
   const vmeta = { id: uid(), kind: 'video', name: job.name + ' · วิดีโอ', nb, created: Date.now(), duration: dur, size: blob.size, mime: blob.type, res: String(H), done: true, fromProject: pr.id };
+  // the title card as the cover picture (library thumbnail + YouTube cover)
+  if (job.cover) { try { const { renderCover } = await import('./titlecard.js'); const jpg = await renderCover(job.cover); if (jpg) { await db.putQuiet('kv', { k: 'cover:' + vmeta.id, v: jpg }); vmeta.cover = 1; vmeta.ytCover = 1; } } catch (e) { console.warn('cover', e); } }
   await db.put('recs', vmeta); await db.addChunk(vmeta.id, 0, blob);
   toast(`ส่งออก "${job.name}" เสร็จแล้ว · ${fmtBytes(blob.size)}`, 4000);
   if (job.onDone) { try { job.onDone(vmeta, blob); } catch { } } else if (!Q.length) showRecording(vmeta, true, blob);

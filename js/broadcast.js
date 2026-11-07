@@ -10,6 +10,8 @@ export class Broadcast {
   constructor(app) {
     this.app = app; this.lastAlive = -1e9; this.pending = new Map();
     this.mode = prefs.studentMode || 'follow';
+    // rebuild the toolbar when the TV comes or goes (the TV-mode button shows only while connected, by default)
+    this.wasConn = false; setInterval(() => { const c = this.connected; if (c !== this.wasConn) { this.wasConn = c; if (!c) this.tvSynced = false; this.app.editor?.buildToolbar?.(); } }, 1500);
     try { this.ch = new BroadcastChannel('senkid-live'); } catch { this.ch = null; }
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
     this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) { setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.autoAt = 0; this.dropped = true; } this.rtcWas = v; this.app.editor?.buildToolbar(); } });
@@ -43,6 +45,7 @@ export class Broadcast {
       const was = this.connected; this.lastAlive = performance.now();
       try { if (viaRtc) this.rtc.send({ type: 'ack' }); else this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
       if (viaRtc) this.sendToken(m.type === 'hello');
+      if (m.type === 'alive' && 'mode' in m) this.checkTv(m);
       if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.uiWas = false; setTimeout(() => this.sendUI(), 200); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
     } else if (m.type === 'need') {
       const ed = this.app.editor; if (!ed) return;
@@ -87,13 +90,13 @@ export class Broadcast {
     // view
     const [x0, y0] = ed.toWorld(0, 0), [x1, y1] = ed.toWorld(ed.W, ed.H);
     const cur = ed.currentPage();
-    const key = [x0, y0, x1, y1].map(v => v.toFixed(1)).join(',') + cur?.id + this.mode + ed.nb.pages.length + ed.cols + (ed.curtain ? ed.curtain.pid + ':' + ed.curtain.y.toFixed(1) : '');
+    const key = [x0, y0, x1, y1].map(v => v.toFixed(1)).join(',') + cur?.id + this.mode + ed.nb.pages.length + ed.cols;
     if (key !== this.lastView) {
       this.lastView = key;
       const vis = []; const rects = {};
       for (const p of ed.pages) { const r = ed.rects.get(p.id); if (!r) continue; const pad = 200; if (r.x > x1 + pad || r.x + r.w < x0 - pad || r.y > y1 + pad || r.y + r.h < y0 - pad) continue; vis.push(p.id); rects[p.id] = r; }
       if (cur && !rects[cur.id]) { rects[cur.id] = ed.rects.get(cur.id); vis.push(cur.id); }
-      this.post({ type: 'view', nb: ed.nb.id, world: [x0, y0, x1, y1], vis, rects, cur: cur?.id, mode: this.mode, paper: ed.paper, curtain: ed.curtain ? { ...ed.curtain } : null });
+      this.post({ type: 'view', nb: ed.nb.id, world: [x0, y0, x1, y1], vis, rects, cur: cur?.id, mode: this.mode, paper: ed.paper });
     }
     // floating tools the class should see: ruler, protractor, calculator display
     const tools = { ...ed.toolsState(), calc: window.__senkidCalc?.() || null }, tk = JSON.stringify(tools);
@@ -106,7 +109,15 @@ export class Broadcast {
     if (ed.laser.length) { this.post({ type: 'laser', pts: ed.laserWorld(), head: !!ed.lasering, opt: prefs.laser }); this.hadLaser = true; }
     else if (this.hadLaser) { this.hadLaser = false; this.post({ type: 'laser', pts: [] }); }
   }
-  setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; this.lastTools = null; setTimeout(() => this.sendUI(), 50); }
+  // the TV reports what it is showing every 1.5 s; anything that does not match the teacher's choice is sent again
+  checkTv(m) {
+    const wantUi = this.mirrorOn(), okMode = !this.app.editor || m.mode == null || m.mode === this.mode, okUi = !!m.ui === wantUi;
+    if (!okMode) this.lastView = null;
+    if (!okUi) { this.uiWas = !!m.ui; this.uiKey = null; this.sendUI(); }
+    const synced = okMode && okUi;
+    if (synced !== this.tvSynced) { this.tvSynced = synced; this.app.editor?.updateTvBtn?.(); }
+  }
+  setMode(m) { this.mode = m; prefs.studentMode = m; savePrefs(); this.lastView = null; this.lastTools = null; this.tvSynced = false; this.app.editor?.updateTvBtn?.(); setTimeout(() => this.sendUI(), 50); }
 }
 
 // outerHTML of a UI element with its canvases (page thumbnails, previews) turned into small images, so the TV shows
@@ -238,6 +249,22 @@ function confirmSecondScreen(ed) {
   ], { width: 560 });
 }
 
+export const TV_KINDS = [
+  ['page', 'เฉพาะกระดาษ ทั้งหน้า', 'ทีวีเห็นหน้าเต็ม ๆ ไม่ซูมตามครู', 'pages'],
+  ['present', 'กระดาษ ซูมตามครู', 'ทีวีเห็นส่วนที่ครูซูม/เลื่อนอยู่', 'fit'],
+  ['screen', 'ทั้งหน้าจอเหมือนครู', 'เห็นเครื่องมือและเมนูด้วย', 'screen'],
+];
+export const tvKind = (app) => prefs.presentKind || (app.broadcast?.mode === 'page' ? 'page' : 'present');
+// choose what the TV shows (does not hide or show the iPad toolbar — that is the presentation-mode button's job)
+export function setTvKind(app, id) {
+  const b = app.broadcast, ed = app.editor; if (!b) return;
+  prefs.presentKind = id; savePrefs();
+  b.setMode(id === 'page' ? 'page' : 'follow');
+  if (id === 'page') ed?.fit();
+  const on = b.connected;
+  toast(!on ? 'ตั้งแบบทีวีไว้แล้ว · จะมีผลเมื่อต่อทีวี' : id === 'page' ? 'ทีวีแสดงทั้งหน้า ไม่ซูมตามครู' : id === 'present' ? 'ทีวีซูม/เลื่อนตามครู ไม่เห็นเครื่องมือ' : 'ทีวีเห็นทั้งหน้าจอเหมือนครู', 2200);
+  ed?.updateTvBtn?.(); ed?.buildToolbar?.();
+}
 export function studentMenu(app, anchor, ed) {
   const b = app.broadcast;
   const box = h('div', { class: 'scr-menu', style: { width: 'min(460px, calc(100vw - 20px))' } });
@@ -298,14 +325,7 @@ export function studentMenu(app, anchor, ed) {
       const pk = h('div', { class: 'pkind' });
       for (const [id, t, sub, ic] of kinds) {
         const r = h('button', { class: 'pk' + (kind === id ? ' on' : '') }, icon(ic), h('div', {}, h('b', {}, t), h('div', { class: 'sub' }, sub)), h('span', { class: 'ck' }, kind === id ? '✓' : ''));
-        r.onclick = () => {
-          prefs.presentKind = id; savePrefs(); close();
-          b.setMode(id === 'page' ? 'page' : 'follow');
-          if (id === 'screen') { if (prefs.toolbarHidden) ed.exitPresent(); toast(on ? 'ทีวีเห็นทั้งหน้าจอเหมือนครู' : 'ตั้งเป็น "ทั้งหน้าจอ" แล้ว · จะมีผลเมื่อทีวีเป็นจอสอง', 2500); return; }
-          if (on) toast(id === 'page' ? 'ทีวีแสดงทั้งหน้าเสมอ ไม่ซูมตามครู' : 'ทีวีซูม/เลื่อนตามครู ไม่เห็นเครื่องมือ', 2500);
-          if (id === 'page') ed.fit();
-          presentMode(ed);
-        };
+        r.onclick = () => { close(); setTvKind(app, id); };
         pk.append(r);
       }
       body.append(h('div', { class: 'sub', style: { margin: '6px 2px 4px' } }, on ? 'เลือกว่าทีวีจะแสดงอะไร (เปลี่ยนได้ตลอดระหว่างสอน)' : 'ใช้เมื่อทีวีเป็นจอสอง · ถ้าสะท้อนจอ ทีวีจะเห็นเหมือน iPad เสมอ'), pk);
