@@ -1940,5 +1940,9 @@
 "กำลังตั้งภาพปก…": "Setting thumbnail…",
 "ตั้งภาพปกไม่ได้: ช่องยังไม่ได้ยืนยันเบอร์โทร · วิดีโอขึ้นแล้วตามปกติ (ยืนยันที่ youtube.com/verify แล้วตั้งปกใน YouTube Studio ได้)": "Couldn't set the thumbnail: the channel isn't phone-verified · the video uploaded normally (verify at youtube.com/verify, then set it in YouTube Studio)",
 "ตั้งภาพปกไม่สำเร็จ · วิดีโอขึ้นแล้วตามปกติ": "Couldn't set the thumbnail · the video uploaded normally",
-"ไม่ใส่ในรูปทรง · พิมพ์ตรงจุดที่แตะแทน": "Not in the shape · type where I tapped"
+"ไม่ใส่ในรูปทรง · พิมพ์ตรงจุดที่แตะแทน": "Not in the shape · type where I tapped",
+"ขีดค้างเป็นเส้นตรง/รูปทรง ปิดอยู่ · เปิดได้ที่ รูปทรง › ปุ่ม “แปลงอัตโนมัติ” หรือ เมนู › ตั้งค่า": "Hold-to-shape is off · turn it on in Shapes › \"Auto-shape\" or Menu › Settings",
+"แปลงอัตโนมัติ: เปิด": "Auto-shape: on",
+"แปลงอัตโนมัติ: ปิด": "Auto-shape: off",
+"ขีดแล้วกดค้าง แปลงเป็นเส้นตรง/รูปทรงอัตโนมัติ (ใช้กับปากกา)": "Draw and hold to turn into a straight line/shape (pen)"
 }

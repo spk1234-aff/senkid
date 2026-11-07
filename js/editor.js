@@ -461,7 +461,7 @@ export class Editor {
         bar.append(st, h('div', { class: 'vsep' }), ...this.coverButtons());
       } else if (t === 'shapes') {
         // Goodnotes-style shapes bar: auto-shape toggle · connectors · shapes · rounded corners
-        const auto = h('button', { class: 'chip ico' + (prefs.shapeRecog ? ' on' : ''), title: 'ขีดแล้วกดค้าง แปลงเป็นรูปทรงอัตโนมัติ (ใช้กับปากกา)' }, icon('magic'));
+        const auto = h('button', { class: 'chip' + (prefs.shapeRecog ? ' on' : ''), title: 'ขีดแล้วกดค้าง แปลงเป็นเส้นตรง/รูปทรงอัตโนมัติ (ใช้กับปากกา)' }, icon('magic'), prefs.shapeRecog ? 'แปลงอัตโนมัติ: เปิด' : 'แปลงอัตโนมัติ: ปิด');
         auto.onclick = () => { prefs.shapeRecog = !prefs.shapeRecog; savePrefs(); this.buildToolbar(); toast(prefs.shapeRecog ? 'เปิดแปลงรูปทรงเมื่อขีดแล้วกดค้าง' : 'ปิดแปลงรูปทรงอัตโนมัติ', 1500); };
         bar.append(auto, h('div', { class: 'vsep' }));
         const kind = prefs.shapeKind || 'rect';
@@ -1038,7 +1038,9 @@ export class Editor {
   armHold() {
     clearInterval(this.holdTimer);
     const L = this.live; if (!L || L.shape || L.rul != null) return;
-    if (!prefs.shapeRecog || L.cover || (L.kind === 'hl' && prefs.hl.straight)) return;
+    if (L.cover || (L.kind === 'hl' && prefs.hl.straight)) return;
+    // shape recognition switched off: still notice the hold, only to say where to switch it back on
+    L.hintOnly = !prefs.shapeRecog;
     L.track = [{ t: performance.now(), x: L.sx, y: L.sy, n: L.pts.length }];
     this.holdTimer = setInterval(() => this.checkHold(), 40);
   }
@@ -1065,6 +1067,7 @@ export class Editor {
   }
   onHold() {
     const L = this.live; if (!L || L.shape || L.pts.length < 4 * 4) return;
+    if (L.hintOnly) { if (Date.now() - (this.recogHintAt || 0) > 45000) { this.recogHintAt = Date.now(); toast('ขีดค้างเป็นเส้นตรง/รูปทรง ปิดอยู่ · เปิดได้ที่ รูปทรง › ปุ่ม “แปลงอัตโนมัติ” หรือ เมนู › ตั้งค่า', 4000); } return; }
     // ignore the jitter after the pen stopped moving (the hold itself)
     const upto = Math.max(4 * STRIDE, Math.min(L.pts.length, (L.holdIdx || L.pts.length) + STRIDE));
     const xy = []; for (let i = 0; i < upto; i += STRIDE) xy.push(L.pts[i], L.pts[i + 1]);
