@@ -17,11 +17,12 @@ import { Timer } from './timer.js';
 import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { ytCard } from './youtube.js';
+import { colorPicker } from './hub.js';
 import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, connected, hasFileScope, tokenOk, busyNow } from './sync.js';
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.54';
+export const VERSION = '1.9.55';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -47,6 +48,7 @@ class App {
   }
   async start() {
     applyTheme(); applyUiFont();
+    try { await (await import('./i18n.js')).initI18n(); } catch (e) { console.warn('i18n', e); }
     const boot = document.getElementById('boot'); if (boot) { boot.querySelector('p').textContent = 'กำลังโหลดสมุด…'; }
     try { await db.openDB(); } catch (e) { this.root.append(h('div', { style: { padding: '40px', textAlign: 'center' } }, 'เปิดที่เก็บข้อมูลไม่ได้ (' + e.message + ') ถ้าเปิดในโหมดส่วนตัว ให้ปิดโหมดนั้นก่อน')); return; }
     try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch { }
@@ -218,7 +220,9 @@ class App {
     const left = h('div', {},
       h('div', { class: 'sec-t' }, 'หน้าตา'),
       card(
-        row('ธีม', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
+        row('สว่าง / มืด', seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, v => { prefs.theme = v; savePrefs(); applyTheme(); if (this.editor) this.editor.need.main = true; })),
+        row('ภาษา / Language', seg([['th', 'ไทย'], ['en', 'English']], prefs.lang === 'en' ? 'en' : 'th', v => { prefs.lang = v; savePrefs(); location.reload(); }), 'ตั้งแยกแต่ละเครื่อง'),
+        h('div', { class: 'row', style: { flexDirection: 'column', alignItems: 'stretch', gap: '8px' } }, h('div', {}, 'ธีมสี'), colorPicker(() => { if (this.editor) this.editor.need.main = true; })),
         row('ฟอนต์ของแอป', (() => { const cur = UI_FONTS.find(f => f[0] === (prefs.uiFont || 'sarabun')) || UI_FONTS[0]; const b = h('button', { class: 'pill sec', style: { height: '42px', fontFamily: familyOf(cur[0]) } }, cur[1], icon('down')); b.onclick = () => this.fontPicker(b); return b; })(), 'ปุ่มและเมนู · ข้อความบนกระดาษไม่เปลี่ยน'),
         row('โหมดนักเรียน', toggle(!!prefs.studentUI, async (v, t) => { if (!v && !(await requireTeacher())) { t?.set?.(true); prefs.studentUI = true; savePrefs(); return; } prefs.studentUI = v; if (v) setUnlocked(false); savePrefs(); refreshEd(); }), (accountRule() && !isTeacherDevice() ? 'เครื่องนี้เป็นเครื่องนักเรียน · โหมดครูเปิดได้เฉพาะเครื่องที่เชื่อม Google ด้วยบัญชีครู' : 'ซ่อนเครื่องมือของครู (ฉายจอ สุ่มชื่อ ม่านบังคำตอบ) ให้แถบเรียบง่าย')),
                 row('ตำแหน่งแถบเครื่องมือ', seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, v => { prefs.toolbarPos = v; savePrefs(); refreshEd(); })),

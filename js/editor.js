@@ -316,6 +316,7 @@ export class Editor {
     }
   }
   buildToolbar0() {
+    if (prefs.studentUI && prefs.toolbarHidden) { prefs.toolbarHidden = false; savePrefs(); queueMicrotask(() => this.applyPos()); }
     if (prefs.toolbarHidden) queueMicrotask(() => this.buildDock());
     this.tb.classList.toggle('tb2', prefs.toolbarPos === 'top');
     $('.ctxbar', this.stage)?.remove(); $('.undocap', this.stage)?.remove();
@@ -362,6 +363,9 @@ export class Editor {
       this.saveBtn = B('save', 'บันทึกเป็นไฟล์ในเครื่อง', (b) => this.saveFileMenu(b)),
       this.menuBtn = B('menu', 'เมนู', (b) => import('./hub.js').then(m => m.openHub(this, b))),
       B('hide', 'ซ่อนแถบเครื่องมือ', () => { const was = prefs.toolbarHidden; this.peek = false; prefs.toolbarHidden = true; savePrefs(); this.applyPos(); if (!was) toast('โหมดนำเสนอ · ลากขีดบนแถบเล็กเพื่อย้ายไปไหนก็ได้ · ˄˅ เปลี่ยนหน้า · แตะเครื่องมือซ้ำเพื่อตั้งค่า · × ออก', 4500, 'keep'); }));
+    if (prefs.studentUI) for (const el of g2.querySelectorAll('button')) if (/^(สติกเกอร์|ม่านบัง|เลเซอร์|หน้าจอนักเรียน)/.test(el.title)) el.remove();
+    if (prefs.studentUI) g4.querySelector('[title^="ซ่อนแถบ"]')?.remove();
+    if (prefs.studentUI) g4.querySelector('[title^="ซ่อนแถบ"]')?.remove();
     tb.append(g1, sep(), g2, sep(), g3, sep(), this.gSizes, h('div', { class: 'grow' }), g4);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -410,7 +414,7 @@ export class Editor {
     const student = !!prefs.studentUI;
     const right = h('div', { class: 'side r' },
       L('timer', 'จับเวลา', 'นาฬิกาจับเวลา', (b) => this.app.timer.panel(b), this.app.timer.visible),
-      ...(student ? [] : [this.micBtn]),
+      this.micBtn,
       this.menuBtn);
     this.saveBtn = null;
     tb.append(tabs, h('div', { class: 'trow' }, left, center, right));

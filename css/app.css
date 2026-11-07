@@ -912,3 +912,27 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .mv-ok{width:72px;height:72px;border-radius:50%;background:#0F8A7E;color:#fff;font-size:40px;display:flex;align-items:center;justify-content:center;margin:20px auto 4px}
 .mv-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:14px}
 .mv-foot .grow,.mv .top .grow{flex:1}.mv-play{color:#fff !important;background:rgba(255,255,255,.12) !important}.mv-foot{border-top:1px solid var(--line)}
+/* ---- ธีมสี ---- */
+[data-color=emerald]{--nav:#0F4D45;--nav2:#176458;--acc:#0F8A7E;--acc-soft:rgba(15,138,126,.13);--desk:#E3ECE7;--ui:#F0F4F1}
+[data-color=grape]{--nav:#3A2466;--nav2:#4C3282;--acc:#7A4FE0;--acc-soft:rgba(122,79,224,.13);--desk:#EAE6F2;--ui:#F4F2F8}
+[data-color=brick]{--nav:#5A2A16;--nav2:#743820;--acc:#D45A24;--acc-soft:rgba(212,90,36,.13);--desk:#F0E8E1;--ui:#F7F2EE}
+[data-color=sakura]{--nav:#5C2440;--nav2:#763053;--acc:#D9487F;--acc-soft:rgba(217,72,127,.13);--desk:#F3E7EC;--ui:#F9F2F5}
+[data-color=charcoal]{--nav:#26282E;--nav2:#373A42;--acc:#4B5563;--acc-soft:rgba(75,85,99,.14);--desk:#E5E5E7;--ui:#F2F2F3}
+[data-theme=dark][data-color=emerald]{--nav:#0E2622;--nav2:#16362F;--acc:#2BB3A4;--acc-soft:rgba(43,179,164,.2);--desk:#0C1412;--ui:#121816}
+[data-theme=dark][data-color=grape]{--nav:#1E1630;--nav2:#2A2042;--acc:#9B7BF0;--acc-soft:rgba(155,123,240,.2);--desk:#100D17;--ui:#16131D}
+[data-theme=dark][data-color=brick]{--nav:#2A1A12;--nav2:#3A251A;--acc:#F07A45;--acc-soft:rgba(240,122,69,.2);--desk:#15100D;--ui:#1B1512}
+[data-theme=dark][data-color=sakura]{--nav:#2B1722;--nav2:#3C2030;--acc:#EC6E9E;--acc-soft:rgba(236,110,158,.2);--desk:#160E12;--ui:#1C1318}
+[data-theme=dark][data-color=charcoal]{--nav:#18191C;--nav2:#25272C;--acc:#9AA3B2;--acc-soft:rgba(154,163,178,.18)}
+.ctheme{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.ctheme button{border:2px solid var(--line);border-radius:12px;overflow:hidden;padding:0;background:var(--bar);color:var(--text);font:inherit;font-size:16px;cursor:pointer;text-align:left}
+.ctheme button.on{border-color:var(--acc)}
+.ctheme .cb{height:18px}.ctheme .ca{height:8px;width:44%;margin:6px 8px 0;border-radius:4px}.ctheme span{display:block;padding:2px 8px 6px}
+/* เมนู: ช่องไอคอนสีประจำหมวด */
+.hub-card .hub-ci{width:58px;height:58px;border-radius:17px;color:#fff;background:var(--tile,#2F5BEA)}
+.hub-card .hub-ci svg.i{width:32px;height:32px;--ico-in:var(--tile,#2F5BEA)}
+.hub-card[data-id=tv]{--tile:#2F5BEA}.hub-card[data-id=rec]{--tile:#E5484D}.hub-card[data-id=video]{--tile:#D9487F}.hub-card[data-id=teach]{--tile:#E0912F}
+.hub-card[data-id=pages]{--tile:#0F8A7E}.hub-card[data-id=out]{--tile:#7A4FE0}.hub-card[data-id=set]{--tile:#4B5563}.hub-card[data-id=help]{--tile:#1D9E75}
+.hub-card[data-id=video] .hub-ci{background:var(--tile);color:#fff}
+.hub-page .hub-ri{background:color-mix(in srgb,var(--tile,var(--acc)) 14%,transparent);color:var(--tile,var(--acc))}
+.hub-top .hub-tile{width:40px;height:40px;border-radius:12px;background:var(--tile,var(--acc));color:#fff;display:flex;align-items:center;justify-content:center}
+.hub-top .hub-tile svg.i{width:24px;height:24px;--ico-in:var(--tile,var(--acc))}

@@ -99,7 +99,7 @@ export class Recorder {
     };
     fillMics(true);
     refreshBtn.onclick = () => fillMics(true);
-    if (audioOnly) {
+    if (audioOnly && !prefs.studentUI) {
       // teacher camera: off / a camera; shape; live preview of the exact size and place it will take
       const camSel = h('select', { class: 'sel', style: { flex: 1 } });
       const camShape = seg([['circle', 'วงกลม'], ['round', 'สี่เหลี่ยมมน']], prefs.rec.camShape || 'circle', v => { prefs.rec.camShape = v; savePrefs(); for (const el of document.querySelectorAll('video.campip')) el.className = 'campip ' + v; });
@@ -164,7 +164,7 @@ export class Recorder {
     const row = (label, ctl, sub) => h('div', { class: 'row' }, h('div', {}, h('div', {}, label), sub ? h('div', { class: 'sub' }, sub) : null), ctl);
     body.append(h('div', { style: { height: '6px' } }),
       row(audioOnly ? 'เก็บไฟล์เสียงใน Google Drive' : 'เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); if (v) uploadPendingRecordings(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
-      ...(audioOnly && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) ? [row('ถอดเสียงเป็นข้อความระหว่างอัด', toggle(!!prefs.rec.transcript, v => { prefs.rec.transcript = v; savePrefs(); }), 'ทดลอง · ใช้ระบบรู้จำเสียงของเครื่อง (ต้องมีเน็ต) ได้ข้อความคร่าว ๆ ไว้ค้นหา/ทำคำบรรยาย · บางเครื่องอาจทำให้ไมค์สะดุด ถ้าเป็นแบบนั้นให้ปิด')] : []),
+      ...(audioOnly && !prefs.studentUI && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) ? [row('ถอดเสียงเป็นข้อความระหว่างอัด', toggle(!!prefs.rec.transcript, v => { prefs.rec.transcript = v; savePrefs(); }), 'ทดลอง · ใช้ระบบรู้จำเสียงของเครื่อง (ต้องมีเน็ต) ได้ข้อความคร่าว ๆ ไว้ค้นหา/ทำคำบรรยาย · บางเครื่องอาจทำให้ไมค์สะดุด ถ้าเป็นแบบนั้นให้ปิด')] : []),
       row('เวลาส่งขึ้น Drive', (() => { const sel = h('select', { class: 'sel' }, h('option', { value: 'bg' }, 'เบื้องหลัง หลังอัดเสร็จ'), h('option', { value: 'manual' }, 'กดส่งเองในคลิปที่อัดไว้')); sel.value = prefs.rec.uploadMode === 'manual' ? 'manual' : 'bg'; sel.onchange = () => { prefs.rec.uploadMode = sel.value; savePrefs(); }; return sel; })(), 'อัดเสร็จจะเก็บลงเครื่องก่อนเสมอ ใช้งานต่อได้ทันที · การส่งขึ้น Drive ทำเบื้องหลังไม่บังหน้าจอ'),
       ...(audioOnly ? [] : [row('เตือนเมื่ออัดนานเกิน 25 นาที', toggle(prefs.rec.warn25, v => { prefs.rec.warn25 = v; savePrefs(); }))]),
       ...(audioOnly ? [] : [row('รูปแบบไฟล์', h('span', { style: { color: 'var(--muted)' } }, mime ? (mime.includes('mp4') ? 'MP4' : 'WebM (เครื่องนี้ไม่รองรับ MP4)') : 'ค่าเริ่มต้นของเบราว์เซอร์')),
@@ -436,7 +436,7 @@ export class AudioRecorder {
     this.stream = stream; this.mr = mr; this.recId = uid(); this.seq = 0; this.bytes = 0; this.writes = [];
     // teacher camera (optional): its own recorder + chunk stream, kept as a hidden companion record
     this.cam = null;
-    if (prefs.rec.cam) {
+    if (prefs.rec.cam && !prefs.studentUI) {
       const cs = await openCam();
       if (!cs) toast('เปิดกล้องครูไม่ได้ (' + camErrorText(openCam.lastError) + ') · อัดเสียง + ลายมืออย่างเดียว', 4500, 'warn');
       else {
@@ -464,7 +464,7 @@ export class AudioRecorder {
   // ---- optional live transcript (device speech recognition; best effort) ----
   startTranscript() {
     this.tx = []; this.sr = null;
-    if (!prefs.rec.transcript) return;
+    if (!prefs.rec.transcript || prefs.studentUI) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return;
     try {
       const sr = new SR(); sr.lang = 'th-TH'; sr.continuous = true; sr.interimResults = false; this.sr = sr; let stopping = false;
@@ -649,11 +649,11 @@ export async function openRecordings(nb, app) {
       const B = (ic, t, fn) => { const b = h('button', { class: 'btn sq', title: t }, icon(ic)); b.onclick = fn; return b; };
       if (m.lesson) { const pb = h('button', { class: 'pill prim', style: { height: '38px', padding: '0 12px' } }, icon('play'), 'เล่นย้อน'); pb.onclick = async () => { const bz = busy('กำลังโหลดเสียง…'); let blob = null; try { blob = await recBlob(m); } catch { } finally { bz.done(); } (await import('./lesson.js')).openPlayer(m, blob); }; it.append(pb); it.querySelector('.meta div').append(' · มีลายมือ'); }
       if (m.continues || m.part > 1) it.querySelector('.meta div').append(` · ตอนที่ ${m.part || 2}`);
-      if (m.kind === 'video') it.append(B('upload', m.yt ? 'อยู่บน YouTube แล้ว · ส่งอีกครั้ง' : 'ส่งขึ้น YouTube', () => import('./youtube.js').then(x => x.uploadToYouTube(m))));
-      if (m.drive && m.done) it.append(B('qr', 'ลิงก์แชร์จาก Google Drive (ใครมีลิงก์ก็ดูได้)', async () => { const bz = busy('กำลังสร้างลิงก์…'); try { const { driveShareLink } = await import('./sync.js'); const link = await driveShareLink(m.drive); m.link = link; await db.put('recs', m); bz.done(); dialog('ลิงก์แชร์', h('div', {}, h('a', { href: link, target: '_blank', rel: 'noopener', style: { wordBreak: 'break-all', fontSize: '20px' } }, link), h('p', { class: 'sub' }, 'ใครมีลิงก์ก็เปิดดู/ดาวน์โหลดได้ · ยกเลิกการแชร์ได้ใน Google Drive')), [{ label: 'คัดลอก', action: () => { navigator.clipboard?.writeText(link).then(() => toast('คัดลอกแล้ว', 1500)).catch(() => { }); return false; } }, { label: 'ปิด', cls: 'prim' }]); } catch (e) { bz.done(); toast('สร้างลิงก์ไม่ได้: ' + (e.message || e), 4000, 'warn'); } }));
+      if (m.kind === 'video' && !prefs.studentUI) it.append(B('upload', m.yt ? 'อยู่บน YouTube แล้ว · ส่งอีกครั้ง' : 'ส่งขึ้น YouTube', () => import('./youtube.js').then(x => x.uploadToYouTube(m))));
+      if (m.drive && m.done && !prefs.studentUI) it.append(B('qr', 'ลิงก์แชร์จาก Google Drive (ใครมีลิงก์ก็ดูได้)', async () => { const bz = busy('กำลังสร้างลิงก์…'); try { const { driveShareLink } = await import('./sync.js'); const link = await driveShareLink(m.drive); m.link = link; await db.put('recs', m); bz.done(); dialog('ลิงก์แชร์', h('div', {}, h('a', { href: link, target: '_blank', rel: 'noopener', style: { wordBreak: 'break-all', fontSize: '20px' } }, link), h('p', { class: 'sub' }, 'ใครมีลิงก์ก็เปิดดู/ดาวน์โหลดได้ · ยกเลิกการแชร์ได้ใน Google Drive')), [{ label: 'คัดลอก', action: () => { navigator.clipboard?.writeText(link).then(() => toast('คัดลอกแล้ว', 1500)).catch(() => { }); return false; } }, { label: 'ปิด', cls: 'prim' }]); } catch (e) { bz.done(); toast('สร้างลิงก์ไม่ได้: ' + (e.message || e), 4000, 'warn'); } }));
       if (m.yt) it.querySelector('.meta div').append(' · YouTube');
       if (m.transcript) it.append(B('edit', 'ข้อความที่ถอดเสียง', async () => { const tx = (await db.get('kv', 'tx:' + m.id))?.v || []; const ta = h('textarea', { class: 'field', rows: 12, style: { width: '100%' } }, tx.map(x => `[${fmtTime(x.t)}] ${x.text}`).join('\n')); dialog('ข้อความที่ถอดเสียง · ' + m.name, ta, [{ label: 'คัดลอก', action: () => { navigator.clipboard?.writeText(ta.value).catch(() => { }); toast('คัดลอกแล้ว', 1500); return false; } }, { label: 'ปิด', cls: 'prim' }], { width: 640 }); }));
-      if ((m.kind === 'audio' && m.lesson) || m.kind === 'video') it.append(B('film', m.kind === 'video' ? 'ตัดต่อวิดีโอนี้' : m.continues || recs.some(x => x.continues === m.id) ? 'ทำวิดีโอ (รวมทุกตอนที่อัดต่อกัน)' : 'ทำวิดีโอจากบทเรียนนี้', async () => { dlg?.close(); if (m.kind === 'video') return (await import('./cut.js')).openCutEditor(app, { addRec: m }); const chain = chainOf(m, recs); (await import('./makevideo.js')).openMakeVideo(app, { preselect: chain }); }));
+      if (!prefs.studentUI && ((m.kind === 'audio' && m.lesson) || m.kind === 'video')) it.append(B('film', m.kind === 'video' ? 'ตัดต่อวิดีโอนี้' : m.continues || recs.some(x => x.continues === m.id) ? 'ทำวิดีโอ (รวมทุกตอนที่อัดต่อกัน)' : 'ทำวิดีโอจากบทเรียนนี้', async () => { dlg?.close(); if (m.kind === 'video') return (await import('./cut.js')).openCutEditor(app, { addRec: m }); const chain = chainOf(m, recs); (await import('./makevideo.js')).openMakeVideo(app, { preselect: chain }); }));
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
       else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
@@ -664,5 +664,5 @@ export async function openRecordings(nb, app) {
   render(); document.addEventListener('senkid:rec-moved', render);
   const projBtn = h('button', { class: 'pill prim', style: { height: '40px' } }, icon('film'), 'ทำวิดีโอ'); projBtn.onclick = async () => { dlg?.close(); (await import('./makevideo.js')).openMakeVideo(app); };
   const head = h('div', { style: { display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' } }, projBtn, h('span', { class: 'sub' }, 'เลือกบทเรียน → ตัดช่วงเงียบให้เอง → ได้วิดีโอ 1 ไฟล์'));
-  dlg = dialog(nb ? `บทเรียนที่อัดในเล่ม "${nbRec?.name || ''}"` : 'คลิปและเสียงที่อัดไว้ (ทุกเล่ม)', h('div', {}, head, list), [], { width: 720 });
+  dlg = dialog(nb ? `บทเรียนที่อัดในเล่ม "${nbRec?.name || ''}"` : 'คลิปและเสียงที่อัดไว้ (ทุกเล่ม)', h('div', {}, prefs.studentUI ? null : head, list), [], { width: 720 });
 }

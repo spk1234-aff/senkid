@@ -65,9 +65,12 @@ export function pushRecent(color) {
   r.unshift(c); state.recent = r.slice(0, 10); savePrefs();
 }
 
+// colour themes: toolbar, accent and desk colours (the paper itself never changes)
+export const COLOR_THEMES = [['navy', 'กรมท่า', '#1E2A55', '#2F5BEA'], ['emerald', 'เขียวมรกต', '#0F4D45', '#0F8A7E'], ['grape', 'ม่วงองุ่น', '#3A2466', '#7A4FE0'], ['brick', 'ส้มอิฐ', '#5A2A16', '#E0662F'], ['sakura', 'ชมพูซากุระ', '#5C2440', '#D9487F'], ['charcoal', 'เทาถ่าน', '#26282E', '#4B5563']];
 export function applyTheme() {
   const dark = state.theme === 'dark' || (state.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  if (state.color && state.color !== 'navy') document.documentElement.dataset.color = state.color; else delete document.documentElement.dataset.color;
   if (state.economy) document.documentElement.dataset.economy = ''; else delete document.documentElement.dataset.economy;
   return dark;
 }

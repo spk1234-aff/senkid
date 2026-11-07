@@ -111,6 +111,7 @@ const P = {
   menu: '<rect x="3.5" y="3.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/><rect x="13.5" y="3.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/><rect x="3.5" y="13.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/><rect x="13.5" y="13.5" width="7" height="7" rx="2" fill="currentColor" stroke="none"/>',
   teach: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20l4-4 4 4M7 9l3 2 4-3 3 2"/>',
   tv: '<rect x="2.5" y="5" width="19" height="12.5" rx="2"/><path d="M8 21h8M12 17.5V21"/>',
+  book: '<path d="M5 4.5h11a2.5 2.5 0 0 1 2.5 2.5v13H7.5A2.5 2.5 0 0 1 5 17.5z"/><path d="M5 17.5A2.5 2.5 0 0 1 7.5 15h11M9 8.5h6M9 11.5h4"/>',
   qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h2v2h-2zM18 14h2M14 18h2M18 18h2v2"/>',
 };
 export const icon = (n, cls = 'i') => {
@@ -292,7 +293,7 @@ export function onLongPress(el, fn, ms = 500) {
 }
 
 export function brandWord(size = 34) {
-  const w = h('div', { class: 'brand-word', style: { fontSize: size + 'px' } });
+  const w = h('div', { class: 'brand-word', 'data-noi18n': '1', style: { fontSize: size + 'px' } });
   w.innerHTML = `<span class="ins"><span class="e">เ</span><svg class="caret" viewBox="0 0 20 18"><path d="M2 16 L10 3 L18 16" stroke="var(--acc)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="position:relative">สิ้น<svg class="strike" viewBox="0 0 40 24"><path d="M3 18 C 12 10, 22 16, 37 4" stroke="#E5484D" stroke-width="4.2" fill="none" stroke-linecap="round"/><path d="M5 9 C 15 14, 25 6, 35 16" stroke="#E5484D" stroke-width="4.2" fill="none" stroke-linecap="round"/></svg></span></span>คิด`;
   return w;
 }

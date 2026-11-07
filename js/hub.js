@@ -1,7 +1,7 @@
 // เมนูหลัก: one button on the board opens a page of big cards; each card opens its own page.
 // Everything that used to sit in the toolbar or the ⋯ menu lives in exactly one of these pages.
 import { h, icon, toast, seg, toggle } from './ui.js';
-import { prefs, savePrefs, applyTheme } from './prefs.js';
+import { prefs, savePrefs, applyTheme, COLOR_THEMES } from './prefs.js';
 
 let root = null;
 export const hubOpen = () => !!root?.isConnected;
@@ -21,27 +21,28 @@ export function openHub(ed, anchor, page = null) {
     !student && { id: 'tv', ic: 'tv', title: 'ต่อทีวี', sub: 'ฉายจอให้นักเรียนดู', rows: () => [
       R('tv', app.broadcast?.connected ? 'ทีวีต่ออยู่ · ตั้งค่า / เลิกใช้' : 'เชื่อมทีวี', 'สแกน QR หรือเปิดลิงก์บนทีวี แล้วเลือกว่าทีวีแสดงอะไร', go(a => app.studentMenu(a))),
     ] },
-    !student && { id: 'rec', ic: 'mic', title: 'อัดบทเรียน', sub: 'เสียง เส้น กล้อง', rows: () => [
-      R('mic', app.audio?.active ? 'กำลังอัด · หยุด / พัก' : 'เริ่มอัด', 'อัดเสียงพร้อมลายมือ (และกล้องครูถ้าเปิดไว้)', go(a => app.audioClick(ed, ed.micBtn || a))),
-      R('gear', 'ไมโครโฟนและกล้องครู', 'เลือกไมค์ เปิดกล้อง ถอดเสียง ส่งขึ้น Drive', go(a => app.recorderSettings(ed, ed.micBtn || a))),
-      R('history', 'บทเรียนที่อัดในเล่มนี้', 'ฟังย้อน แชร์ ดาวน์โหลด', () => { closeHub(); app.openRecordings(ed.nb.id); }),
+    { id: 'rec', ic: 'mic', title: student ? 'อัดเสียง' : 'อัดบทเรียน', sub: student ? 'เสียงพร้อมเส้นที่เขียน' : 'เสียง เส้น กล้อง', rows: () => [
+      R('mic', app.audio?.active ? 'กำลังอัด · หยุด / พัก' : 'เริ่มอัด', student ? 'อัดเสียงอธิบายพร้อมเส้นที่เขียน' : 'อัดเสียงพร้อมลายมือ (และกล้องครูถ้าเปิดไว้)', go(a => app.audioClick(ed, ed.micBtn || a))),
+      R('gear', student ? 'เลือกไมโครโฟน' : 'ไมโครโฟนและกล้องครู', student ? null : 'เลือกไมค์ เปิดกล้อง ถอดเสียง ส่งขึ้น Drive', go(a => app.recorderSettings(ed, ed.micBtn || a))),
+      R('history', student ? 'เสียงที่อัดในเล่มนี้' : 'บทเรียนที่อัดในเล่มนี้', student ? 'ฟังย้อนพร้อมดูเส้น' : 'ฟังย้อน แชร์ ดาวน์โหลด', () => { closeHub(); app.openRecordings(ed.nb.id); }),
     ] },
     !student && { id: 'video', ic: 'film', title: 'ทำวิดีโอ', sub: '3 ขั้น จบ', direct: () => { closeHub(); import('./makevideo.js').then(m => m.openMakeVideo(app)); } },
-    { id: 'teach', ic: 'teach', title: student ? 'เครื่องมือ' : 'เครื่องมือสอน', sub: student ? 'จับเวลา เลเซอร์' : 'ใช้ระหว่างคาบ', rows: () => [
+    { id: 'teach', ic: 'teach', title: student ? 'เครื่องมือ' : 'เครื่องมือสอน', sub: student ? 'จับเวลา คณิต' : 'ใช้ระหว่างคาบ', rows: () => student ? [
       R('timer', 'นาฬิกาจับเวลา', null, go(a => app.timer.panel(a))),
-      ...(student ? [] : [R('dice', 'สุ่มชื่อนักเรียน / จัดกลุ่ม', null, go(a => app.picker.open(a)))]),
+      R('equation', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์', null, go(a => ed.mathMenu(a))),
+    ] : [
+      R('timer', 'นาฬิกาจับเวลา', null, go(a => app.timer.panel(a))),
+      R('dice', 'สุ่มชื่อนักเรียน / จัดกลุ่ม', null, go(a => app.picker.open(a))),
       R('laser', 'เลเซอร์พอยเตอร์', 'ชี้แล้วหายเอง', () => { closeHub(); ed.setTool('laser'); }),
-      ...(student ? [] : [
-        R('curtain', ed.curtain ? 'ปิดม่านบังคำตอบ' : 'ม่านบังคำตอบ', 'ค่อย ๆ เลื่อนเปิดทีละขั้น', () => { closeHub(); ed.toggleCurtain(); }),
-        R('dice', 'สุ่มโจทย์ฝึก', 'โจทย์ + เฉลย พิมพ์สวยด้วย LaTeX', go(a => import('./problems.js').then(m => m.openProblems(ed, a)))),
-        R('pages', ed.splitPane ? 'ปิดเทียบสองหน้า' : 'เทียบสองหน้า', 'ดูอีกหน้าด้านขวา เขียนต่อด้านซ้าย', () => { closeHub(); import('./split.js').then(m => m.toggleSplit(ed)); }),
-        R('history', 'ย้อนดูขั้นก่อนหน้า', 'ดูว่าเขียนอะไรไปบ้าง โดยไม่ลบ', go(a => ed.openPeek(a))),
-      ]),
+      R('curtain', ed.curtain ? 'ปิดม่านบังคำตอบ' : 'ม่านบังคำตอบ', 'ค่อย ๆ เลื่อนเปิดทีละขั้น', () => { closeHub(); ed.toggleCurtain(); }),
+      R('dice', 'สุ่มโจทย์ฝึก', 'โจทย์ + เฉลย พิมพ์สวยด้วย LaTeX', go(a => import('./problems.js').then(m => m.openProblems(ed, a)))),
+      R('pages', ed.splitPane ? 'ปิดเทียบสองหน้า' : 'เทียบสองหน้า', 'ดูอีกหน้าด้านขวา เขียนต่อด้านซ้าย', () => { closeHub(); import('./split.js').then(m => m.toggleSplit(ed)); }),
+      R('history', 'ย้อนดูขั้นก่อนหน้า', 'ดูว่าเขียนอะไรไปบ้าง โดยไม่ลบ', go(a => ed.openPeek(a))),
       R('equation', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์', null, go(a => ed.mathMenu(a))),
       R('sticker', 'สติกเกอร์', null, go(a => ed.stickerPanel(a))),
       R('hide', 'โหมดนำเสนอ (ซ่อนแถบเครื่องมือ)', 'แตะขีดเล็กด้านบนเพื่อเอาแถบกลับมา', () => { closeHub(); prefs.toolbarHidden = true; savePrefs(); ed.applyPos(); }),
     ] },
-    { id: 'pages', ic: 'pageplus', title: 'หน้าและสมุด', sub: 'เพิ่ม ย้าย คัดลอก', rows: () => {
+    { id: 'pages', ic: 'book', title: 'หน้าและสมุด', sub: 'เพิ่ม ย้าย คัดลอก', rows: () => {
       const cur = ed.currentPage(), marked = !!ed.nb.marks?.[cur?.id];
       return [
         R('pageplus', 'เพิ่มหน้า / แทรก PDF', null, go(a => ed.addPageMenu(a))),
@@ -65,14 +66,16 @@ export function openHub(ed, anchor, page = null) {
         R('scissors', 'โปรเจกต์ตัดต่อ (ปรับละเอียด)', 'สำหรับตัดหัว‑ท้าย แบ่งคลิป ความเร็ว', () => { closeHub(); import('./cut.js').then(m => m.openProjects(app)); }),
       ]),
     ] },
-    { id: 'set', ic: 'gear', title: 'ตั้งค่า', sub: 'การเขียน บัญชี ห้องเรียน', rows: () => [
+    { id: 'set', ic: 'gear', title: 'ตั้งค่า', sub: student ? 'การเขียน ธีมสี ภาษา' : 'การเขียน บัญชี ห้องเรียน', rows: () => [
       T('การเขียน'),
       S('เขียนด้วยนิ้ว', 'ปิดไว้: นิ้วใช้เลื่อนและซูม', toggle(prefs.fingerDraw, (v) => { prefs.fingerDraw = v; savePrefs(); })),
       S('แปลงเป็นรูปทรงอัตโนมัติ', 'ขีดแล้วกดค้างไว้ครู่หนึ่ง', toggle(prefs.shapeRecog, (v) => { prefs.shapeRecog = v; savePrefs(); ed.buildToolbar(); })),
       S('ขีดฆ่าเพื่อลบ', 'ขีดไปมาซ้ำ ๆ ทับเส้นที่ต้องการลบ', toggle(prefs.scribbleErase, (v) => { prefs.scribbleErase = v; savePrefs(); })),
       S('แสดง 2 หน้าคู่ (เล่มนี้)', null, toggle(prefs.twoPage && !ed.nb.single, (v) => { ed.nb.single = !v; if (v && !prefs.twoPage) { prefs.twoPage = true; savePrefs(); } ed.saveNb(); ed.relayout(true); })),
       T('หน้าตา'),
-      S('ธีม', null, seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, (v) => { prefs.theme = v; savePrefs(); applyTheme(); ed.need.main = true; })),
+      h('div', { class: 'hub-row set', style: { flexDirection: 'column', alignItems: 'stretch' } }, h('div', { class: 'hub-rt' }, h('b', {}, 'ธีมสี')), colorPicker(() => ed.need.main = true)),
+      S('ภาษา / Language', 'ตั้งแยกแต่ละเครื่อง', seg([['th', 'ไทย'], ['en', 'English']], prefs.lang === 'en' ? 'en' : 'th', (v) => { prefs.lang = v; savePrefs(); location.reload(); })),
+      S('สว่าง / มืด', null, seg([['light', 'สว่าง'], ['dark', 'มืด'], ['auto', 'ตามระบบ']], prefs.theme, (v) => { prefs.theme = v; savePrefs(); applyTheme(); ed.need.main = true; })),
       S('ตำแหน่งแถบเครื่องมือ', null, seg([['top', 'บน'], ['left', 'ซ้าย'], ['right', 'ขวา'], ['bottom', 'ล่าง']], prefs.toolbarPos, (v) => { prefs.toolbarPos = v; savePrefs(); ed.applyPos(); ed.buildToolbar(); })),
       S('ใช้งานแบบ', 'โหมดนักเรียนซ่อนเครื่องมือของครู', seg([['t', 'ครู'], ['s', 'นักเรียน']], student ? 's' : 't', async (v) => { if (v === 't' && !(await (await import('./lock.js')).requireTeacher())) return; prefs.studentUI = v === 's'; savePrefs(); ed.buildToolbar(); closeHub(); })),
       T('อื่น ๆ'),
@@ -90,20 +93,31 @@ export function openHub(ed, anchor, page = null) {
   root.addEventListener('pointerdown', (e) => { if (e.target === root) closeHub(); });
   const home = () => {
     top.replaceChildren(h('button', { class: 'pill sec hub-back' }, icon('back'), 'กลับไปกระดาน'), h('div', { class: 'hub-title' }, 'เมนู'));
-    top.firstChild.onclick = closeHub;
+    top.firstChild.onclick = closeHub; root.style.removeProperty('--tile');
     const grid = h('div', { class: 'hub-grid' });
     for (const p of PAGES) { const c = h('button', { class: 'hub-card', 'data-id': p.id }, h('span', { class: 'hub-ci' }, icon(p.ic)), h('b', {}, p.title), h('span', {}, p.sub)); c.onclick = () => p.direct ? p.direct() : open(p); grid.append(c); }
     main.replaceChildren(grid);
   };
   const open = (p) => {
-    top.replaceChildren(h('button', { class: 'pill sec hub-back' }, icon('back'), 'เมนู'), h('div', { class: 'hub-title' }, p.title));
+    top.replaceChildren(h('button', { class: 'pill sec hub-back' }, icon('back'), 'เมนู'), h('span', { class: 'hub-tile' }, icon(p.ic)), h('div', { class: 'hub-title' }, p.title));
     top.firstChild.onclick = home;
+    root.style.setProperty('--tile', TILE[p.id] || '');
     main.replaceChildren(h('div', { class: 'hub-page' }, ...p.rows()));
   };
   const want = page && PAGES.find(p => p.id === page);
   if (want && !want.direct) open(want); else home();
 }
 
+const TILE = { tv: '#2F5BEA', rec: '#E5484D', video: '#D9487F', teach: '#E0912F', pages: '#0F8A7E', out: '#7A4FE0', set: '#4B5563', help: '#1D9E75' };
+export function colorPicker(after) {
+  const box = h('div', { class: 'ctheme' });
+  for (const [id, name, nav, acc] of COLOR_THEMES) {
+    const b = h('button', { class: (prefs.color || 'navy') === id ? 'on' : '' }, h('div', { class: 'cb', style: { background: nav } }), h('div', { class: 'ca', style: { background: acc } }), h('span', {}, name));
+    b.onclick = () => { prefs.color = id; savePrefs(); applyTheme(); for (const x of box.children) x.classList.toggle('on', x === b); after?.(); };
+    box.append(b);
+  }
+  return box;
+}
 const HOWTO = [
   { q: 'อยากต่อทีวีให้นักเรียนดู', a: ['เมนู > <b>ต่อทีวี</b> > เชื่อมทีวี', 'บนทีวีเปิดลิงก์หรือสแกน QR ที่ขึ้น', 'เลือกว่าทีวีแสดงเฉพาะกระดาน หรือทั้งจอ'] },
   { q: 'อยากอัดบทเรียนไว้ให้นักเรียนดูย้อนหลัง', a: ['กดปุ่ม<b>ไมค์</b>บนแถบ (หรือ เมนู > อัดบทเรียน > เริ่มอัด)', 'สอนตามปกติ เสียงและลายมือถูกเก็บพร้อมกัน', 'กดไมค์อีกครั้ง > หยุดและบันทึก'] },
