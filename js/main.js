@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.63';
+export const VERSION = '1.9.64';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -48,13 +48,22 @@ class App {
   }
   async start() {
     applyTheme(); applyUiFont();
+    // fetch a newer version first thing, so a fix still arrives even if this launch goes wrong later
+    try { navigator.serviceWorker?.getRegistration?.().then(r => r && r.update()).catch(() => { }); } catch { }
     try { await (await import('./i18n.js')).initI18n(); } catch (e) { console.warn('i18n', e); }
     try { applyLock(); } catch (e) { console.warn('lock', e); } // student link / account rule must decide the mode before the first screen
     const boot = document.getElementById('boot'); if (boot) { boot.querySelector('p').textContent = 'กำลังโหลดสมุด…'; }
     try { await db.openDB(); } catch (e) { this.root.append(h('div', { style: { padding: '40px', textAlign: 'center' } }, 'เปิดที่เก็บข้อมูลไม่ได้ (' + e.message + ') ถ้าเปิดในโหมดส่วนตัว ให้ปิดโหมดนั้นก่อน')); return; }
     try { if (navigator.storage?.persist) await navigator.storage.persist(); } catch { }
     // continue where the user left off
-    const last = prefs.lastOpen && await db.get('notebooks', prefs.lastOpen).catch(() => null);
+    let last = prefs.lastOpen && await db.get('notebooks', prefs.lastOpen).catch(() => null);
+    // crash guard: if the app closed itself while reopening this notebook last time (iPad out of memory),
+    // start at the library instead of crashing again in a loop
+    const BK = 'senkid.bootOpen';
+    let crashed = null; try { crashed = localStorage.getItem(BK); } catch { }
+    if (last && crashed === last.id) { const nm = last.name; last = null; setTimeout(() => toast(`ครั้งก่อนแอปปิดตัวขณะเปิดสมุด "${nm}" จึงเริ่มที่หน้าแรกแทน · เปิดสมุดได้ตามปกติ`, 6000, 'warn'), 1500); }
+    try { if (last) localStorage.setItem(BK, last.id); else localStorage.removeItem(BK); } catch { }
+    setTimeout(() => { try { localStorage.removeItem(BK); } catch { } }, 12000);
     try { if (last) await this.openNotebook(last.id); else await this.openLibrary(); }
     catch (e) { console.error(e); prefs.lastOpen = null; savePrefs(); try { await this.openLibrary(); } catch { } toast('เปิดสมุดล่าสุดไม่สำเร็จ จึงกลับมาหน้าแรก', 3500, 'warn'); }
     finally { document.getElementById('boot')?.remove(); }
