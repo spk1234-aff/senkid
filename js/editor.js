@@ -2508,7 +2508,7 @@ export class Editor {
     if (tab === 'marks') {
       const ids = Object.keys(this.nb.marks || {}).filter(pid => this.pageMap.has(pid)).sort((a, b) => this.nb.pages.indexOf(a) - this.nb.pages.indexOf(b));
       if (this.nb.lastInk && this.pageMap.has(this.nb.lastInk)) list.append(row(this.nb.lastInk, 'หน้าที่เขียนล่าสุด', new Date(this.editedAt?.get(this.nb.lastInk) || this.nb.updated || 0).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })));
-      if (!ids.length) list.append(h('p', { class: 'hint' }, 'ยังไม่มีที่คั่น · กด ★ ด้านล่าง หรือเมนู ⋯ > ปักที่คั่นหน้านี้'));
+      if (!ids.length) list.append(h('p', { class: 'hint' }, 'ยังไม่มีที่คั่น · กด ★ ด้านล่าง หรือเมนู > ปักที่คั่นหน้านี้'));
       for (const pid of ids) { const m = this.nb.marks[pid]; const x = h('button', { class: 'x', title: 'ถอน' }, '×'); x.onclick = (e) => { e.stopPropagation(); this.toggleMark(pid); }; const r = row(pid, m.label || ('หน้า ' + (this.nb.pages.indexOf(pid) + 1)), m.label ? 'หน้า ' + (this.nb.pages.indexOf(pid) + 1) : '', x); if (r) { r.oncontextmenu = (e) => e.preventDefault(); onLongPress(r, async () => { const v = await ask('ชื่อที่คั่น', { value: m.label || '' }); if (v != null) { m.label = v.trim(); this.saveNb(); this.renderThumbs(); } }); list.append(r); } }
       return;
     }
