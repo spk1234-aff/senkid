@@ -34,6 +34,7 @@ async function rasterShapeText(s) {
   return { bytes: new Uint8Array(await png.arrayBuffer()), x: x0, y: y0, w, h: hh };
 }
 async function rasterize(s) {
+  if (s.t === 'text' && !(s.w > 0 && s.h > 0)) { const { measureText } = await import('./render.js'); const m = measureText(s); s = { ...s, w: m.w, h: m.h, bb: null }; }
   const b = strokeBB(s), w = b[2] - b[0], hh = b[3] - b[1];
   let k = 3;
   if (s.t === 'img') k = Math.min(4, Math.max(1.5, (s.iw * (s.crop?.w || 1)) / Math.max(1, s.w)));

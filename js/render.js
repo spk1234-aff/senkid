@@ -396,7 +396,9 @@ export function shapeTextBox(sh) {
   if (sh.k === 'ellipse') return { cx: sh.cx, cy: sh.cy, w: sh.rx * 2 * 0.74, h: sh.ry * 2 * 0.74, ang: sh.rot || 0 };
   const P = sh.pts || [], n = P.length / 2 | 0; if (n < 3) return null;
   let cx = 0, cy = 0; for (let i = 0; i < n; i++) { cx += P[i * 2]; cy += P[i * 2 + 1]; } cx /= n; cy /= n;
-  if (n === 4) {
+  // a rectangle (corners at right angles, maybe turned): text follows its sides; a diamond etc. keeps text level
+  const rightAngles = n === 4 && [0, 1, 2, 3].every(i => { const a = i * 2, b = ((i + 1) % 4) * 2, c = ((i + 2) % 4) * 2, ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], vx = P[c] - P[b], vy = P[c + 1] - P[b + 1]; return Math.abs(ux * vx + uy * vy) <= 0.08 * Math.hypot(ux, uy) * Math.hypot(vx, vy); });
+  if (rightAngles) {
     const e0 = Math.hypot(P[2] - P[0], P[3] - P[1]), e1 = Math.hypot(P[4] - P[2], P[5] - P[3]);
     let ang = Math.atan2(P[3] - P[1], P[2] - P[0]);
     // keep the writing upright: use whichever side is closest to horizontal
@@ -407,7 +409,8 @@ export function shapeTextBox(sh) {
   }
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < n; i++) { x0 = Math.min(x0, P[i * 2]); x1 = Math.max(x1, P[i * 2]); y0 = Math.min(y0, P[i * 2 + 1]); y1 = Math.max(y1, P[i * 2 + 1]); }
-  return { cx, cy, w: (x1 - x0) * (n === 3 ? 0.55 : 0.72), h: (y1 - y0) * (n === 3 ? 0.5 : 0.72), ang: 0 };
+  const f = n === 3 ? [0.55, 0.5] : n === 4 ? [0.52, 0.5] : [0.72, 0.72];
+  return { cx, cy, w: (x1 - x0) * f[0], h: (y1 - y0) * f[1], ang: 0 };
 }
 let seg = null;
 function words(t) {
@@ -476,7 +479,7 @@ export function drawPaper(ctx, page, paperKey, k) {
         }
       }
     }
-    else { ctx.fillStyle = '#9AA0AA'; ctx.font = `${18}px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.fillText('กำลังโหลดหน้า PDF…', P.w / 2, P.h / 2); }
+    if (!bm) { ctx.fillStyle = '#9AA0AA'; ctx.font = `${18}px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.fillText('กำลังโหลดหน้า PDF…', P.w / 2, P.h / 2); }
     return;
   }
   ctx.fillStyle = pp.fill; ctx.fillRect(0, 0, P.w, P.h);

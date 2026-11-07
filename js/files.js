@@ -25,8 +25,9 @@ export async function buildBackup(ids, livePages, onProgress) {
       for (const s of p.strokes) {
         if (s.t === 'img') strokes.push({ id: s.id, t: 'img', iw: s.iw, ih: s.ih, crop: s.crop, mask: s.mask, x: s.x, y: s.y, w: s.w, h: s.h, ts: s.ts, meta: s.meta, rot: s.rot, data: await imgData(s.blob) });
         else if (s.t === 'text') strokes.push({ ...s, bb: undefined });
-        else if (s.pts) strokes.push({ id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w, ts: s.ts, hs: s.hs, pts: Array.from(s.pts, (v, i) => i % STRIDE < 2 ? Math.round(v * 100) / 100 : Math.round(v * 1000) / 1000) });
-        else strokes.push({ id: s.id, t: s.t, pen: s.pen, c: s.c, a: s.a, w: s.w, ts: s.ts, shape: s.shape });
+        // keep every field (answer covers cv/op, text in shapes tx, fills, …); only the points become a plain array
+        else if (s.pts) strokes.push({ ...s, bb: undefined, _g: undefined, pts: Array.from(s.pts, (v, i) => i % STRIDE < 2 ? Math.round(v * 100) / 100 : Math.round(v * 1000) / 1000) });
+        else strokes.push({ ...s, bb: undefined, _g: undefined });
       }
       out.pages.push({ id: p.id, nb: p.nb, size: p.size, bg: p.bg, pw: p.pw, ph: p.ph, pdf: p.pdf, strokes });
     }

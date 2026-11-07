@@ -115,7 +115,7 @@ export const MORE_TOPICS = [
     const m = R(11, 99), n = R(lv > 1 ? -6 : 3, 8);
     if (lv > 1) { const a = R(2, 9), b = R(2, 9), p = R(-5, 6), q = R(-5, 6); let c = a * b, e = p + q; const A = c >= 10 ? dec(c, 1) : String(c); if (c >= 10) e += 1;
       return { q: `(${a} \\times 10^{${p}})(${b} \\times 10^{${q}})`, a: `${A} \\times 10^{${e}}` }; }
-    const big = Math.random() < .5, digits = String(m), A = digits[0] + '.' + digits[1];
+    const big = Math.random() < .5, digits = String(m), A = digits[1] === '0' ? digits[0] : digits[0] + '.' + digits[1];
     if (big) { const num = String(m) + '0'.repeat(n - 1); return { q: num.replace(/\B(?=(\d{3})+(?!\d))/g, '{,}'), a: `${A} \\times 10^{${n}}` }; }
     const k = R(2, 6); return { q: '0.' + '0'.repeat(k - 1) + digits, a: `${A} \\times 10^{-${k}}` };
   }],

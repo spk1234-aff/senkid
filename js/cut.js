@@ -7,7 +7,7 @@ import { prefs, savePrefs } from './prefs.js';
 import { renderPageTo } from './render.js';
 import { lessonSource, drawCamFrame } from './lesson.js';
 import { CREDIT } from './exportpdf.js';
-import { loadAssets as titleAssets, drawTitleCard } from './titlecard.js';
+import { loadAssets as titleAssets, drawTitleCard, openTitleDesigner } from './titlecard.js';
 
 const KEY = (id) => 'proj:' + id;
 export async function listProjects() { return (await db.getAll('kv')).filter(x => x.k.startsWith('proj:')).map(x => x.v).sort((a, b) => (b.updated || 0) - (a.updated || 0)); }
@@ -299,7 +299,14 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
       [{ label: 'ยกเลิก' }, { label: 'ใช้', cls: 'prim', flex: 2, action: () => { c.in = a; c.out = b; changed(); } }], { width: 520 });
   };
   const holdDialog = async (c) => { const v = await ask('แสดงกี่วินาที', { value: String(Math.round((c.hold || HOLD) / 1000)) }); const n = parseFloat(v); if (n > 0) { c.hold = Math.round(n * 1000); changed(); } };
-  const clipSettings = (c) => {
+  const clipSettings = async (c) => {
+    // a designed title card: edit it in the same designer as Make-video
+    if (c.kind === 'title' && c.design) {
+      const d = await openTitleDesigner(c.design); if (!d) return;
+      c.design = d; c.text = d.lines[0] || c.text; c.sub = d.lines[1] || ''; c.name = c.name || c.text; c.hold = d.hold || c.hold;
+      try { eng.src(c).A = await titleAssets(d); } catch { }
+      changed(); return;
+    }
     const body = h('div', {});
     if (c.kind === 'lesson' || c.kind === 'video') body.append(h('div', { class: 'lbl', style: { marginTop: 0 } }, 'ความเร็ว (เร็วกว่า 1× จะปิดเสียงช่วงนี้)'), seg([['1', '1×'], ['1.5', '1.5×'], ['2', '2×'], ['3', '3×']], String(c.speed || 1), v => c.speed = +v),
       h('div', { class: 'lbl' }, 'เสียง'), seg([['on', 'เปิด'], ['off', 'ปิดเสียง']], c.mute ? 'off' : 'on', v => c.mute = v === 'off'));

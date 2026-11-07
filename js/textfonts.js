@@ -27,6 +27,8 @@ export function familyFor(id) {
 }
 export function ensureFont(id) {
   if (fontReady(id)) return Promise.resolve(true);
+  // a failed font is retried at most once a minute (familyFor runs on every draw)
+  if (state.get(id) === 'fail' && Date.now() - (ensureFont.failAt?.get(id) || 0) < 60000) return Promise.resolve(false);
   const f = TEXT_FONTS.find(x => x[0] === id); if (!f) return Promise.resolve(false);
   if (state.get(id) === 'loading') return ensureFont.p.get(id);
   state.set(id, 'loading');
@@ -37,7 +39,7 @@ export function ensureFont(id) {
   };
   const p = Promise.all([load(400), f[4] ? load(700).catch(() => null) : null])
     .then(() => { state.set(id, 'ready'); for (const h of hooks) { try { h(id); } catch { } } return true; })
-    .catch((e) => { console.warn('font', id, e); state.set(id, 'fail'); return false; });
+    .catch((e) => { console.warn('font', id, e); state.set(id, 'fail'); (ensureFont.failAt ||= new Map()).set(id, Date.now()); return false; });
   (ensureFont.p ||= new Map()).set(id, p);
   return p;
 }

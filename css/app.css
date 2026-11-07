@@ -758,9 +758,6 @@ video.campip.round{border-radius:18%}
 .cp-page .ck{position:absolute;right:6px;top:6px;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#fff;font-size:14px;display:flex;align-items:center;justify-content:center;opacity:0}
 .cp-page.on .ck{opacity:1}
 
-/* curtain controls */
-.curtainbar{position:absolute;left:50% !important;transform:translateX(-50%);bottom:84px !important;top:auto !important;display:flex;gap:6px;padding:6px 8px;border-radius:999px;background:var(--panel,rgba(255,255,255,.96));box-shadow:0 6px 20px rgba(0,0,0,.18);z-index:21;width:max-content;max-width:calc(100vw - 40px)}
-.curtainbar .chip{display:inline-flex;align-items:center;gap:6px}
 
 .peekbox{width:min(420px,calc(100vw - 20px));padding:6px 4px}
 .peekbox input[type=range]{accent-color:var(--acc);margin:8px 0}

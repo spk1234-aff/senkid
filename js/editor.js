@@ -848,7 +848,7 @@ export class Editor {
   }
   // draw one finished stroke directly on main (fast path)
   drawIncremental(page, s) {
-    if (s.t === 'hl') { this.need.main = true; return; }
+    if (s.t === 'hl' || page.strokes.some(x => x.cv)) { this.need.main = true; return; }
     const r = this.rects.get(page.id), R = this.R, k = this.z * R, ctx = this.ctxMain;
     ctx.save(); ctx.setTransform(k, 0, 0, k, (this.ox + r.x * this.z) * R, (this.oy + r.y * this.z) * R);
     ctx.beginPath(); ctx.rect(0, 0, r.w, r.h); ctx.clip();
@@ -1038,7 +1038,7 @@ export class Editor {
   armHold() {
     clearInterval(this.holdTimer);
     const L = this.live; if (!L || L.shape || L.rul != null) return;
-    if (!prefs.shapeRecog || (L.kind === 'hl' && prefs.hl.straight)) return;
+    if (!prefs.shapeRecog || L.cover || (L.kind === 'hl' && prefs.hl.straight)) return;
     L.track = [{ t: performance.now(), x: L.sx, y: L.sy, n: L.pts.length }];
     this.holdTimer = setInterval(() => this.checkHold(), 40);
   }
@@ -1211,14 +1211,14 @@ export class Editor {
   }
 
   up(e, cancel) {
-    if (this.shDraw && this.shDraw.id === e.pointerId) { const D = this.shDraw; this.shDraw = null; this.need.ui = true; if (!cancel) this.commitShapeTool(D); this.pointers.delete(e.pointerId); return; }
+    if (this.shDraw && this.shDraw.id === e.pointerId) { const D = this.shDraw; this.shDraw = null; this.need.ui = true; if (!cancel && !(!D.moved && this.tapCoverAt(D.page, D.sx, D.sy))) this.commitShapeTool(D); this.pointers.delete(e.pointerId); return; }
     if (this.rgrab && this.rgrab.pts.has(e.pointerId)) { this.rulerUp(e); return; }
     if (this.lp && this.lp.id === e.pointerId) { clearTimeout(this.lp.t); this.lp = null; }
     if (this.lasering && this.lasering.id === e.pointerId && !cancel) { const Ls = this.lasering, [ux, uy] = this.local(e); if (Math.hypot(ux - Ls.sx, uy - Ls.sy) < 10 && performance.now() - Ls.t0 < 450 && Ls.page) this.tapCoverAt(Ls.page, Ls.sx, Ls.sy); }
     if (this.lasering && this.lasering.id === e.pointerId) { (this.laserEnd ||= new Map()).set(this.lasering.s, performance.now()); this.lasering = null; this.pointers.delete(e.pointerId); this.laserDirty = true; return; }
-    if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { this.pointers.delete(e.pointerId); this.finishLasso(); return; }
+    if (this.lassoDraw && this.lassoDraw.id === e.pointerId) { this.pointers.delete(e.pointerId); const LD = this.lassoDraw; let span = 0; for (let i = 2; i < LD.pts.length; i += 2) span = Math.max(span, Math.hypot(LD.pts[i] - LD.pts[0], LD.pts[i + 1] - LD.pts[1])); if (!cancel && span * this.z < 10 && (() => { const [ux, uy] = this.local(e); return this.tapCoverAt(LD.page, ux, uy); })()) { this.lassoDraw = null; this.need.ui = true; return; } this.finishLasso(); return; }
     if (this.lxf && this.lxf.id === e.pointerId) { this.pointers.delete(e.pointerId); this.endLassoDrag(); return; }
-    if (this.textTap && this.textTap.id === e.pointerId) { const tt = this.textTap; this.textTap = null; this.pointers.delete(e.pointerId); if (!cancel) { const hit = this.imgAt(tt.page, tt.x, tt.y), shp = !(hit && hit.t === 'text') && this.closedShapeAt(tt.page, tt.sx, tt.sy); if (shp) this.shapeTextDialog(tt.page, shp); else if (hit && hit.t === 'text') this.editTextInline(tt.page, hit); else this.editTextInline(tt.page, null, tt.x, tt.y); } return; }
+    if (this.textTap && this.textTap.id === e.pointerId) { const tt = this.textTap; this.textTap = null; this.pointers.delete(e.pointerId); if (!cancel && !this.tapCoverAt(tt.page, tt.sx, tt.sy)) { const hit = this.imgAt(tt.page, tt.x, tt.y), shp = !(hit && hit.t === 'text') && this.closedShapeAt(tt.page, tt.sx, tt.sy); if (shp) this.shapeTextDialog(tt.page, shp, { x: tt.x, y: tt.y }); else if (hit && hit.t === 'text') this.editTextInline(tt.page, hit); else this.editTextInline(tt.page, null, tt.x, tt.y); } return; }
     if (this.imgDrag && this.imgDrag.id === e.pointerId) {
       const d = this.imgDrag; this.imgDrag = null; this.pointers.delete(e.pointerId);
       if (d.cur !== d.orig) { const before = d.page.strokes.map(s => s === d.cur ? d.orig : s); this.pushHistory({ k: 'str', items: [{ pid: d.page.id, before, after: d.page.strokes.slice() }] }); this.markDirty(d.page); }
@@ -2185,7 +2185,7 @@ export class Editor {
   tapImage(e) { const r = this.stage.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return false; const pr = this.rects.get(page.id), img = this.imgAt(page, wx - pr.x, wy - pr.y); if (img && img.t === 'img') { this.selectImage(page.id, img.id); return true; } return false; }
   // ---------- text inside shapes ----------
   closedShapeAt(page, sx, sy) { const st = this.shapeAt(page, sx, sy); return st && (st.shape.closed || st.shape.k === 'ellipse') ? st : null; }
-  shapeTextDialog(page, st) {
+  shapeTextDialog(page, st, at = null) {
     if (this.txEd) this.txCommit();
     const T0 = st.tx || {}, T = { text: T0.text || '', size: T0.size || prefs.textSize || 24, bold: T0.bold ?? !!prefs.textBold, c: T0.c || st.c || prefs.penColor, f: T0.f || prefs.textFont || 'sarabun' };
     const ta = h('textarea', { class: 'field', rows: 4, style: { height: 'auto', minHeight: '120px', padding: '10px 14px', lineHeight: '1.3', resize: 'vertical', textAlign: 'center' }, placeholder: 'พิมพ์ข้อความในรูปทรง…' });
@@ -2207,7 +2207,9 @@ export class Editor {
       h('div', { class: 'lbl' }, 'ฟอนต์'), fonts,
       h('div', { class: 'lbl' }, 'สีตัวอักษร'), colors);
     preview();
-    dialog(st.tx?.text ? 'แก้ข้อความในรูปทรง' : 'พิมพ์ในรูปทรง', body, [{ label: 'ยกเลิก' }, { label: 'ใส่ข้อความ', cls: 'prim', flex: 2, action: () => {
+    // tapped inside a frame but wanted an ordinary text box there
+    if (at && !st.tx?.text) { const plain = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '8px' } }, icon('text'), 'ไม่ใส่ในรูปทรง · พิมพ์ตรงจุดที่แตะแทน'); plain.onclick = () => { this._stdClose?.(); setTimeout(() => this.editTextInline(page, null, at.x, at.y), 60); }; body.append(plain); }
+    const dgx = dialog(st.tx?.text ? 'แก้ข้อความในรูปทรง' : 'พิมพ์ในรูปทรง', body, [{ label: 'ยกเลิก' }, { label: 'ใส่ข้อความ', cls: 'prim', flex: 2, action: () => {
       const text = ta.value.replace(/\s+$/, ''), cur = page.strokes.find(x => x.id === st.id); if (!cur) return;
       const before = page.strokes.slice(), ns = { ...cur, bb: null };
       if (text) ns.tx = { text, size: T.size, bold: T.bold, c: T.c, f: T.f !== 'sarabun' ? T.f : undefined }; else delete ns.tx;
@@ -2216,6 +2218,7 @@ export class Editor {
       this.pushHistory({ k: 'str', items: [{ pid: page.id, before, after: page.strokes.slice() }] });
       this.markDirty(page); this.need.main = true; if (this.sel) this.buildShapeBar?.();
     } }], { width: 620, onClose: () => offF() });
+    this._stdClose = () => dgx.close();
     setTimeout(() => ta.focus(), 80);
   }
   // ---------- cover pen (answer hider): tap a strip to reveal it, tap again to hide ----------
@@ -2223,26 +2226,22 @@ export class Editor {
     const r = this.rects.get(page.id); if (!r) return null;
     const [wx, wy] = this.toWorld(sx, sy), x = wx - r.x, y = wy - r.y, tol = 8 / this.z;
     for (let i = page.strokes.length - 1; i >= 0; i--) {
-      const s = page.strokes[i]; if (!s.cv || !s.pts) continue;
+      const s = page.strokes[i]; if (!s.cv) continue;
       const b = strokeBB(s), R = s.w / 2 + tol; if (x < b[0] - R || x > b[2] + R || y < b[1] - R || y > b[3] + R) continue;
-      const P = s.pts;
-      for (let j = 0; j < P.length; j += STRIDE) {
-        const k = j + STRIDE < P.length ? j + STRIDE : j, ax = P[j], ay = P[j + 1], bx = P[k], by = P[k + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
-        const u = L2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2)) : 0;
-        if (Math.hypot(x - ax - dx * u, y - ay - dy * u) <= R) return s;
-      }
+      if (hitStroke(s, x, y, tol)) return s;
     }
     return null;
   }
   tapCoverAt(page, sx, sy) {
     const s = this.coverAt(page, sx, sy); if (!s) return false;
-    s.op = s.op ? 0 : 1; this.markDirty(page); this.need.main = true; this.buildCoverBar?.();
+    // a new object (not an in-place edit) so lesson recordings and the TV notice the change
+    const ns = { ...s, op: s.op ? 0 : 1, bb: null }; page.strokes = page.strokes.map(x => x === s ? ns : x); this.markDirty(page); this.need.main = true; this.buildCoverBar?.();
     try { navigator.vibrate?.(6); } catch { }
     return true;
   }
   tapCover(e) { const r = this.stage.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); return !!page && this.tapCoverAt(page, sx, sy); }
   coverAll(page, open) {
-    let n = 0; for (const s of page.strokes) if (s.cv && !!s.op !== open) { s.op = open ? 1 : 0; n++; }
+    let n = 0; page.strokes = page.strokes.map(s => { if (s.cv && !!s.op !== open) { n++; return { ...s, op: open ? 1 : 0, bb: null }; } return s; });
     if (n) { this.markDirty(page); this.need.main = true; }
     return n;
   }
@@ -2262,7 +2261,7 @@ export class Editor {
     if (performance.now() - (this.txDone || 0) < 700) return;
     const [sx, sy] = this.local(e), [wx, wy] = this.toWorld(sx, sy), page = this.pageAt(wx, wy, 6); if (!page) return;
     const r = this.rects.get(page.id), hit = this.imgAt(page, wx - r.x, wy - r.y), shp = !(hit && hit.t === 'text') && this.closedShapeAt(page, sx, sy);
-    if (shp) this.shapeTextDialog(page, shp); else if (hit && hit.t === 'text') this.editTextInline(page, hit); else this.editTextInline(page, null, wx - r.x, wy - r.y);
+    if (shp) this.shapeTextDialog(page, shp, { x: wx - r.x, y: wy - r.y }); else if (hit && hit.t === 'text') this.editTextInline(page, hit); else this.editTextInline(page, null, wx - r.x, wy - r.y);
   }
   imgAt(page, x, y) {
     for (let i = page.strokes.length - 1; i >= 0; i--) { const s = page.strokes[i]; if (s.t !== 'img' && s.t !== 'text') continue; const [lx, ly] = objLocal(s, x, y); if (lx >= s.x && lx <= s.x + s.w && ly >= s.y && ly <= s.y + s.h) return s; }
@@ -2673,7 +2672,7 @@ export class Editor {
     if (!gone.length && ids.size) db.snapshot(p, 'edit');
     p._ids = ids; this.delWhy = null;
   }
-  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.hooks?.dirty?.(p); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); this.splitPane?.changed(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
+  markDirty(p) { if (!p) return; (this.editedAt ||= new Map()).set(p.id, Date.now()); this.lastInput = Date.now(); this.hooks?.dirty?.(p); if (this.nb.lastInk !== p.id) { this.nb.lastInk = p.id; this.nbDirty = true; } this.app.broadcast?.pageChanged(p); this.splitPane?.changed(p); p._ver = (p._ver || 0) + 1; this.dirty.add(p.id); this.scheduleSave(); if (this.tool === 'cover') this.buildCoverBar(); if (this.thumbs.classList.contains('open')) { clearTimeout(this.thT); this.thT = setTimeout(() => this.refreshThumbs(), 700); } }
   saveNb() { this.nbDirty = true; this.scheduleSave(); }
   scheduleSave() { clearTimeout(this.saveT); this.saveT = setTimeout(() => this.flush(), 700); }
   async flush() {

@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.60';
+export const VERSION = '1.9.61';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -265,7 +265,7 @@ class App {
         row('ป้องกันเบราว์เซอร์ลบข้อมูล', persisted),
         row('สำรองสมุดทั้งหมด', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'ส่งออก'); b.onclick = async () => { await this.editor?.flush(); this.exportNotebooks((await db.getAll('notebooks')).map(n => n.id)); }; return b; })()),
         row('นำเข้าไฟล์สำรอง', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('upload'), 'นำเข้า'); b.onclick = () => this.importBackup(); return b; })()),
-        ...(prefs.studentUI ? [] : [row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => openRecordings(); return b; })()),
+        ...(prefs.studentUI ? [] : [row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => this.openRecordings(); return b; })()),
         row('ทำวิดีโอจากบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เริ่ม'); b.onclick = async () => (await import('./makevideo.js')).openMakeVideo(this); return b; })(), 'เลือกบทเรียน ตัดช่วงเงียบให้เอง ได้วิดีโอ 1 ไฟล์')])),
       h('div', { class: 'sec-t' }, 'ความช่วยเหลือ'),
       card(
@@ -295,7 +295,7 @@ class App {
       try { const t = JSON.parse(localStorage.getItem('senkid.gtoken') || 'null'); const left = t ? Math.round((t.exp - Date.now()) / 60000) : 0; if (left < 60) it('warn', `สิทธิ์ Google เหลือ ${left} นาที`, 'ถ้าคาบนี้ยาวกว่านั้น แอปจะรอต่อสิทธิ์จนกว่าจะว่าง (ไม่เด้งระหว่างสอน) · ต่อตอนนี้เพื่อให้ได้เต็ม 60 นาที', { label: 'ต่อสิทธิ์ตอนนี้', fn: async () => { await this.editor?.flush?.(); signIn({ force: true }); } }); else it(true, `สิทธิ์ Google เหลือ ${left} นาที`, 'พอสำหรับคาบนี้', null); } catch { }
       const ago = sync.lastSync ? Math.round((Date.now() - sync.lastSync) / 60000) : null; it(ago != null && ago < 180 ? true : 'warn', 'Google Drive: ' + (sync.email || 'เชื่อมต่อแล้ว'), ago == null ? 'ยังไม่เคยซิงก์' : `ซิงก์ล่าสุด ${ago < 1 ? 'เมื่อสักครู่' : ago + ' นาทีที่แล้ว'}` + (sync.error ? ' · ' + sync.error : ''), { label: 'ซิงก์ตอนนี้', fn: () => syncNow('manual') }); }
     // storage
-    try { const e = await navigator.storage?.estimate?.(); if (e) { const free = (e.quota - e.usage) / 1048576; it(free > 500 ? true : free > 150 ? 'warn' : false, `พื้นที่: ใช้ ${fmtBytes(e.usage)} จาก ${fmtBytes(e.quota)}`, free < 500 ? 'เหลือน้อย · ย้ายคลิปขึ้น Drive หรือลบคลิปเก่า' : 'เพียงพอ', free < 500 ? { label: 'คลิป', fn: () => openRecordings() } : null); } } catch { }
+    try { const e = await navigator.storage?.estimate?.(); if (e) { const free = (e.quota - e.usage) / 1048576; it(free > 500 ? true : free > 150 ? 'warn' : false, `พื้นที่: ใช้ ${fmtBytes(e.usage)} จาก ${fmtBytes(e.quota)}`, free < 500 ? 'เหลือน้อย · ย้ายคลิปขึ้น Drive หรือลบคลิปเก่า' : 'เพียงพอ', free < 500 ? { label: 'คลิป', fn: () => this.openRecordings() } : null); } } catch { }
     // persistent storage (iPad may evict otherwise)
     try { const p = await navigator.storage?.persisted?.(); if (p != null) it(p ? true : 'warn', p ? 'ข้อมูลถูกตั้งเป็นถาวรแล้ว' : 'ข้อมูลยังไม่ได้ตั้งเป็นถาวร', p ? 'ระบบจะไม่ลบข้อมูลแอปเอง' : 'iPad อาจเคลียร์ข้อมูลเมื่อพื้นที่เต็ม', p ? null : { label: 'ตั้งถาวร', fn: async () => { const ok = await navigator.storage.persist(); toast(ok ? 'ตั้งเป็นถาวรแล้ว' : 'ระบบไม่อนุญาต (ใช้จากไอคอนบนหน้าโฮมจะได้สิทธิ์นี้)', 2500); } }); } catch { }
     // microphone
@@ -313,7 +313,7 @@ class App {
     const b = this.broadcast; const paired = prefs.pairedAt && Date.now() - prefs.pairedAt < 12 * 3600e3;
     it(b?.rtc?.open || b?.connected ? true : paired ? 'warn' : 'warn', b?.rtc?.open ? 'ทีวี (จอที่สอง): เชื่อมต่ออยู่' : b?.connected ? 'หน้าจอนักเรียน: เชื่อมต่ออยู่' : paired ? 'ทีวี: ยังไม่ได้ต่อ · จะต่อเองเมื่อหน้าต่างบนทีวีเปิดอยู่' : 'ทีวี: ยังไม่ได้ตั้งค่าวันนี้', '', this.editor && !b?.rtc?.open ? { label: 'ต่อทีวี', fn: () => this.studentMenu(document.querySelector('.tb .btn') || document.body) } : null);
     // pending clips
-    try { const recs = await db.getAll('recs'); const pend = recs.filter(r => r.done && !r.drive && !r.local).length; if (pend) it('warn', `คลิป ${pend} รายการยังอยู่ในเครื่อง`, 'จะส่งขึ้น Drive เองเมื่อเชื่อม Google และมีเน็ต', { label: 'ดูคลิป', fn: () => openRecordings() }); } catch { }
+    try { const recs = await db.getAll('recs'); const pend = recs.filter(r => r.done && !r.drive && !r.local).length; if (pend) it('warn', `คลิป ${pend} รายการยังอยู่ในเครื่อง`, 'จะส่งขึ้น Drive เองเมื่อเชื่อม Google และมีเน็ต', { label: 'ดูคลิป', fn: () => this.openRecordings() }); } catch { }
     // online
     it(navigator.onLine ? true : 'warn', navigator.onLine ? 'อินเทอร์เน็ต: ต่ออยู่' : 'อินเทอร์เน็ต: ออฟไลน์', navigator.onLine ? '' : 'สอนได้ปกติ · ซิงก์และทีวี(จอสอง)จะทำเมื่อมีเน็ต', null);
     const list = h('div', { class: 'hc' }, ...items.map(x => h('div', { class: 'hc-row ' + (x.ok === true ? 'ok' : x.ok === 'warn' ? 'warn' : 'bad') }, h('i', {}, x.ok === true ? '✓' : x.ok === 'warn' ? '!' : '✕'), h('div', {}, h('b', {}, x.title), x.sub ? h('div', { class: 'sub' }, x.sub) : ''), x.fix ? (() => { const bb = h('button', { class: 'pill sec', style: { height: '38px', flex: 'none' } }, x.fix.label); bb.onclick = () => { close(); x.fix.fn(); }; return bb; })() : '')));
