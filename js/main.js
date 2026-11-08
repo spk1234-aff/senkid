@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.64';
+export const VERSION = '1.9.65';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -63,7 +63,7 @@ class App {
     let crashed = null; try { crashed = localStorage.getItem(BK); } catch { }
     if (last && crashed === last.id) { const nm = last.name; last = null; setTimeout(() => toast(`ครั้งก่อนแอปปิดตัวขณะเปิดสมุด "${nm}" จึงเริ่มที่หน้าแรกแทน · เปิดสมุดได้ตามปกติ`, 6000, 'warn'), 1500); }
     try { if (last) localStorage.setItem(BK, last.id); else localStorage.removeItem(BK); } catch { }
-    setTimeout(() => { try { localStorage.removeItem(BK); } catch { } }, 12000);
+    { const clr = () => { try { localStorage.removeItem(BK); } catch { } }; setTimeout(clr, 12000); addEventListener('pagehide', clr, { once: true }); } // a normal reload/close isn't a crash
     try { if (last) await this.openNotebook(last.id); else await this.openLibrary(); }
     catch (e) { console.error(e); prefs.lastOpen = null; savePrefs(); try { await this.openLibrary(); } catch { } toast('เปิดสมุดล่าสุดไม่สำเร็จ จึงกลับมาหน้าแรก', 3500, 'warn'); }
     finally { document.getElementById('boot')?.remove(); }

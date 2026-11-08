@@ -223,7 +223,7 @@ export function recognizeBracket(p, { force = null } = {}) {
   // the far side: the point farthest from the ends' side
   let far = P[0], fd = -1; for (const q of P) { const dd = Math.abs(q[0] - ex); if (dd > fd) { fd = dd; far = q; } }
   const d = far[0] - ex;
-  if (!force && Math.abs(d) < 0.55 * w) return null;
+  if (!force && (Math.abs(d) < 0.55 * w || Math.abs(d) < 0.055 * hgt)) return null; // (a wobbly straight stroke barely bulges)
   let kind = force;
   if (!kind) {
     const V = rdp(P, Math.max(2, 0.05 * hgt));
@@ -261,12 +261,24 @@ export function recognizeChevron(p) {
   if (p.length < 8) return null;
   const R = resample(trimRest(p), 64); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
   const L = pathLen(R); if (L < 30) return null;
-  const V = rdp(P, Math.max(2, 0.05 * L));
-  if (V.length !== 3) return null;
-  const [a, v, b] = V, la = Math.hypot(a[0] - v[0], a[1] - v[1]), lb = Math.hypot(b[0] - v[0], b[1] - v[1]);
+  // vertex = the point farthest from the line joining the two ends; both arms must be fairly straight
+  const a = P[0], b = P[P.length - 1], cl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+  let vi = 0, vd = -1; P.forEach((q, i) => { const d = Math.abs((b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0])) / cl; if (d > vd) { vd = d; vi = i; } });
+  if (vi < P.length * 0.12 || vi > P.length * 0.88) return null;
+  const v = P[vi];
+  const armDev = (i0, i1) => { const p0 = P[i0], p1 = P[i1]; let m = 0; for (let i = i0; i <= i1; i++) m = Math.max(m, distSeg(P[i][0], P[i][1], p0[0], p0[1], p1[0], p1[1])); return m; };
+  const la0 = Math.hypot(a[0] - v[0], a[1] - v[1]), lb0 = Math.hypot(b[0] - v[0], b[1] - v[1]);
+  if (armDev(0, vi) > Math.max(0.17 * la0, 3) || armDev(vi, P.length - 1) > Math.max(0.17 * lb0, 3)) return null;
+  const la = Math.hypot(a[0] - v[0], a[1] - v[1]), lb = Math.hypot(b[0] - v[0], b[1] - v[1]);
   if (la < 0.3 * lb || lb < 0.3 * la) return null;
   const ang = Math.acos(Math.max(-1, Math.min(1, ((a[0] - v[0]) * (b[0] - v[0]) + (a[1] - v[1]) * (b[1] - v[1])) / (la * lb)))) * 180 / Math.PI;
   if (ang < 20 || ang > 135) return null;
+  // a real corner, not a rounded bend like ( or ): close to the vertex the stroke already turns about as much as overall
+  { let vi = 0, bd = Infinity; P.forEach((q, i) => { const d = Math.hypot(q[0] - v[0], q[1] - v[1]); if (d < bd) { bd = d; vi = i; } });
+    const k = Math.max(3, Math.round(P.length * 0.09)), A = P[Math.max(0, vi - k)], B = P[Math.min(P.length - 1, vi + k)], c = P[vi];
+    const la2 = Math.hypot(A[0] - c[0], A[1] - c[1]), lb2 = Math.hypot(B[0] - c[0], B[1] - c[1]);
+    const loc = la2 && lb2 ? Math.acos(Math.max(-1, Math.min(1, ((A[0] - c[0]) * (B[0] - c[0]) + (A[1] - c[1]) * (B[1] - c[1])) / (la2 * lb2)))) * 180 / Math.PI : 180;
+    if (loc > Math.min(158, ang + 62)) return null; }
   // symmetric chevron: axis from the midpoint of the ends to the vertex, equal arms, same opening angle
   const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], ax = v[0] - m[0], ay = v[1] - m[1], al = Math.hypot(ax, ay) || 1, ux = ax / al, uy = ay / al;
   const arm = (la + lb) / 2, half = ang / 2 * Math.PI / 180;
@@ -276,6 +288,72 @@ export function recognizeChevron(p) {
   // keep the end the pen started on first
   const first = Math.hypot(A[0] - a[0], A[1] - a[1]) <= Math.hypot(B[0] - a[0], B[1] - a[1]) ? [A, B] : [B, A];
   return { k: 'poly', closed: false, pts: [first[0][0], first[0][1], v[0], v[1], first[1][0], first[1][1]], chevron: true };
+}
+function finishPoly(V) {
+  const n = V.length;
+  if (n === 3) {
+    return { k: 'poly', pts: V.flat(), closed: true };
+  }
+  if (n === 4) {
+    const angs = V.map((c, i) => angleAt(V[(i + 3) % 4], c, V[(i + 1) % 4]));
+    if (angs.every(a => Math.abs(a - 90) < 16)) return { k: 'poly', pts: rectFrom(V), closed: true };
+    const e = (i) => [V[(i + 1) % 4][0] - V[i][0], V[(i + 1) % 4][1] - V[i][1]];
+    const par = (u, v) => { const a = Math.abs(Math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])); return Math.min(a, Math.PI - a) < 13 * D2R; };
+    if (par(e(0), e(2)) && par(e(1), e(3))) {
+      let mx = 0, my = 0; V.forEach(q => { mx += q[0]; my += q[1]; }); mx /= 4; my /= 4;
+      const a = [((V[1][0] - V[0][0]) + (V[2][0] - V[3][0])) / 2, ((V[1][1] - V[0][1]) + (V[2][1] - V[3][1])) / 2];
+      const b = [((V[3][0] - V[0][0]) + (V[2][0] - V[1][0])) / 2, ((V[3][1] - V[0][1]) + (V[2][1] - V[1][1])) / 2];
+      // snap the longer pair horizontal if close
+      return { k: 'poly', closed: true, pts: [mx - a[0] / 2 - b[0] / 2, my - a[1] / 2 - b[1] / 2, mx + a[0] / 2 - b[0] / 2, my + a[1] / 2 - b[1] / 2, mx + a[0] / 2 + b[0] / 2, my + a[1] / 2 + b[1] / 2, mx - a[0] / 2 + b[0] / 2, my - a[1] / 2 + b[1] / 2] };
+    }
+    return { k: 'poly', pts: V.flat(), closed: true };
+  }
+  if (n === 5 || n === 6) return { k: 'poly', pts: regularize(V), closed: true };
+  return null;
+}
+
+// an almost-closed polygon (the pen stopped short of, or ran past, where it started): find its corners, meet the two
+// ends where their sides cross, and return the closed polygon — so a square or triangle drawn with a gap isn't flattened
+function closeGap(P, L, diag, chord) {
+  if (chord > 0.42 * diag || diag < 16) return null;
+  let V = rdp(P, Math.max(0.03 * L, 2));
+  // drop near-straight joints and very short sides (hooks), keeping the two ends
+  for (let changed = true; changed && V.length > 3;) {
+    changed = false;
+    for (let i = 1; i < V.length - 1; i++) {
+      const short = Math.hypot(V[i + 1][0] - V[i][0], V[i + 1][1] - V[i][1]) < 0.05 * L && i < V.length - 2;
+      if (angleAt(V[i - 1], V[i], V[i + 1]) > 152 || short) { V.splice(short && angleAt(V[i - 1], V[i], V[i + 1]) <= 152 ? i + 1 : i, 1); changed = true; break; }
+    }
+  }
+  // tiny tail at either end (a flick when the pen landed or lifted)
+  if (V.length > 4 && Math.hypot(V[1][0] - V[0][0], V[1][1] - V[0][1]) < 0.06 * L) V.shift();
+  if (V.length > 4 && Math.hypot(V[V.length - 1][0] - V[V.length - 2][0], V[V.length - 1][1] - V[V.length - 2][1]) < 0.06 * L) V.pop();
+  if (V.length < 4) return null;
+  // a polygon turns the same way at every corner (a Z or W doesn't)
+  const turn = (a, b, c) => (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+  let sg = 0; for (let i = 1; i < V.length - 1; i++) { const t = Math.sign(turn(V[i - 1], V[i], V[i + 1])); if (!sg) sg = t; else if (t && t !== sg) return null; }
+  const a0 = V[0], a1 = V[1], b0 = V[V.length - 1], b1 = V[V.length - 2];
+  const d1 = [a1[0] - a0[0], a1[1] - a0[1]], d2 = [b0[0] - b1[0], b0[1] - b1[1]];
+  const cosA = (d1[0] * d2[0] + d1[1] * d2[1]) / ((Math.hypot(...d1) * Math.hypot(...d2)) || 1);
+  let C;
+  if (cosA > Math.cos(28 * D2R)) C = V.slice(1, -1); // started in the middle of a side: first and last pieces are the same side
+  else {
+    // where the last side (b1→b0, extended) meets the first side (a1→a0, extended back)
+    const ex = a0[0] - a1[0], ey = a0[1] - a1[1], fx = b0[0] - b1[0], fy = b0[1] - b1[1], den = ex * fy - ey * fx;
+    if (Math.abs(den) < 1e-6) return null;
+    const t = ((b1[0] - a1[0]) * fy - (b1[1] - a1[1]) * fx) / den, u = ((b1[0] - a1[0]) * ey - (b1[1] - a1[1]) * ex) / den;
+    if (t < 0.4 || u < 0.4) return null;
+    const X = [a1[0] + ex * t, a1[1] + ey * t];
+    if (Math.hypot(X[0] - a0[0], X[1] - a0[1]) > 0.45 * diag || Math.hypot(X[0] - b0[0], X[1] - b0[1]) > 0.45 * diag) return null;
+    C = [...V.slice(1, -1), X];
+  }
+  if (C.length < 3 || C.length > 4) return null; // (an open C-curve would otherwise pass as a pentagon or hexagon)
+  // the drawn ink must lie on the polygon's sides
+  const n = C.length; let e = 0;
+  for (const q of P) { let m = Infinity; for (let i = 0; i < n; i++) { const a = C[i], b = C[(i + 1) % n]; m = Math.min(m, distSeg(q[0], q[1], a[0], a[1], b[0], b[1])); } e += m; }
+  if (e / P.length / diag > 0.035) return null;
+  for (let i = 0; i < n; i++) { const g = angleAt(C[(i + n - 1) % n], C[i], C[(i + 1) % n]); if (g < 12 || g > 165) return null; }
+  return finishPoly(C);
 }
 export function recognize(p) {
   if (p.length < 8) return null;
@@ -307,6 +385,7 @@ export function recognize(p) {
   const closed = chord < Math.max(0.2 * diag, 8);
 
   if (!closed) {
+    { const pg = closeGap(P, L, diag, chord); if (pg) return pg; }
     // ---- arrow ----
     const S = rdp(P, Math.max(0.035 * L, 2));
     if (S.length >= 3) {
@@ -347,6 +426,8 @@ export function recognize(p) {
   const rot = loop.slice(fi).concat(loop.slice(0, fi)); rot.push(rot[0]);
   let V = rdp(rot, Math.max(0.03 * perim, 2.5)); V.pop();
   V = cleanCorners(V, perim);
+  // the pen stopped a little short of (or past) the start: the bit between end and start isn't a real side
+  if (V.length >= 4 && chord > 0.03 * L) { const pg = closeGap(P, L, diag, chord); if (pg && pg.pts && pg.pts.length / 2 < V.length) return pg; }
   const n = V.length;
   let polyErr = Infinity;
   if (n >= 3 && n <= 6) {
@@ -366,24 +447,7 @@ export function recognize(p) {
   }
   if (!polyWins && n > 6) return E.err < 0.14 && E.sweep > 5 ? { k: 'ellipse', cx: E.cx, cy: E.cy, rx: E.rx, ry: E.ry, rot: E.rot } : null;
   if (polyErr > 0.03) return null;
-  if (n === 3) {
-    return { k: 'poly', pts: V.flat(), closed: true };
-  }
-  if (n === 4) {
-    const angs = V.map((c, i) => angleAt(V[(i + 3) % 4], c, V[(i + 1) % 4]));
-    if (angs.every(a => Math.abs(a - 90) < 16)) return { k: 'poly', pts: rectFrom(V), closed: true };
-    const e = (i) => [V[(i + 1) % 4][0] - V[i][0], V[(i + 1) % 4][1] - V[i][1]];
-    const par = (u, v) => { const a = Math.abs(Math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])); return Math.min(a, Math.PI - a) < 13 * D2R; };
-    if (par(e(0), e(2)) && par(e(1), e(3))) {
-      let mx = 0, my = 0; V.forEach(q => { mx += q[0]; my += q[1]; }); mx /= 4; my /= 4;
-      const a = [((V[1][0] - V[0][0]) + (V[2][0] - V[3][0])) / 2, ((V[1][1] - V[0][1]) + (V[2][1] - V[3][1])) / 2];
-      const b = [((V[3][0] - V[0][0]) + (V[2][0] - V[1][0])) / 2, ((V[3][1] - V[0][1]) + (V[2][1] - V[1][1])) / 2];
-      // snap the longer pair horizontal if close
-      return { k: 'poly', closed: true, pts: [mx - a[0] / 2 - b[0] / 2, my - a[1] / 2 - b[1] / 2, mx + a[0] / 2 - b[0] / 2, my + a[1] / 2 - b[1] / 2, mx + a[0] / 2 + b[0] / 2, my + a[1] / 2 + b[1] / 2, mx - a[0] / 2 + b[0] / 2, my - a[1] / 2 + b[1] / 2] };
-    }
-    return { k: 'poly', pts: V.flat(), closed: true };
-  }
-  if (n === 5 || n === 6) return { k: 'poly', pts: regularize(V), closed: true };
+  if (n >= 3 && n <= 6) return finishPoly(V);
   // fallback: loose ellipse if reasonably round
   if (E.err < 0.14 && E.sweep > 5) return { k: 'ellipse', cx: E.cx, cy: E.cy, rx: E.rx, ry: E.ry, rot: E.rot };
   return null;
@@ -491,4 +555,14 @@ export function shapeAs(p, kind) {
     return { k: 'curve', closed: false, pts: S2.flat() };
   }
   return null;
+}
+
+// what a stroke becomes when the pen is held at its end (the editor's hold-to-shape)
+export function holdShape(xy) {
+  let sh = recognize(xy);
+  // a stroke shaped down-up-right is a square-root sign even when it misses the strict match: never flatten it into a line
+  if ((!sh || (!sh.closed && !sh.radical)) && looksLikeRadical(xy)) { const r = shapeAs(xy, 'radical'); if (r) return r; }
+  else if (!sh || (!sh.closed && !sh.radical && sh.k !== 'ellipse' && sh.k !== 'arrow')) { const br = recognizeChevron(xy) || recognizeBracket(xy); if (br) sh = br; }
+  if (sh && !sh.closed && !sh.radical && !sh.chevron && sh.k !== 'bracket' && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh;
+  return sh;
 }

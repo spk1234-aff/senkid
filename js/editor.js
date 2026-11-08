@@ -6,7 +6,7 @@ import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
-import { recognize, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical, recognizeBracket, recognizeChevron } from './shapes.js';
+import { recognize, holdShape, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical, recognizeBracket, recognizeChevron } from './shapes.js';
 import * as db from './db.js';
 import { isMathBg, mathPaperDialog, describe as describeMath } from './papers.js';
 import { openPenPanel, openEraserPanel, openColorManager } from './penpanel.js';
@@ -1071,11 +1071,7 @@ export class Editor {
     // ignore the jitter after the pen stopped moving (the hold itself)
     const upto = Math.max(4 * STRIDE, Math.min(L.pts.length, (L.holdIdx || L.pts.length) + STRIDE));
     const xy = []; for (let i = 0; i < upto; i += STRIDE) xy.push(L.pts[i], L.pts[i + 1]);
-    let sh = recognize(xy);
-    // a stroke shaped down-up-right is a square-root sign even when it misses the strict match: never flatten it into a line
-    if ((!sh || (!sh.closed && !sh.radical)) && looksLikeRadical(xy)) sh = shapeAs(xy, 'radical') || sh;
-    else if (!sh || (!sh.closed && !sh.radical && sh.k !== 'ellipse')) { const br = recognizeBracket(xy) || recognizeChevron(xy); if (br) sh = br; }
-    if (sh && !sh.closed && !sh.radical && !sh.chevron && sh.k !== 'bracket' && !['ellipse', 'arrow', 'line'].includes(sh.k)) sh = shapeAs(xy, 'line') || sh; // (a square-root sign keeps its three straight segments)
+    let sh = holdShape(xy);
     if (sh) sh = this.tidyWithPrevious(L, sh);
     if (sh) { L.shape = sh; L.rawXY = xy; L.rawPts = Array.from(L.pts.slice(0, upto)); this.need.live = true; try { navigator.vibrate?.(10); } catch { } }
   }
@@ -1555,10 +1551,21 @@ export class Editor {
   placeShapeBar() {
     const sel = this.selStroke(); if (!sel || this.imgBar.dataset.kind !== 'shape') return;
     const r = this.rects.get(sel.page.id), b = strokeBB(sel.s), bar = this.imgBar, bw = bar.offsetWidth || 420, bh = bar.offsetHeight || 50;
-    const X0 = this.ox + (r.x + b[0]) * this.z, X1 = this.ox + (r.x + b[2]) * this.z, Y1 = this.oy + (r.y + b[3]) * this.z, Y0 = this.oy + (r.y + b[1]) * this.z;
-    let x = (X0 + X1) / 2 - bw / 2, y = Y1 + 22; if (y + bh > this.H - 8) y = Y0 - bh - 22;
-    bar.style.left = Math.max(8, Math.min(this.W - bw - 8, x)) + 'px'; bar.style.top = Math.max(60, y) + 'px';
+    // keep clear of the shape AND every handle (ends, rotation knob, move square), so the bar never sits on something you need to drag
+    const sx = (x) => this.ox + (r.x + x) * this.z, sy = (y) => this.oy + (r.y + y) * this.z;
+    let X0 = sx(b[0]), X1 = sx(b[2]), Y0 = sy(b[1]), Y1 = sy(b[3]);
+    try { for (const hd of shapeHandles(sel.s.shape)) { const hx = sx(hd.x), hy = sy(hd.y); X0 = Math.min(X0, hx); X1 = Math.max(X1, hx); Y0 = Math.min(Y0, hy); Y1 = Math.max(Y1, hy); } } catch { }
+    const pad = 30; X0 -= pad; X1 += pad; Y0 -= pad; Y1 += pad;
+    const top = 60, W = this.W, H = this.H, cx = (X0 + X1) / 2 - bw / 2, cy = (Y0 + Y1) / 2 - bh / 2;
+    const clampX = (x) => Math.max(8, Math.min(W - bw - 8, x)), clampY = (y) => Math.max(top, Math.min(H - bh - 8, y));
+    const cands = [[cx, Y1], [cx, Y0 - bh], [X1, cy], [X0 - bw, cy], [8, H - bh - 8], [W - bw - 8, H - bh - 8], [8, top], [W - bw - 8, top]]
+      .map(([x, y]) => [clampX(x), clampY(y)]);
+    const overlap = ([x, y]) => Math.max(0, Math.min(x + bw, X1) - Math.max(x, X0)) * Math.max(0, Math.min(y + bh, Y1) - Math.max(y, Y0));
+    let best = cands[0], bo = Infinity;
+    for (const c of cands) { const o = overlap(c); if (o < bo - 1) { bo = o; best = c; } if (o === 0) break; }
+    bar.style.left = best[0] + 'px'; bar.style.top = best[1] + 'px';
   }
+
 
 
   // ---------- notebook file on the device ----------
