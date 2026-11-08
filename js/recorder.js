@@ -125,7 +125,7 @@ export class Recorder {
         camSub.textContent = (camSel.value ? `เปิด: ${camSel.selectedOptions[0]?.textContent}` : prefs.rec.cam ? `ไม่พบกล้อง "${prefs.rec.camLabel || prefs.rec.cam}" ตอนนี้ · เสียบแล้วเลือกใหม่` : 'ปิดอยู่ · จะอัดเสียงกับลายมืออย่างเดียว') + (force ? ` · พบกล้อง ${devs.length} ตัว${names ? ': ' + names : ''}` : '');
       };
       camRefresh.onclick = () => fillCams(true, true);
-      const startCamPreview = async () => { stopCamPreview(); if (!prefs.rec.cam) return; camSub.textContent = 'กำลังเปิดกล้อง…'; const st = await openCam(); if (!st) { camSub.textContent = 'เปิดกล้องไม่ได้: ' + camErrorText(openCam.lastError); camSub.style.color = 'var(--warn, #b45309)'; return; } camSub.style.color = ''; camSub.textContent = `เปิด: ${camSel.selectedOptions[0]?.textContent} · ${st.getVideoTracks()[0]?.getSettings?.().width || '?'}×${st.getVideoTracks()[0]?.getSettings?.().height || '?'}`; this.camTest = st; const stage = ed?.stage || document.body; showCamPip(stage, st, {}); };
+      const startCamPreview = async () => { stopCamPreview(); if (!prefs.rec.cam) return; if (this.testStream) { this._meterRun = (this._meterRun || 0) + 1; cancelAnimationFrame(this.meterRaf); this.testStream.getTracks().forEach(t => t.stop()); this.testStream = null; this.testCtx?.close?.(); this.testCtx = null; micSub.textContent = 'หยุดทดสอบไมค์ชั่วคราวระหว่างเปิดกล้อง (iPad เปิดทีละอย่างในหน้าตั้งค่า) · ตอนอัดจริงจะเปิดพร้อมกัน'; } camSub.textContent = 'กำลังเปิดกล้อง…'; const st = await openCam(); if (!st) { camSub.textContent = 'เปิดกล้องไม่ได้: ' + camErrorText(openCam.lastError); camSub.style.color = 'var(--warn, #b45309)'; return; } camSub.style.color = ''; camSub.textContent = `เปิด: ${camSel.selectedOptions[0]?.textContent} · ${st.getVideoTracks()[0]?.getSettings?.().width || '?'}×${st.getVideoTracks()[0]?.getSettings?.().height || '?'}`; this.camTest = st; const stage = ed?.stage || document.body; showCamPip(stage, st, {}); };
       const stopCamPreview = () => { hideCamPip(); this.camTest?.getTracks().forEach(t => t.stop()); this.camTest = null; };
       camSel.onchange = () => { prefs.rec.cam = camSel.value; prefs.rec.camLabel = camSel.value ? (camSel.selectedOptions[0]?.textContent || '') : ''; savePrefs(); fillCams(); startCamPreview(); };
       fillCams(true); if (prefs.rec.cam) startCamPreview();
@@ -137,16 +137,25 @@ export class Recorder {
     micSel.onchange = () => { prefs.rec.mic = micSel.value; prefs.rec.micLabel = micSel.value ? (micSel.selectedOptions[0]?.textContent || '') : ''; savePrefs(); fillMics(); if (this.testStream) startMeter(); };
     const stopMeter = () => { try { this._camCleanup?.(); this._camCleanup = null; } catch { } try { navigator.mediaDevices.removeEventListener('devicechange', onDev); } catch { } cancelAnimationFrame(this.meterRaf); this.testStream?.getTracks().forEach(t => t.stop()); this.testStream = null; this.testCtx?.close?.(); this.testCtx = null; };
     const startMeter = async () => {
-      stopMeter();
+      stopMeter(); try { this.camTest?.getTracks().forEach(t => t.stop()); this.camTest = null; hideCamPip(); } catch { }
+      const run = this._meterRun = (this._meterRun || 0) + 1; // a second tap (or iPad's devicechange when the USB mic opens) restarts us: the older run must not touch the new stream
+      testBtn.disabled = true;
       try {
-        this.testStream = await navigator.mediaDevices.getUserMedia({ audio: micSel.value ? { deviceId: { exact: micSel.value } } : true });
-        await fillMics();
+        const st = await navigator.mediaDevices.getUserMedia({ audio: micSel.value ? { deviceId: { exact: micSel.value } } : true });
+        if (run !== this._meterRun) { st.getTracks().forEach(t => t.stop()); return; }
+        this.testStream = st;
+        fillMics(); // refresh the labels in the background: never await it here (iOS reroutes audio while it runs)
         const AC = window.AudioContext || window.webkitAudioContext; this.testCtx = new AC();
-        const an = this.testCtx.createAnalyser(); an.fftSize = 512; this.testCtx.createMediaStreamSource(this.testStream).connect(an);
+        try { await this.testCtx.resume(); } catch { }
+        if (run !== this._meterRun || this.testStream !== st) return;
+        const an = this.testCtx.createAnalyser(); an.fftSize = 512; this.testCtx.createMediaStreamSource(st).connect(an);
+        micSub.textContent = 'กำลังฟัง: ' + (st.getAudioTracks()[0]?.label || 'ไมค์เริ่มต้นของเครื่อง') + ' · พูดแล้วแถบจะขยับ';
+        st.getAudioTracks()[0]?.addEventListener('ended', () => { if (this.testStream === st) { micSub.textContent = 'ไมค์ถูกตัดการเชื่อมต่อ (เครื่องสลับอุปกรณ์เสียง) · กดทดสอบไมค์อีกครั้ง'; stopMeter(); } });
         const buf = new Uint8Array(an.fftSize); const bars = [...meter.children];
         const loop = () => { an.getByteTimeDomainData(buf); let m = 0; for (const v of buf) m = Math.max(m, Math.abs(v - 128)); const lv = Math.min(1, m / 90); bars.forEach((b, i) => { const on = i / bars.length < lv; b.style.background = on ? (i < 16 ? '#1E9E5A' : i < 21 ? '#F5B83D' : '#E5484D') : ''; }); this.meterRaf = requestAnimationFrame(loop); };
         loop();
-      } catch (e) { toast('เปิดไมค์ไม่ได้: ' + (e.message || e.name), 3000, 'warn'); }
+      } catch (e) { if (run === this._meterRun) toast('เปิดไมค์ไม่ได้: ' + micErrorText(e), 4000, 'warn'); }
+      finally { testBtn.disabled = false; }
     };
     testBtn.onclick = startMeter;
     // resolution
@@ -303,7 +312,9 @@ export async function listCams() {
   try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && d.deviceId && d.deviceId !== 'default'); } catch { return []; }
 }
 export const camName = (d, i) => d.label || (i === 0 ? 'กล้องหน้า' : i === 1 ? 'กล้องหลัง' : `กล้อง ${i + 1}`);
-export async function openCam() {
+// withAudio: ask for mic + camera in ONE getUserMedia. iPadOS interrupts a capture that is already running whenever a
+// second capture starts (the mic goes silent or the camera stops) — one combined request avoids that.
+export async function openCam(withAudio = null) {
   const want = prefs.rec.cam; if (!want) return null;
   const hd = (prefs.rec.camRes || 480) >= 720;
   const vid = { width: { ideal: hd ? 1280 : 640 }, height: { ideal: hd ? 720 : 480 }, frameRate: { ideal: 24, max: 30 } };
@@ -317,7 +328,7 @@ export async function openCam() {
   openCam.lastError = null;
   for (const c of tries) {
     try {
-      const st = await navigator.mediaDevices.getUserMedia({ video: c, audio: false });
+      const st = await navigator.mediaDevices.getUserMedia({ video: c, audio: withAudio || false });
       // some external cameras hand over a track that never delivers frames: wait briefly for the first frame
       const ok = await firstFrame(st, 2500);
       if (ok) return st;
@@ -371,6 +382,18 @@ export function showCamPip(stage, stream, { shape = prefs.rec.camShape || 'circl
 }
 export function hideCamPip() { for (const v of document.querySelectorAll('video.campip')) { removeEventListener('resize', v._place); v.srcObject = null; v.remove(); } }
 
+export function micErrorText(e) {
+  const n = (e && e.name) || '';
+  if (/NotAllowed|Permission|Security/i.test(n)) return 'ไม่ได้รับอนุญาตให้ใช้ไมค์ · เปิดที่ ตั้งค่า iPad → Safari → ไมโครโฟน และ ความเป็นส่วนตัว → ไมโครโฟน → Safari';
+  if (/NotFound|Overconstrained/i.test(n)) return 'ไม่พบไมค์ตัวที่เลือก · ลองเลือก "ไมค์เริ่มต้นของเครื่อง"';
+  if (/NotReadable|AbortError|TrackStart/i.test(n)) return 'ไมค์ถูกแอปอื่นหรือระบบใช้อยู่ · ปิดแอปอื่นที่ใช้ไมค์ หรือถอดเสียบใหม่';
+  return (e && (e.message || e.name)) || 'ไม่ทราบสาเหตุ';
+}
+async function micConstraints() {
+  const base = { echoCancellation: true, noiseSuppression: true };
+  const want = await resolveMic();
+  return want ? { ...base, deviceId: { exact: want.deviceId } } : base;
+}
 async function openMic() {
   const base = { echoCancellation: true, noiseSuppression: true };
   const want = await resolveMic();
@@ -428,16 +451,27 @@ export class AudioRecorder {
         }
       } catch { }
     }
-    let stream;
-    try { stream = await openMic(); }
-    catch (e) { toast('เปิดไมค์ไม่ได้: ' + (e.message || e.name) + ' (ตรวจการอนุญาตไมค์ในการตั้งค่า Safari)', 4000, 'warn'); return; }
+    let stream, camStream = null;
+    const wantCam = !!(prefs.rec.cam && !prefs.studentUI);
+    if (wantCam) {
+      // one request for both; if the camera refuses, fall back to mic alone
+      let both = null; try { both = await openCam(await micConstraints()); } catch { }
+      if (both && both.getAudioTracks().length) {
+        stream = new MediaStream(both.getAudioTracks()); stream._micLabel = both.getAudioTracks()[0]?.label || '';
+        camStream = new MediaStream(both.getVideoTracks());
+      } else if (both) { both.getTracks().forEach(t => t.stop()); }
+    }
+    if (!stream) {
+      try { stream = await openMic(); }
+      catch (e) { toast('เปิดไมค์ไม่ได้: ' + micErrorText(e), 4500, 'warn'); return; }
+    }
     const mime = pickAudioMime();
     let mr; try { mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : undefined); } catch { mr = new MediaRecorder(stream); }
     this.stream = stream; this.mr = mr; this.recId = uid(); this.seq = 0; this.bytes = 0; this.writes = [];
     // teacher camera (optional): its own recorder + chunk stream, kept as a hidden companion record
     this.cam = null;
-    if (prefs.rec.cam && !prefs.studentUI) {
-      const cs = await openCam();
+    if (wantCam) {
+      const cs = camStream || await openCam();
       if (!cs) toast('เปิดกล้องครูไม่ได้ (' + camErrorText(openCam.lastError) + ') · อัดเสียง + ลายมืออย่างเดียว', 4500, 'warn');
       else {
         const cmime = pickCamMime(); let cmr; try { cmr = new MediaRecorder(cs, cmime ? { mimeType: cmime, videoBitsPerSecond: (prefs.rec.camRes || 480) >= 720 ? 2e6 : 900e3 } : { videoBitsPerSecond: (prefs.rec.camRes || 480) >= 720 ? 2e6 : 900e3 }); } catch { cmr = new MediaRecorder(cs); }
