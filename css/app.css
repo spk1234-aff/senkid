@@ -1016,3 +1016,10 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .sheet.mv,.sheet.vlib{z-index:48} /* below #layer so dialogs and menus open on top */
 .vlib .top .grow{flex:1}.vlib .top .title{font-size:24px;font-weight:700}
 .vl-play{left:8px;top:auto;bottom:8px;margin:0;width:44px;height:44px}
+/* device check */
+.devchk .dc-row{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:10px;margin:4px 0;background:var(--panel2,rgba(255,255,255,.05))}
+.devchk .dc-row.ok{background:rgba(30,158,90,.14)}.devchk .dc-row.bad{background:rgba(229,72,77,.14)}.devchk .dc-row.wait{opacity:.8}
+.devchk .dc-ico{font-weight:700;font-size:18px;width:22px;flex:none}.devchk .dc-row.ok .dc-ico{color:#1E9E5A}.devchk .dc-row.bad .dc-ico{color:#E5484D}
+.devchk .dc-t{font-weight:600}.devchk .dc-s{font-size:13px;color:var(--muted);word-break:break-word}
+.devchk .dc-rep{width:100%;font:12px/1.4 ui-monospace,monospace;background:var(--panel2,rgba(0,0,0,.2));color:var(--muted);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:8px;padding:8px;resize:vertical}
+.advbox{margin-top:6px;padding:4px 10px;border:1px dashed var(--line,rgba(255,255,255,.14));border-radius:12px}

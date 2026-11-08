@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.66';
+export const VERSION = '1.9.67';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -313,10 +313,11 @@ class App {
     try {
       const R = await import('./recorder.js');
       const { label, peak, err } = await R.micProbe(2000);
-      if (err) it(false, 'ไมค์: เปิดไม่ได้', R.camErrorText(err), null);
+      const dc = { label: 'ตรวจละเอียด', action: () => R.deviceCheck(this.editor) };
+      if (err) it(false, 'ไมค์: เปิดไม่ได้', R.camErrorText(err), dc);
       else it(peak > 0.02 ? true : 'warn', `ไมค์: ${R.micName(label)}`, peak > 0.02 ? `ได้ยินเสียง (ระดับ ${Math.round(peak * 100)}%)` : 'เงียบมาก · พูดใส่ไมค์แล้วกด "ตรวจอีกครั้ง" หรือเลือกไมค์อื่น (กดค้างปุ่มไมค์)', null);
       // camera (only when the teacher turned it on)
-      if (prefs.rec?.cam) { const cams = await R.listCams(); const ok = cams.some(d => d.deviceId === prefs.rec.cam || (prefs.rec.camLabel && d.label === prefs.rec.camLabel)) || prefs.rec.cam === 'user' || prefs.rec.cam === 'environment'; it(ok ? true : 'warn', ok ? `กล้องครู: ${prefs.rec.camLabel || 'กล้องในตัว'}` : `กล้องครู "${prefs.rec.camLabel || prefs.rec.cam}" ไม่พบ`, ok ? 'พร้อมอัด' : 'เสียบกล้องหรือเปลี่ยนเป็นกล้องในตัว (กดค้างปุ่มไมค์)', null); }
+      if (prefs.rec?.cam) { const cams = await R.listCams(); const ok = cams.some(d => d.deviceId === prefs.rec.cam || (prefs.rec.camLabel && d.label === prefs.rec.camLabel)) || prefs.rec.cam === 'user' || prefs.rec.cam === 'environment'; it(ok ? true : 'warn', ok ? `กล้องครู: ${prefs.rec.camLabel || 'กล้องในตัว'}` : `กล้องครู "${prefs.rec.camLabel || prefs.rec.cam}" ไม่พบ`, ok ? 'พร้อมอัด' : 'เสียบกล้องหรือเปลี่ยนเป็นกล้องในตัว (กดค้างปุ่มไมค์)', dc); }
     } catch (e) { console.warn('probe', e); }
     // TV window
     const b = this.broadcast; const paired = prefs.pairedAt && Date.now() - prefs.pairedAt < 12 * 3600e3;
