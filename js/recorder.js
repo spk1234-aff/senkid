@@ -712,6 +712,25 @@ export function scheduleBackgroundUpload(delay = 15000) {
   clearTimeout(bgTimer);
   bgTimer = setTimeout(() => { bgTimer = null; uploadPendingRecordings(); }, delay);
 }
+// bring a clip that lives on Drive back onto this device (one download, then every replay is instant and offline)
+export async function pullBack(meta) {
+  const bz = busy('กำลังดึงคลิปจาก Google Drive มาเก็บในเครื่อง…', fmtBytes(meta.size || 0), 0);
+  try {
+    const one = async (m, label) => {
+      if (!m || !m.drive || m.localCopy) return;
+      bz.set('กำลังดึงคลิปจาก Google Drive มาเก็บในเครื่อง…', label + ' ' + fmtBytes(m.size || 0), 0);
+      const { gfetchBlob } = await import('./sync.js');
+      const b = await gfetchBlob(m.drive, (m.mime || 'video/mp4').split(';')[0]);
+      await db.deleteRec(m.id).catch(() => { }); await db.addChunk(m.id, 0, b);
+      m.localCopy = true; m.size = b.size; await db.put('recs', m);
+    };
+    await one(meta, 'เสียง');
+    if (meta.cam) { try { await one(await db.get('recs', meta.cam), 'กล้องครู'); } catch (e) { console.warn('cam pull', e); } }
+    toast('เก็บสำเนาในเครื่องแล้ว · เปิดเล่นได้ทันทีโดยไม่ต้องใช้เน็ต (ต้นฉบับยังอยู่บน Drive)', 3500);
+    return true;
+  } catch (e) { toast('ดึงจาก Drive ไม่สำเร็จ: ' + (e.auth ? 'ต้องเชื่อมต่อ Google ใหม่' : e.message || e), 4500, 'warn'); return false; }
+  finally { bz.done(); }
+}
 export async function maybeUpload(meta, quiet) {
   if (!syncOn() || prefs.rec.toDrive === false || !meta.done || meta.drive) return null;
   if (quiet && !hasFileScope()) return null;
@@ -741,7 +760,7 @@ export function uploadPendingRecordings(force) {
     if (!syncOn() || prefs.rec.toDrive === false || !hasFileScope() || !navigator.onLine) return;
     if (!uploadAllowedNow(force)) return;
     if (window.senkid?.audio?.state && window.senkid.audio.state !== 'idle') return; // never while a lesson is being recorded
-    const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive && !r.local).sort((a, b) => a.created - b.created);
+    const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive && !r.local && !r.localCopy).sort((a, b) => a.created - b.created);
     let n = 0;
     if (recs.length) toast(`กำลังส่ง ${recs.length} ไฟล์ขึ้น Google Drive อยู่เบื้องหลัง · ใช้งานต่อได้ตามปกติ`, 3000);
     for (const m of recs) {
@@ -753,7 +772,7 @@ export function uploadPendingRecordings(force) {
   return pendingRun;
 }
 export async function recBlob(meta) {
-  if (meta.drive) { const { gfetchBlob } = await import('./sync.js'); return gfetchBlob(meta.drive, (meta.mime || 'video/mp4').split(';')[0]); }
+  if (meta.drive && !meta.localCopy) { const { gfetchBlob } = await import('./sync.js'); return gfetchBlob(meta.drive, (meta.mime || 'video/mp4').split(';')[0]); }
   const chunks = (await db.chunksOf(meta.id)).sort((a, b) => a.seq - b.seq).map(c => c.blob);
   const type = (meta.mime || (meta.kind === 'audio' ? 'audio/mp4' : 'video/mp4')).split(';')[0];
   const raw = new Blob(chunks, { type });

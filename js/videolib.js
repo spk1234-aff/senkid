@@ -46,7 +46,7 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
     try { const S = await import('./sync.js'); driveOk = S.connected() && S.hasFileScope() && prefs.rec?.toDrive !== false; } catch { driveOk = false; }
   };
   const inTab = (r) => cur === 'videos' ? r.kind === 'video' : r.kind === 'audio';
-  const local = (r) => !r.drive && !r.gone; // the file is on this device
+  const local = (r) => (!r.drive || r.localCopy) && !r.gone; // the file is on this device
   const badges = (r) => {
     const out = [];
     if (r.yt) out.push(h('span', { class: 'vl-b yt' }, 'YouTube'));
@@ -109,7 +109,9 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
         close(); if (r.kind === 'video') return (await import('./cut.js')).openCutEditor(app, { addRec: r });
         const all = (await db.getAll('recs')); const chain = (await R()).chainOf(r, all); (await import('./makevideo.js')).openMakeVideo(app, { preselect: chain });
       } },
-      !student && driveOk && local(r) && r.done && { icon: 'cloud', label: 'ย้ายไป Google Drive (คืนพื้นที่เครื่อง)', action: async () => { await (await R()).maybeUpload(r); paint(); } },
+      !student && r.drive && !r.localCopy && r.done && { icon: 'download', label: 'ดึงกลับมาเก็บในเครื่อง (เล่นได้ไม่ต้องใช้เน็ต)', action: async () => { if (await (await R()).pullBack(r)) paint(); } },
+      !student && r.drive && r.localCopy && r.done && { icon: 'trash', label: 'ลบสำเนาในเครื่อง (เก็บไว้บน Drive)', action: async () => { await db.deleteRec(r.id); r.localCopy = false; if (r.cam) { const cm = await db.get('recs', r.cam); if (cm?.localCopy) { await db.deleteRec(cm.id); cm.localCopy = false; await db.put('recs', cm); } } await db.put('recs', r); toast('ลบสำเนาในเครื่องแล้ว', 2000); paint(); } },
+      !student && driveOk && local(r) && !r.drive && r.done && { icon: 'cloud', label: 'ย้ายไป Google Drive (คืนพื้นที่เครื่อง)', action: async () => { await (await R()).maybeUpload(r); paint(); } },
       '-',
       { icon: 'edit', label: 'เปลี่ยนชื่อ', action: () => rename(r) },
       { icon: 'trash', label: 'ลบ', danger: true, action: async () => { if (await (await R()).deleteRecording(r)) { recs = recs.filter(x => x !== r); paint(); } } },
@@ -154,9 +156,10 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   const paintUsage = async () => {
     usage.innerHTML = '';
     let all = recs; try { all = await db.getAll('recs'); } catch { }
-    const mine = all.filter(r => local(r) && r.done); // includes the hidden teacher-camera files, which take real space
+    const mine = all.filter(r => local(r) && r.done);
+    const pendAll = mine.filter(r => !r.drive); // includes the hidden teacher-camera files, which take real space
     const used = mine.reduce((a, r) => a + (r.size || 0), 0);
-    const pend = student ? [] : mine.filter(r => !r.local);
+    const pend = student ? [] : pendAll.filter(r => !r.local);
     let quota = '';
     try { const e = await navigator.storage?.estimate?.(); if (e?.quota) quota = ` · เครื่องเหลือที่ว่าง ${fmtBytes(Math.max(0, e.quota - e.usage))}`; } catch { }
     const freeable = student ? [] : recs.filter(r => local(r) && r.kind === 'video' && r.yt);
