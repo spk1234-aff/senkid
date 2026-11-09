@@ -1023,3 +1023,4 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .devchk .dc-t{font-weight:600}.devchk .dc-s{font-size:13px;color:var(--muted);word-break:break-word}
 .devchk .dc-rep{width:100%;font:12px/1.4 ui-monospace,monospace;background:var(--panel2,rgba(0,0,0,.2));color:var(--muted);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:8px;padding:8px;resize:vertical}
 .advbox{margin-top:6px;padding:4px 10px;border:1px dashed var(--line,rgba(255,255,255,.14));border-radius:12px}
+.vl-make{margin-top:8px;height:40px;font-size:17px;justify-content:center;width:100%}

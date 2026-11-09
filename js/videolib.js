@@ -14,7 +14,7 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   const root = h('div', { class: 'sheet vlib' });
   const closeBtn = h('button', { class: 'btn', title: 'ปิด' }, icon('close'));
   const search = h('input', { class: 'field vl-search', type: 'search', placeholder: 'ค้นหาชื่อคลิป / ชื่อสมุด' });
-  const make = student ? null : h('button', { class: 'pill prim' }, icon('film'), ' ส่งออกวิดีโอ');
+  const make = null; // every lesson card carries its own ทำวิดีโอ button
   const tabs = h('div', { class: 'seg vl-tabs' });
   const groupSeg = h('div', { class: 'seg vl-group' });
   const usage = h('div', { class: 'vl-usage' });
@@ -32,7 +32,7 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   search.oninput = () => { q = search.value.trim().toLowerCase(); paintGrid(); };
   const remember = () => { prefs.vlib = { tab: cur, group }; savePrefs(); };
   if (cur === 'projects') cur = 'lessons';
-  for (const [k, l] of [['lessons', 'บทเรียนที่อัด'], ['videos', 'วิดีโอที่ส่งออก']]) {
+  for (const [k, l] of [['lessons', 'บทเรียนที่อัด'], ['videos', 'วิดีโอ']]) {
     const b = h('button', { 'data-k': k }, l); b.onclick = () => { cur = k; remember(); paint(); }; tabs.append(b);
   }
   for (const [k, l] of [['nb', 'ตามสมุด'], ['date', 'ตามวันที่']]) {
@@ -106,7 +106,8 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
       !student && (r.ytLink || r.drive) && { icon: 'qr', label: 'ลิงก์แชร์', action: () => shareLink(r) },
       playable && !r.gone && { icon: 'share', label: 'แชร์ไฟล์ (LINE, AirDrop)', action: async () => (await R()).shareRecording(r) },
       playable && !r.gone && { icon: 'download', label: 'บันทึกลงเครื่อง', action: async () => (await R()).saveRecording(r) },
-      !student && r.done && !r.gone && r.kind === 'audio' && (r.lesson || r.cam) && { icon: 'film', label: 'ส่งออกวิดีโอสำหรับตัดต่อ (4K)', action: async () => (await import('./exportvideo.js')).openExportVideo(app, r) },
+      !student && r.done && !r.gone && r.kind === 'audio' && (r.lesson || r.cam) && { icon: 'film', label: 'ทำวิดีโอ (รวมเส้น + เสียง + กล้อง)', action: async () => (await import('./exportvideo.js')).makeVideo(app, r) },
+      !student && r.done && !r.gone && r.kind === 'video' && { icon: 'share', label: 'บันทึกลงแอปรูปภาพ', action: async () => (await import('./exportvideo.js')).saveToPhotos(r) },
       !student && r.drive && !r.localCopy && r.done && { icon: 'download', label: 'ดึงกลับมาเก็บในเครื่อง (เล่นได้ไม่ต้องใช้เน็ต)', action: async () => { if (await (await R()).pullBack(r)) paint(); } },
       !student && r.drive && r.localCopy && r.done && { icon: 'trash', label: 'ลบสำเนาในเครื่อง (เก็บไว้บน Drive)', action: async () => { await db.deleteRec(r.id); r.localCopy = false; if (r.cam) { const cm = await db.get('recs', r.cam); if (cm?.localCopy) { await db.deleteRec(cm.id); cm.localCopy = false; await db.put('recs', cm); } } await db.put('recs', r); toast('ลบสำเนาในเครื่องแล้ว', 2000); paint(); } },
       !student && driveOk && local(r) && !r.drive && r.done && { icon: 'cloud', label: 'ย้ายไป Google Drive (คืนพื้นที่เครื่อง)', action: async () => { await (await R()).maybeUpload(r); paint(); } },
@@ -126,6 +127,16 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
       h('div', { class: 'vl-thw' }, cv, h('span', { class: 'vl-dur' }, fmtTime(r.duration || 0)), playBtn, h('div', { class: 'vl-badges' }, ...badges(r))),
       h('div', { class: 'vl-meta' }, h('b', {}, r.name || 'ไม่มีชื่อ'), h('span', {}, `${nbName ? nbName + ' · ' : ''}${d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}${r.size && local(r) ? ' · ' + fmtBytes(r.size) : ''}`)), more);
     playBtn.onclick = (e) => { e.stopPropagation(); playRec(r); };
+    if (!student && r.kind === 'audio' && (r.lesson || r.cam) && r.done && !r.gone) {
+      const mk = h('button', { class: 'pill prim vl-make' }, icon('film'), ' ทำวิดีโอ');
+      mk.onclick = async (e) => { e.stopPropagation(); (await import('./exportvideo.js')).makeVideo(app, r); };
+      el.querySelector('.vl-meta')?.append(mk);
+    }
+    if (!student && r.kind === 'video' && r.done && !r.gone) {
+      const sv = h('button', { class: 'pill prim vl-make' }, icon('share'), ' บันทึกลงรูปภาพ');
+      sv.onclick = async (e) => { e.stopPropagation(); (await import('./exportvideo.js')).saveToPhotos(r); };
+      el.querySelector('.vl-meta')?.append(sv);
+    }
     more.onclick = (e) => { e.stopPropagation(); recMenu(r, more); };
     el.onclick = () => recMenu(r, more);
     requestAnimationFrame(() => thumbOf(r, cv));

@@ -781,7 +781,7 @@ export async function recBlob(meta) {
   try { const { defragMp4 } = await import('./mp4fix.js'); const fixed = await defragMp4(raw); if (fixed) return new Blob([fixed], { type }); } catch (e) { console.warn('mp4 fix', e); }
   return raw;
 }
-function fileName(meta) {
+export function fileName(meta) {
   const d = new Date(meta.created), p = (n) => String(n).padStart(2, '0');
   return `senkid-${meta.kind === 'audio' ? 'audio' : meta.kind === 'cam' ? 'cam' : 'clip'}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${extOf(meta.mime)}`;
 }
@@ -869,7 +869,7 @@ export async function openRecordingsList(nb, app) {
       if (m.drive && m.done && !prefs.studentUI) it.append(B('qr', 'ลิงก์แชร์จาก Google Drive (ใครมีลิงก์ก็ดูได้)', async () => { const bz = busy('กำลังสร้างลิงก์…'); try { const { driveShareLink } = await import('./sync.js'); const link = await driveShareLink(m.drive); m.link = link; await db.put('recs', m); bz.done(); dialog('ลิงก์แชร์', h('div', {}, h('a', { href: link, target: '_blank', rel: 'noopener', style: { wordBreak: 'break-all', fontSize: '20px' } }, link), h('p', { class: 'sub' }, 'ใครมีลิงก์ก็เปิดดู/ดาวน์โหลดได้ · ยกเลิกการแชร์ได้ใน Google Drive')), [{ label: 'คัดลอก', action: () => { navigator.clipboard?.writeText(link).then(() => toast('คัดลอกแล้ว', 1500)).catch(() => { }); return false; } }, { label: 'ปิด', cls: 'prim' }]); } catch (e) { bz.done(); toast('สร้างลิงก์ไม่ได้: ' + (e.message || e), 4000, 'warn'); } }));
       if (m.yt) it.querySelector('.meta div').append(' · YouTube');
       if (m.transcript) it.append(B('edit', 'ข้อความที่ถอดเสียง', async () => { const tx = (await db.get('kv', 'tx:' + m.id))?.v || []; const ta = h('textarea', { class: 'field', rows: 12, style: { width: '100%' } }, tx.map(x => `[${fmtTime(x.t)}] ${x.text}`).join('\n')); dialog('ข้อความที่ถอดเสียง · ' + m.name, ta, [{ label: 'คัดลอก', action: () => { navigator.clipboard?.writeText(ta.value).catch(() => { }); toast('คัดลอกแล้ว', 1500); return false; } }, { label: 'ปิด', cls: 'prim' }], { width: 640 }); }));
-      if (!prefs.studentUI && m.kind === 'audio' && (m.lesson || m.cam)) it.append(B('film', 'ส่งออกวิดีโอ', async () => { dlg?.close(); (await import('./exportvideo.js')).openExportVideo(window.senkid, m); }));
+      if (!prefs.studentUI && m.kind === 'audio' && (m.lesson || m.cam)) it.append(B('film', 'ทำวิดีโอ', async () => { dlg?.close(); (await import('./exportvideo.js')).makeVideo(window.senkid, m); }));
       if (m.drive) { const dl = h('a', { class: 'btn sq', title: 'เปิดใน Google Drive', href: m.link || ('https://drive.google.com/file/d/' + m.drive + '/view'), target: '_blank', rel: 'noopener' }, icon('cloud')); it.append(dl); it.querySelector('.meta div').append(' · อยู่ใน Drive'); }
       else if (syncOn() && hasFileScope() && m.done) it.append(B('cloud', 'ส่งขึ้น Google Drive แล้วลบออกจากเครื่อง', async () => { await maybeUpload(m); render(); }));
       it.append(B('play', 'เปิดดู', () => showRecording(m)), B('download', 'บันทึกไฟล์', () => saveRecording(m)), B('share', 'แชร์', () => shareRecording(m)),
