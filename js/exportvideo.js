@@ -22,20 +22,40 @@ export async function openExportVideo(app, rec) {
     estEl.textContent = `ความยาว ${fmtTime(dur)} · ไฟล์ราว ${fmtBytes(mb * 1e6)} · ใช้เวลาราว ${mins} นาที · ต้องเปิดแอปค้างไว้จนเสร็จ หน้าจอจะไม่ดับเอง`;
   };
   est();
-  dialog('ส่งออกวิดีโอสำหรับตัดต่อ', body, [{ label: 'ยกเลิก' }, {
-    label: 'เริ่มส่งออก', cls: 'prim', icon: 'film', action: async () => {
-      const pr = { id: 'xv-' + rec.id, name: rec.name, clips: [], updated: Date.now() };
-      await addRecClip(pr, rec);
-      pr.clips[0].cam = !!(cam && x.cam === 'pip');
-      const d = pr.clips[0].dur || dur;
-      Q.enqueue({ id: uid(), name: rec.name, project: pr, res: +x.res === 2160 ? 3840 : 1920, dur: d, onDone: async (vmeta, blob) => {
+  // step 1 (tap): make sure the files are on this device, then pre-load the media
+  // step 2 (tap): start — the media elements get their first play() inside this tap, which iPad requires
+  let prepared = null;
+  dialog('ส่งออกวิดีโอสำหรับตัดต่อ', body, [{ label: 'ยกเลิก', action: () => { prepared?.eng?.dispose?.(); } }, {
+    label: 'เตรียมไฟล์', cls: 'prim', icon: 'film', keep: true, action: async (B) => {
+      if (!prepared) {
+        try {
+          if (B) { B.disabled = true; B.textContent = 'กำลังเตรียม…'; }
+          const R = await import('./recorder.js');
+          if (rec.drive && !rec.localCopy) { estEl.textContent = 'กำลังดึงไฟล์จาก Google Drive มาเก็บในเครื่องก่อน (ทำครั้งเดียว)…'; const ok = await R.pullBack(rec); if (!ok) throw new Error('ดึงไฟล์จาก Drive ไม่สำเร็จ'); }
+          const pr = { id: 'xv-' + rec.id, name: rec.name, clips: [], updated: Date.now() };
+          await addRecClip(pr, rec);
+          pr.clips[0].cam = !!(cam && x.cam === 'pip');
+          estEl.textContent = 'กำลังโหลดเสียงและภาพกล้อง…';
+          const { Engine } = await import('./cut.js');
+          const eng = new Engine(pr); await eng.loadAll((i, n) => { estEl.textContent = `กำลังโหลดสื่อ ${i}/${n}…`; });
+          prepared = { pr, eng, d: pr.clips[0].dur || dur };
+          estEl.textContent = `พร้อมแล้ว · ${fmtTime(prepared.d)} · กด "เริ่มแปลงเลย" แล้วเปิดแอปค้างไว้จนเสร็จ`;
+          if (B) { B.disabled = false; B.textContent = ''; B.append(icon('film'), ' เริ่มแปลงเลย'); }
+        } catch (e) { estEl.textContent = 'เตรียมไฟล์ไม่สำเร็จ: ' + (e.message || e); if (B) { B.disabled = false; B.textContent = 'ลองอีกครั้ง'; } }
+        return false;
+      }
+      // unlock every media element inside this user gesture (iPad refuses a programmatic first play())
+      try { for (const s of prepared.eng.srcs.values()) for (const el of [s.audio, s.cam, s.v]) if (el) { const pr0 = el.play(); if (pr0?.then) pr0.then(() => el.pause()).catch(() => { }); else el.pause(); } } catch { }
+      const { pr, eng, d: dd } = prepared;
+      Q.enqueue({ id: uid(), name: rec.name, project: pr, engine: eng, res: +x.res === 2160 ? 3840 : 1920, dur: dd, onDone: async (vmeta, blob) => {
         vmeta.name = rec.name + (x.res === '2160' ? ' · 4K' : ' · 1080p'); vmeta.forEdit = 1; await db.put('recs', vmeta);
         if (cam && x.cam === 'sep') {
-          try { const R = await import('./recorder.js'); const cb = await R.recBlob(cam); const cm = { id: uid(), kind: 'video', name: rec.name + ' · กล้องครู', nb: rec.nb, created: Date.now(), duration: cam.duration || d, size: cb.size, mime: cb.type || 'video/mp4', res: String(prefs.rec.camRes || 480), done: true, forEdit: 1 }; await db.put('recs', cm); await db.addChunk(cm.id, 0, cb); } catch (e) { toast('แยกไฟล์กล้องไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
+          try { const R = await import('./recorder.js'); const cb = await R.recBlob(cam); const cm = { id: uid(), kind: 'video', name: rec.name + ' · กล้องครู', nb: rec.nb, created: Date.now(), duration: cam.duration || dd, size: cb.size, mime: cb.type || 'video/mp4', res: String(prefs.rec.camRes || 480), done: true, forEdit: 1 }; await db.put('recs', cm); await db.addChunk(cm.id, 0, cb); } catch (e) { toast('แยกไฟล์กล้องไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
         }
         toast(`ส่งออก "${rec.name}" เสร็จแล้ว · อยู่ในคลังวิดีโอ แท็บ "วิดีโอที่ส่งออก" · กดบันทึกไฟล์เพื่อนำไปตัดต่อ`, 6000);
       } });
-      toast('เริ่มส่งออกแล้ว · ดูความคืบหน้าที่ป้ายมุมจอ', 2500);
+      toast('เริ่มแปลงแล้ว · ดูความคืบหน้าที่ป้ายมุมจอ · อย่าสลับแอปจนกว่าจะเสร็จ', 3500);
+      return true;
     }
   }], { width: 560 });
 }

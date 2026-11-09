@@ -18,7 +18,7 @@ function release() { try { wake?.release(); } catch { } wake = null; }
 function paint() {
   if (!running && !Q.length) { pill?.remove(); pill = null; return; }
   if (!pill) { pill = h('button', { class: 'xq-pill', 'data-nomirror': '1' }, icon('film'), h('span', { class: 'xq-txt' })); pill.onclick = showQueue; document.body.append(pill); }
-  pill.querySelector('.xq-txt').textContent = (running ? `กำลังส่งออก ${running.pct != null ? Math.round(running.pct * 100) + '%' : ''}` : '') + (Q.length ? ` · รออีก ${Q.length}` : '');
+  pill.querySelector('.xq-txt').textContent = (running ? (running.stage || `กำลังส่งออก ${running.pct != null ? Math.round(running.pct * 100) + '%' : ''}${running.bytes ? ' · ' + fmtBytes(running.bytes) : ''}`) : '') + (Q.length ? ` · รออีก ${Q.length}` : '');
 }
 function showQueue() {
   const list = h('div', { class: 'reclist' });
@@ -32,7 +32,9 @@ async function render(job) {
   const { Engine } = await import('./cut.js');
   const { pickMime, showRecording, creditImage, drawCredit, scheduleBackgroundUpload } = await import('./recorder.js');
   const W = job.res, H = Math.round(W * 9 / 16), pr = job.project;
-  const eng = new Engine(pr); await eng.loadAll();
+  job.stage = 'กำลังเตรียมไฟล์…'; paint();
+  const eng = job.engine || new Engine(pr); if (!job.engine) await eng.loadAll((i, n) => { job.stage = `กำลังเตรียมไฟล์ ${i}/${n}…`; paint(); });
+  job.stage = ''; 
   const cv = h('canvas', { width: W, height: H, style: { position: 'fixed', left: '-9999px', top: 0 } }); document.body.append(cv);
   const ctx = cv.getContext('2d', { alpha: false });
   const stream = cv.captureStream(30);
@@ -43,27 +45,36 @@ async function render(job) {
   await ac.resume();
   const credit = creditImage(H);
   const mime = pickMime(); let mr; try { mr = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: W >= 3840 ? 24e6 : W >= 2560 ? 12e6 : W >= 1920 ? 8e6 : 4e6 } : undefined); } catch { mr = new MediaRecorder(stream); }
-  const chunks = []; mr.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
-  const dur = job.dur; mr.start(1000);
-  const t0 = performance.now(); let t = 0, lastWall = t0;
-  await new Promise(res => {
+  // chunks go straight to IndexedDB: a 40-minute 4K export is several GB, far more than iPad Safari lets a page hold in memory
+  const vid = uid(); let seq = 0, bytes = 0, pendingWrites = [];
+  mr.ondataavailable = (e) => { if (e.data?.size) { bytes += e.data.size; job.bytes = bytes; const pw = db.addChunk(vid, seq++, e.data).catch(err => { job.writeErr = err; }); pendingWrites.push(pw); } };
+  const dur = job.dur; mr.start(2000);
+  const t0 = performance.now(); let t = 0, lastWall = t0, lastAdvance = t0, lastT = -1;
+  await new Promise((res, rej) => {
     const tick = (now) => {
+      if (job.writeErr) return rej(new Error('เขียนไฟล์ลงเครื่องไม่ได้ (พื้นที่เต็ม?) ' + (job.writeErr.message || '')));
       const ck = eng.clockT(); t = ck != null ? ck : t + (now - lastWall); lastWall = now;
       eng.sync(t); eng.draw(ctx, W, H, t); drawCredit(ctx, W, H, credit);
+      if (t > lastT + 50) { lastT = t; lastAdvance = now; }
+      else if (now - lastAdvance > 15000) return rej(new Error('ภาพ/เสียงไม่เดินหน้าเกิน 15 วินาที (iPad อาจหยุดเล่นสื่อ) · ลองกดส่งออกใหม่โดยไม่สลับแอประหว่างแปลง'));
       job.at = t; job.pct = t / dur; if (now - (job.painted || 0) > 500) { job.painted = now; paint(); }
       if (t >= dur + 200 || cancelFlag) return res(); requestAnimationFrame(tick);
     }; requestAnimationFrame(tick);
-  });
+  }).catch(async (e) => { try { mr.stop(); } catch { } eng.pauseAll(); eng.dispose(); try { ac.close(); } catch { } cv.remove(); await Promise.allSettled(pendingWrites); await db.deleteRec(vid).catch(() => { }); throw e; });
   const stopped = new Promise(r => { mr.onstop = r; setTimeout(r, 3000); }); mr.stop(); await stopped;
   eng.pauseAll(); eng.dispose(); try { ac.close(); } catch { } cv.remove();
-  if (cancelFlag) { toast('ยกเลิกการส่งออกแล้ว', 1500); job.onCancel?.(); return; }
-  let blob = new Blob(chunks, { type: (mime || 'video/webm').split(';')[0] });
-  if (blob.type.includes('mp4')) { try { const { defragMp4 } = await import('./mp4fix.js'); const fixed = await defragMp4(blob); if (fixed) blob = new Blob([fixed], { type: blob.type }); } catch { } }
+  await Promise.allSettled(pendingWrites);
+  if (cancelFlag) { await db.deleteRec(vid).catch(() => { }); toast('ยกเลิกการส่งออกแล้ว', 1500); job.onCancel?.(); return; }
+  job.stage = 'กำลังปิดไฟล์…'; paint();
+  const parts = (await db.chunksOf(vid)).sort((a, b) => a.seq - b.seq).map(c => c.blob);
+  let blob = new Blob(parts, { type: (mime || 'video/webm').split(';')[0] });
+  // small files get their MP4 index moved to the front (plays in more apps); huge ones are left as recorded, since that step needs the whole file in memory
+  if (blob.type.includes('mp4') && blob.size < 300e6) { try { const { defragMp4 } = await import('./mp4fix.js'); const fixed = await defragMp4(blob); if (fixed) { blob = new Blob([fixed], { type: blob.type }); await db.deleteRec(vid).catch(() => { }); await db.addChunk(vid, 0, blob); } } catch { } }
   const nb = pr.clips.find(c => c.kind === 'page')?.src?.nb || (await (async () => { const c = pr.clips.find(c => c.kind === 'lesson'); if (!c) return null; return (await db.get('recs', c.src))?.nb || null; })());
-  const vmeta = { id: uid(), kind: 'video', name: job.name + ' · วิดีโอ', nb, created: Date.now(), duration: dur, size: blob.size, mime: blob.type, res: String(H), done: true, fromProject: pr.id };
+  const vmeta = { id: vid, kind: 'video', name: job.name + ' · วิดีโอ', nb, created: Date.now(), duration: dur, size: blob.size, mime: blob.type, res: String(H), done: true, fromProject: pr.id };
   // the title card as the cover picture (library thumbnail + YouTube cover)
   if (job.cover) { try { const { renderCover } = await import('./titlecard.js'); const jpg = await renderCover(job.cover); if (jpg) { await db.putQuiet('kv', { k: 'cover:' + vmeta.id, v: jpg }); vmeta.cover = 1; vmeta.ytCover = 1; } } catch (e) { console.warn('cover', e); } }
-  await db.put('recs', vmeta); await db.addChunk(vmeta.id, 0, blob);
+  await db.put('recs', vmeta); // chunks are already stored under vid
   toast(`ส่งออก "${job.name}" เสร็จแล้ว · ${fmtBytes(blob.size)}`, 4000);
   if (job.onDone) { try { job.onDone(vmeta, blob); } catch { } } else if (!Q.length) showRecording(vmeta, true, blob);
   try { scheduleBackgroundUpload(); } catch { }
