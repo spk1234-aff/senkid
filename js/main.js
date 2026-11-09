@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.67';
+export const VERSION = '1.9.68';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -50,6 +50,8 @@ class App {
     applyTheme(); applyUiFont();
     // fetch a newer version first thing, so a fix still arrives even if this launch goes wrong later
     try { navigator.serviceWorker?.getRegistration?.().then(r => r && r.update()).catch(() => { }); } catch { }
+    if (!prefs.rec.uploadModeV2) { prefs.rec.uploadMode = 'night'; prefs.rec.uploadModeV2 = 1; savePrefs(); } // 1.9.68: clips stay on the device, Drive upload at night or by hand
+    import('./recorder.js').then(R => R.startUploadScheduler?.()).catch(() => { });
     try { await (await import('./i18n.js')).initI18n(); } catch (e) { console.warn('i18n', e); }
     try { applyLock(); } catch (e) { console.warn('lock', e); } // student link / account rule must decide the mode before the first screen
     const boot = document.getElementById('boot'); if (boot) { boot.querySelector('p').textContent = 'กำลังโหลดสมุด…'; }
@@ -274,8 +276,8 @@ class App {
         row('ป้องกันเบราว์เซอร์ลบข้อมูล', persisted),
         row('สำรองสมุดทั้งหมด', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'ส่งออก'); b.onclick = async () => { await this.editor?.flush(); this.exportNotebooks((await db.getAll('notebooks')).map(n => n.id)); }; return b; })()),
         row('นำเข้าไฟล์สำรอง', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('upload'), 'นำเข้า'); b.onclick = () => this.importBackup(); return b; })()),
-        ...(prefs.studentUI ? [] : [row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => this.openRecordings(); return b; })()),
-        row('ทำวิดีโอจากบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เริ่ม'); b.onclick = async () => (await import('./makevideo.js')).openMakeVideo(this); return b; })(), 'เลือกบทเรียน ตัดช่วงเงียบให้เอง ได้วิดีโอ 1 ไฟล์')])),
+        ...(prefs.studentUI ? [] : [row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => { this._closeSettings?.(); this.openRecordings(); }; return b; })()),
+        row('ทำวิดีโอจากบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เริ่ม'); b.onclick = async () => { this._closeSettings?.(); (await import('./makevideo.js')).openMakeVideo(this); }; return b; })(), 'เลือกบทเรียน ตัดช่วงเงียบให้เอง ได้วิดีโอ 1 ไฟล์')])),
       h('div', { class: 'sec-t' }, 'ความช่วยเหลือ'),
       card(
         ...(prefs.studentUI ? [] : [row('สถิติการใช้งาน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('graph'), 'ดู'); b.onclick = async () => (await import('./stats.js')).openStats(); return b; })(), 'เวลาเขียน ต่อทีวี บทเรียนที่อัด (นับในเครื่องนี้)')]),
@@ -286,7 +288,7 @@ class App {
         row('ตรวจหาอัปเดต', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'อัปเดต'); b.onclick = () => this.checkUpdate(b); return b; })()),
         row('ผู้พัฒนา', h('div', { class: 'devcard' }, h('img', { src: 'img/dev.jpg', alt: DEV.name, width: 64, height: 64 }), h('span', { style: { color: 'var(--muted)', textAlign: 'right' } }, nobr(DEV.name), h('br'), h('small', {}, nobr(DEV.org))))))
     );
-    this.sheet('ตั้งค่า', h('div', { class: 'cols' }, left, right));
+    this._closeSettings = this.sheet('ตั้งค่า', h('div', { class: 'cols' }, left, right));
   }
 
   // one page that says whether everything is ready for class, with a fix button beside each problem

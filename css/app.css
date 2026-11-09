@@ -1007,7 +1007,7 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .vl-play svg{width:26px;height:26px}
 .vl-badges{position:absolute;left:8px;top:8px;display:flex;gap:4px;flex-wrap:wrap}
 .vl-b{font-size:14px;line-height:1.55;padding:0 7px;border-radius:6px;color:#fff;background:rgba(0,0,0,.6)}
-.vl-b.yt{background:#E5302B}.vl-b.dr{background:#1F7AE0}.vl-b.lc{background:rgba(40,44,56,.82)}.vl-b.bad{background:#B45309}
+.vl-b.yt{background:#E5302B}.vl-b.dr{background:#1F7AE0}.vl-b.lc{background:rgba(40,44,56,.82)}.vl-b.bad{background:#B45309}.vl-b.cam{background:#7C3AED}.vl-b.ls{background:#1E9E5A}
 .vl-meta{padding:8px 44px 10px 12px;display:flex;flex-direction:column;min-width:0}
 .vl-meta b{font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vl-meta span{font-size:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vl-more{position:absolute;right:4px;bottom:6px}

@@ -52,6 +52,8 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
     if (r.yt) out.push(h('span', { class: 'vl-b yt' }, 'YouTube'));
     if (r.drive) out.push(h('span', { class: 'vl-b dr' }, 'Drive'));
     if (local(r)) out.push(h('span', { class: 'vl-b lc' }, 'ในเครื่อง'));
+    if (r.cam) out.push(h('span', { class: 'vl-b cam' }, 'กล้องครู'));
+    if (r.lesson) out.push(h('span', { class: 'vl-b ls' }, 'ลายมือ'));
     if (!r.done) out.push(h('span', { class: 'vl-b bad' }, 'ไม่สมบูรณ์'));
     return out;
   };
@@ -83,7 +85,7 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   const R = () => import('./recorder.js');
   const playRec = async (r) => {
     if (r.gone && r.ytLink) { window.open(r.ytLink, '_blank', 'noopener'); return; }
-    if (r.lesson) { const { busy } = await import('./ui.js'); const bz = busy('กำลังโหลดเสียง…'); let blob = null; try { blob = await (await R()).recBlob(r); } catch { } finally { bz.done(); } (await import('./lesson.js')).openPlayer(r, blob); return; }
+    if (r.lesson || r.cam) { const { busy } = await import('./ui.js'); const bz = busy('กำลังโหลดเสียง…'); let blob = null; try { blob = await (await R()).recBlob(r); } catch { } finally { bz.done(); } (await import('./lesson.js')).openPlayer(r, blob); return; }
     (await R()).showRecording(r);
   };
   const shareLink = async (r) => {
@@ -97,7 +99,7 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   const recMenu = (r, anchor) => {
     const playable = r.done && (local(r) || r.drive || r.ytLink);
     const items = [
-      playable && { icon: 'play', label: r.lesson ? 'เล่นย้อน (เสียง + ลายมือ)' : r.gone ? 'ดูบน YouTube' : 'เล่น', action: () => playRec(r) },
+      playable && { icon: 'play', label: r.lesson || r.cam ? (r.cam ? 'เล่นย้อน (เสียง + ลายมือ + หน้าครู)' : 'เล่นย้อน (เสียง + ลายมือ)') : r.gone ? 'ดูบน YouTube' : 'เล่น', action: () => playRec(r) },
       r.yt && !r.gone && { icon: 'play', label: 'ดูบน YouTube', action: () => window.open(r.ytLink, '_blank', 'noopener') },
       !student && r.kind === 'video' && r.done && !r.gone && { icon: 'upload', label: r.yt ? 'ส่งขึ้น YouTube อีกครั้ง' : 'ส่งขึ้น YouTube', action: () => import('./youtube.js').then(x => x.uploadToYouTube(r)) },
       !student && (r.ytLink || r.drive) && { icon: 'qr', label: 'ลิงก์แชร์', action: () => shareLink(r) },
@@ -151,13 +153,22 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   // ---------- storage ----------
   const paintUsage = async () => {
     usage.innerHTML = '';
-    const mine = recs.filter(r => local(r));
+    let all = recs; try { all = await db.getAll('recs'); } catch { }
+    const mine = all.filter(r => local(r) && r.done); // includes the hidden teacher-camera files, which take real space
     const used = mine.reduce((a, r) => a + (r.size || 0), 0);
+    const pend = student ? [] : mine.filter(r => !r.local);
     let quota = '';
     try { const e = await navigator.storage?.estimate?.(); if (e?.quota) quota = ` · เครื่องเหลือที่ว่าง ${fmtBytes(Math.max(0, e.quota - e.usage))}`; } catch { }
     const freeable = student ? [] : recs.filter(r => local(r) && r.kind === 'video' && r.yt);
     const info = h('div', {}, h('b', {}, `คลิปในเครื่อง ${mine.length} ไฟล์ · ${fmtBytes(used)}`), h('span', { class: 'sub' }, quota));
     usage.append(info);
+    if (pend.length && driveOk) {
+      const sz = pend.reduce((a, r) => a + (r.size || 0), 0);
+      const R = await import('./recorder.js');
+      const b = h('button', { class: 'pill prim' }, icon('cloud'), `ส่งขึ้น Drive ตอนนี้ (${pend.length} ไฟล์ · ${fmtBytes(sz)})`);
+      b.onclick = async () => { b.disabled = true; b.textContent = 'กำลังส่ง…'; try { await R.uploadPendingRecordings(true); } finally { paint(); } };
+      usage.append(b, h('span', { class: 'sub' }, R.uploadMode() === 'night' ? 'หรือปล่อยให้ส่งเองตอน 01:00–05:00 เมื่อแอปเปิดอยู่' : R.uploadMode() === 'manual' ? 'ตั้งค่าไว้ให้กดส่งเองเท่านั้น' : ''));
+    }
     if (freeable.length) {
       const sz = freeable.reduce((a, r) => a + (r.size || 0), 0);
       const b = h('button', { class: 'pill sec' }, icon('trash'), `ลบสำเนาในเครื่องที่อยู่บน YouTube แล้ว (${freeable.length} · ${fmtBytes(sz)})`);

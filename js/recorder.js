@@ -180,7 +180,7 @@ export class Recorder {
     adv.append(stats, h('div', { style: { height: '6px' } }),
       row(audioOnly ? 'เก็บไฟล์เสียงใน Google Drive' : 'เก็บคลิปใน Google Drive', toggle(prefs.rec.toDrive !== false && syncOn(), v => { prefs.rec.toDrive = v; savePrefs(); if (v) uploadPendingRecordings(); }), syncOn() ? 'อัดเสร็จแล้วส่งขึ้น Drive (โฟลเดอร์ เส้นคิด/คลิป) แล้วลบออกจากเครื่อง · ประหยัดพื้นที่ iPad' : 'ต้องเปิดซิงก์ผ่าน Google Drive ในตั้งค่าก่อน'),
       ...(audioOnly && !prefs.studentUI && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) ? [row('ถอดเสียงเป็นข้อความระหว่างอัด', toggle(!!prefs.rec.transcript, v => { prefs.rec.transcript = v; savePrefs(); }), 'ทดลอง · ใช้ระบบรู้จำเสียงของเครื่อง (ต้องมีเน็ต) ได้ข้อความคร่าว ๆ ไว้ค้นหา/ทำคำบรรยาย · บางเครื่องอาจทำให้ไมค์สะดุด ถ้าเป็นแบบนั้นให้ปิด')] : []),
-      row('เวลาส่งขึ้น Drive', (() => { const sel = h('select', { class: 'sel' }, h('option', { value: 'bg' }, 'เบื้องหลัง หลังอัดเสร็จ'), h('option', { value: 'manual' }, 'กดส่งเองในคลิปที่อัดไว้')); sel.value = prefs.rec.uploadMode === 'manual' ? 'manual' : 'bg'; sel.onchange = () => { prefs.rec.uploadMode = sel.value; savePrefs(); }; return sel; })(), 'อัดเสร็จจะเก็บลงเครื่องก่อนเสมอ ใช้งานต่อได้ทันที · การส่งขึ้น Drive ทำเบื้องหลังไม่บังหน้าจอ'),
+      row('เวลาส่งขึ้น Drive', (() => { const sel = h('select', { class: 'sel' }, h('option', { value: 'night' }, 'กลางคืน 01:00–05:00 (ถ้าแอปเปิดอยู่)'), h('option', { value: 'bg' }, 'ทันทีหลังอัดเสร็จ'), h('option', { value: 'manual' }, 'กดส่งเองเท่านั้น')); sel.value = uploadMode(); sel.onchange = () => { prefs.rec.uploadMode = sel.value; savePrefs(); if (sel.value === 'bg') uploadPendingRecordings(); }; return sel; })(), 'คลิปเก็บลงเครื่องก่อนเสมอ เปิดเล่นได้ทันที · กลางคืน: เสียบชาร์จแล้วเปิดเส้นคิดค้างไว้ แอปจะส่งให้เอง · กดส่งเองได้ทุกเมื่อในคลังวิดีโอ'),
       ...(audioOnly ? [] : [row('เตือนเมื่ออัดนานเกิน 25 นาที', toggle(prefs.rec.warn25, v => { prefs.rec.warn25 = v; savePrefs(); }))]),
       ...(audioOnly ? [] : [row('รูปแบบไฟล์', h('span', { style: { color: 'var(--muted)' } }, mime ? (mime.includes('mp4') ? 'MP4' : 'WebM (เครื่องนี้ไม่รองรับ MP4)') : 'ค่าเริ่มต้นของเบราว์เซอร์')),
       row('ให้นาฬิกาจับเวลาติดไปในคลิป', toggle(this.app.timer.s.inClip, v => { this.app.timer.s.inClip = v; this.app.timer.save(); }))]));
@@ -268,7 +268,7 @@ export class Recorder {
     if (this.state === 'idle') return;
     const bz = busy('กำลังบันทึกคลิป…', 'รอสักครู่ อย่าเพิ่งปิดแอป');
     try { await this._stop(); } finally { bz.done(); }
-    const blob = await maybeUpload(this.meta);
+    const blob = uploadMode() === 'bg' ? await maybeUpload(this.meta) : null;
     await showRecording(this.meta, true, blob);
   }
   async _stop() {
@@ -677,9 +677,14 @@ export class AudioRecorder {
     try { await this.wake?.release(); } catch { }
     this.state = 'idle'; this.syncButton();
     await Promise.all(this.writes);
-    let lessonBytes = 0; try { lessonBytes = await this.app.timeline?.stop(); } catch (e) { console.warn('timeline stop', e); }
+    let lessonBytes = 0, lessonWhy = '';
+    try { lessonBytes = await this.app.timeline?.stop(); if (!this.app.timeline) lessonWhy = 'no-timeline'; } catch (e) { console.warn('timeline stop', e); lessonWhy = 'stop:' + (e.message || e); }
+    // the handwriting file may still exist (autosaved every few seconds) even when stop() reported nothing — trust the file
+    if (!lessonBytes) { try { const kv = await db.get('kv', 'lesson:' + this.recId); if (kv?.v) { lessonBytes = kv.v.length; lessonWhy += ' recovered-from-kv'; } else lessonWhy += ' no-kv'; } catch { } }
+    if (!lessonBytes && !lessonWhy) lessonWhy = 'inactive';
     const tx = this.stopTranscript(); if (tx.length) { this.meta.transcript = true; try { await db.putQuiet('kv', { k: 'tx:' + this.recId, v: tx }); } catch { } }
-    Object.assign(this.meta, { duration: dur, size: this.bytes, done: true, lesson: lessonBytes > 0 });
+    Object.assign(this.meta, { duration: dur, size: this.bytes, done: true, lesson: lessonBytes > 0 || !!this.meta.cam, lessonWhy: lessonBytes > 0 ? undefined : lessonWhy });
+    if (!lessonBytes) console.warn('lesson timeline missing:', lessonWhy);
     await db.put('recs', this.meta);
     toast(`บันทึกเสียงลงเครื่องแล้ว (${fmtTime(dur)}) · เล่นย้อนพร้อมลายมือได้ที่ปุ่มส่งออก > เสียงที่อัดในสมุดเล่มนี้`, 3500);
     scheduleBackgroundUpload();
@@ -689,8 +694,21 @@ export class AudioRecorder {
 // after recording: push to Drive and free the space on this device
 // recordings are always saved on the device first; Drive upload runs later in the background (or by hand), never blocking the teacher
 let bgTimer = null;
+// upload policy: 'night' (default) = only between 01:00 and 05:00 while the app is open and idle; 'bg' = right after
+// recording; 'manual' = only when the teacher presses "ส่งขึ้น Drive". Night/manual keep the clip on the device first,
+// so the lesson is instantly replayable and the teacher's network is free during class.
+export function uploadMode() { return prefs.rec.uploadMode || 'night'; }
+export function inNightWindow(d = new Date()) { const hr = d.getHours(); return hr >= 1 && hr < 5; }
+export function uploadAllowedNow(force) { if (force) return true; const m = uploadMode(); if (m === 'manual') return false; if (m === 'night') return inNightWindow(); return true; }
+let nightTimer = null;
+export function startUploadScheduler() {
+  clearInterval(nightTimer);
+  const tick = () => { if (document.visibilityState !== 'visible') return; if (uploadMode() === 'night' && inNightWindow() && !pendingRun) uploadPendingRecordings(); };
+  nightTimer = setInterval(tick, 10 * 60e3); setTimeout(tick, 20e3);
+  document.addEventListener('visibilitychange', tick);
+}
 export function scheduleBackgroundUpload(delay = 15000) {
-  if (prefs.rec.uploadMode === 'manual') return;
+  if (uploadMode() !== 'bg') return;
   clearTimeout(bgTimer);
   bgTimer = setTimeout(() => { bgTimer = null; uploadPendingRecordings(); }, delay);
 }
@@ -706,6 +724,8 @@ export async function maybeUpload(meta, quiet) {
     meta.drive = r.id; meta.link = r.webViewLink; meta.size = blob.size; meta.mime = blob.type;
     await db.put('recs', meta);
     await db.deleteRec(meta.id); await db.put('recs', meta); // drop the local chunks, keep the record
+    // the teacher-camera clip travels with its lesson: send it right away rather than waiting for the background pass
+    if (meta.cam) { try { const cm = await db.get('recs', meta.cam); if (cm && cm.done && !cm.drive) { bz.set('กำลังส่งภาพกล้องครูขึ้น Google Drive…', fmtBytes(cm.size || 0), 0); const cb = await recBlob(cm); const rc = await uploadRecording(cb, fileName(cm), (t, p) => bz.set('กำลังส่งภาพกล้องครูขึ้น Google Drive…', t, p)); cm.drive = rc.id; cm.link = rc.webViewLink; cm.size = cb.size; cm.mime = cb.type; await db.deleteRec(cm.id); await db.put('recs', cm); } } catch (e) { console.warn('cam upload', e); } }
     scheduleSync(3000);
     if (!quiet) toast('เก็บคลิปใน Google Drive แล้ว (โฟลเดอร์ เส้นคิด/คลิป) · ไม่กินพื้นที่เครื่อง', 3500);
     return blob;
@@ -719,7 +739,8 @@ export function uploadPendingRecordings(force) {
   if (pendingRun) return pendingRun;
   pendingRun = (async () => {
     if (!syncOn() || prefs.rec.toDrive === false || !hasFileScope() || !navigator.onLine) return;
-    if (prefs.rec.uploadMode === 'manual' && !force) return;
+    if (!uploadAllowedNow(force)) return;
+    if (window.senkid?.audio?.state && window.senkid.audio.state !== 'idle') return; // never while a lesson is being recorded
     const recs = (await db.getAll('recs')).filter(r => r.done && !r.drive && !r.local).sort((a, b) => a.created - b.created);
     let n = 0;
     if (recs.length) toast(`กำลังส่ง ${recs.length} ไฟล์ขึ้น Google Drive อยู่เบื้องหลัง · ใช้งานต่อได้ตามปกติ`, 3000);
@@ -761,15 +782,19 @@ export async function showRecording(meta, fresh, blob) {
   const body = h('div');
   if (meta.kind === 'audio') body.append(h('audio', { src: url, controls: true, style: { width: '100%', marginTop: '8px' } }));
   else body.append(h('video', { class: 'preview', src: url, controls: true, playsinline: true }));
+  let cam = null; if (meta.cam) { try { cam = await db.get('recs', meta.cam); } catch { } }
+  const parts = meta.kind === 'audio' ? [`เสียง ${fmtBytes(blob.size)}`, meta.lesson ? 'ลายมือ ✓' : null, meta.cam ? (cam ? `กล้องครู ✓ ${fmtBytes(cam.size || 0)}${cam.drive ? ' (Drive)' : ' (ในเครื่อง)'}` : 'กล้องครู: ไฟล์หาย') : null].filter(Boolean).join(' · ') : fmtBytes(blob.size) + ' · ' + (meta.res === '2160' ? '4K' : meta.res + 'p');
   body.append(h('div', { class: 'stats' },
     h('div', {}, h('span', {}, 'ความยาว'), h('b', {}, fmtTime(meta.duration || 0))),
-    h('div', {}, h('span', {}, 'ขนาดไฟล์'), h('b', {}, fmtBytes(blob.size) + (meta.kind === 'audio' ? ' · เสียง' : ' · ' + (meta.res === '2160' ? '4K' : meta.res + 'p'))))));
+    h('div', {}, h('span', {}, meta.kind === 'audio' && meta.lesson ? 'บทเรียนนี้มี' : 'ขนาดไฟล์'), h('b', { style: { fontSize: meta.lesson ? '20px' : '' } }, parts))));
+  if (meta.kind === 'audio' && meta.lesson) body.append(h('p', { style: { fontSize: '19px', color: 'var(--muted)', margin: '10px 0 0' } }, 'ตัวเล่นด้านบนเป็นไฟล์เสียงดิบ · กด "เล่นย้อน" เพื่อดูลายมือ' + (meta.cam ? 'และหน้าครู' : '') + 'เขียนตามเสียง หรือ "ทำวิดีโอ" เพื่อรวมเป็น MP4'));
   body.append(h('p', { style: { fontSize: '19px', color: 'var(--muted)', margin: '12px 0 0' } }, meta.drive ? 'คลิปอยู่ใน Google Drive (โฟลเดอร์ เส้นคิด/คลิป) ไม่กินพื้นที่เครื่อง · เปิดดูอีกครั้งได้ที่เมนู > คลิปที่อัดไว้' : 'คลิปเก็บไว้ในแอปแล้ว เปิดดูอีกครั้งได้ที่เมนู > คลิปที่อัดไว้ · บน iPad กด "แชร์" แล้วเลือก "บันทึกวิดีโอ" เพื่อเก็บลงแอปรูปภาพ'));
   if (meta.ytLink) body.append(h('p', { style: { margin: '8px 0 0' } }, 'YouTube: ', h('a', { href: meta.ytLink, target: '_blank', rel: 'noopener' }, meta.ytLink)));
   dialog(fresh ? 'อัดคลิปเสร็จแล้ว' : meta.name, body, [
+    ...(meta.kind === 'audio' && (meta.lesson || meta.cam) ? [{ label: 'เล่นย้อน', icon: 'play', cls: 'prim', action: () => { import('./lesson.js').then(m => m.openPlayer(meta, blob)); } }] : []),
     { label: 'บันทึกไฟล์', icon: 'download', action: () => { saveRecording(meta); return false; } },
     ...(meta.kind === 'video' && !prefs.studentUI ? [{ label: meta.yt ? 'YouTube อีกครั้ง' : 'ส่งขึ้น YouTube', icon: 'upload', action: () => { import('./youtube.js').then(m => m.uploadToYouTube(meta, blob)); } }] : []),
-    { label: meta.kind === 'audio' ? 'แชร์ / ส่งต่อ' : 'แชร์ / บันทึกลงรูปภาพ', icon: 'share', cls: 'prim', flex: 2, action: () => { shareRecording(meta); return false; } },
+    { label: meta.kind === 'audio' ? 'แชร์ไฟล์เสียง' : 'แชร์ / บันทึกลงรูปภาพ', icon: 'share', cls: meta.kind === 'audio' && meta.lesson ? '' : 'prim', flex: meta.kind === 'audio' && meta.lesson ? 1 : 2, action: () => { shareRecording(meta); return false; } },
   ], { width: 760, onClose: () => URL.revokeObjectURL(url) });
 }
 

@@ -146,7 +146,19 @@ export async function deleteLesson(id) { try { await db.del('kv', KV(id)); } cat
 export async function openPlayer(meta, audioBlob) {
   const bz = busy('กำลังเตรียมบทเรียน…');
   let data; try { data = await loadLesson(meta.id); } finally { bz.done(); }
-  if (!data) return toast('ไม่พบข้อมูลลายมือของการอัดนี้', 2500, 'warn');
+  if (!data) {
+    // no handwriting file (older clip, or the recorder lost it): still play the audio and the teacher camera over the notebook's current pages
+    if (!meta.cam) return toast('ไม่พบข้อมูลลายมือของการอัดนี้', 2500, 'warn');
+    toast('ไม่พบลายมือของการอัดนี้ · เล่นเสียงกับหน้าครูบนหน้ากระดาษปัจจุบันแทน', 3500, 'warn');
+    let pg = null; try { pg = meta.page && await db.get('pages', meta.page); } catch { }
+    const W = pg?.w || 1366, H = pg?.h || 1024;
+    const base = pg ? { ...serializePage(pg), strokes: await Promise.all((pg.strokes || []).map(strokeOut)) } : { id: 'p', w: W, h: H, strokes: [] };
+    const pid = pg?.id || 'p';
+    data = { v: 1, id: meta.id, duration: meta.duration || 0, final: true, events: [
+      [0, 'meta', { nb: meta.nb, name: meta.name, paper: pg?.paper || 'cream' }],
+      [0, 'base', pid, base],
+      [0, 'view', { world: [0, 0, W, H], vis: [pid], rects: { [pid]: { x: 0, y: 0, w: W, h: H } }, paper: pg?.paper || 'cream' }]] };
+  }
   const st = new State(data); await st.prepare();
   const dur = Math.max(data.duration || 0, meta.duration || 0, data.events.at(-1)?.[0] || 0);
   for (const sc of document.querySelectorAll('#layer .scrim')) sc.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); // close the list the player was opened from
