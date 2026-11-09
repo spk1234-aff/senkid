@@ -10,11 +10,11 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   open?.close();
   const student = !!prefs.studentUI;
   const st = prefs.vlib || {};
-  let cur = student ? 'lessons' : (tab || st.tab || 'videos'), q = '', group = st.group || 'nb', nbOnly = nb;
+  let cur = student ? 'lessons' : (tab || st.tab || 'lessons'), q = '', group = st.group || 'nb', nbOnly = nb;
   const root = h('div', { class: 'sheet vlib' });
   const closeBtn = h('button', { class: 'btn', title: 'ปิด' }, icon('close'));
   const search = h('input', { class: 'field vl-search', type: 'search', placeholder: 'ค้นหาชื่อคลิป / ชื่อสมุด' });
-  const make = student ? null : h('button', { class: 'pill prim' }, icon('film'), 'ทำวิดีโอ');
+  const make = student ? null : h('button', { class: 'pill prim' }, icon('film'), ' ส่งออกวิดีโอ');
   const tabs = h('div', { class: 'seg vl-tabs' });
   const groupSeg = h('div', { class: 'seg vl-group' });
   const usage = h('div', { class: 'vl-usage' });
@@ -28,10 +28,11 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
   const close = () => { root.remove(); document.removeEventListener('senkid:rec-moved', paint); open = null; };
   open = { close };
   closeBtn.onclick = close;
-  if (make) make.onclick = async () => { close(); (await import('./makevideo.js')).openMakeVideo(app); };
+  if (make) make.onclick = () => { if (cur !== 'lessons') { cur = 'lessons'; remember(); paint(); } toast('เลือกบทเรียนที่จะส่งออก แล้วกด ⋯ → ส่งออกวิดีโอ (4K)', 3500); };
   search.oninput = () => { q = search.value.trim().toLowerCase(); paintGrid(); };
   const remember = () => { prefs.vlib = { tab: cur, group }; savePrefs(); };
-  for (const [k, l] of [['videos', 'วิดีโอที่ทำแล้ว'], ['lessons', 'บทเรียนที่อัด'], ['projects', 'โปรเจกต์ตัดต่อ']]) {
+  if (cur === 'projects') cur = 'lessons';
+  for (const [k, l] of [['lessons', 'บทเรียนที่อัด'], ['videos', 'วิดีโอที่ส่งออก']]) {
     const b = h('button', { 'data-k': k }, l); b.onclick = () => { cur = k; remember(); paint(); }; tabs.append(b);
   }
   for (const [k, l] of [['nb', 'ตามสมุด'], ['date', 'ตามวันที่']]) {
@@ -101,14 +102,11 @@ export function openVideoLibrary(app, { nb = null, tab = null } = {}) {
     const items = [
       playable && { icon: 'play', label: r.lesson || r.cam ? (r.cam ? 'เล่นย้อน (เสียง + ลายมือ + หน้าครู)' : 'เล่นย้อน (เสียง + ลายมือ)') : r.gone ? 'ดูบน YouTube' : 'เล่น', action: () => playRec(r) },
       r.yt && !r.gone && { icon: 'play', label: 'ดูบน YouTube', action: () => window.open(r.ytLink, '_blank', 'noopener') },
-      !student && r.kind === 'video' && r.done && !r.gone && { icon: 'upload', label: r.yt ? 'ส่งขึ้น YouTube อีกครั้ง' : 'ส่งขึ้น YouTube', action: () => import('./youtube.js').then(x => x.uploadToYouTube(r)) },
+      // (YouTube upload is hidden: export for external editing is the only video path now)
       !student && (r.ytLink || r.drive) && { icon: 'qr', label: 'ลิงก์แชร์', action: () => shareLink(r) },
       playable && !r.gone && { icon: 'share', label: 'แชร์ไฟล์ (LINE, AirDrop)', action: async () => (await R()).shareRecording(r) },
       playable && !r.gone && { icon: 'download', label: 'บันทึกลงเครื่อง', action: async () => (await R()).saveRecording(r) },
-      !student && r.done && !r.gone && ((r.kind === 'audio' && r.lesson) || r.kind === 'video') && { icon: 'film', label: r.kind === 'video' ? 'ตัดต่อวิดีโอนี้' : 'ทำวิดีโอจากบทเรียนนี้', action: async () => {
-        close(); if (r.kind === 'video') return (await import('./cut.js')).openCutEditor(app, { addRec: r });
-        const all = (await db.getAll('recs')); const chain = (await R()).chainOf(r, all); (await import('./makevideo.js')).openMakeVideo(app, { preselect: chain });
-      } },
+      !student && r.done && !r.gone && r.kind === 'audio' && (r.lesson || r.cam) && { icon: 'film', label: 'ส่งออกวิดีโอสำหรับตัดต่อ (4K)', action: async () => (await import('./exportvideo.js')).openExportVideo(app, r) },
       !student && r.drive && !r.localCopy && r.done && { icon: 'download', label: 'ดึงกลับมาเก็บในเครื่อง (เล่นได้ไม่ต้องใช้เน็ต)', action: async () => { if (await (await R()).pullBack(r)) paint(); } },
       !student && r.drive && r.localCopy && r.done && { icon: 'trash', label: 'ลบสำเนาในเครื่อง (เก็บไว้บน Drive)', action: async () => { await db.deleteRec(r.id); r.localCopy = false; if (r.cam) { const cm = await db.get('recs', r.cam); if (cm?.localCopy) { await db.deleteRec(cm.id); cm.localCopy = false; await db.put('recs', cm); } } await db.put('recs', r); toast('ลบสำเนาในเครื่องแล้ว', 2000); paint(); } },
       !student && driveOk && local(r) && !r.drive && r.done && { icon: 'cloud', label: 'ย้ายไป Google Drive (คืนพื้นที่เครื่อง)', action: async () => { await (await R()).maybeUpload(r); paint(); } },
