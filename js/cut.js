@@ -326,7 +326,7 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
       const recs = (await db.getAll('recs')).filter(r => r.done && !r.hidden).sort((a, b) => b.created - a.created);
       const nbs = new Map((await db.getAll('notebooks')).map(n => [n.id, n]));
       const item = (title, sub, fn) => { const b = h('button', { class: 'mvitem' }, h('span', {}, title), h('span', { class: 'n' }, sub)); b.onclick = fn; return b; };
-      if (cur === 'lesson') { const l = recs.filter(r => r.kind === 'audio' && r.lesson); if (!l.length) body.append(h('div', { class: 'sub' }, 'ยังไม่มีบทเรียนที่อัด')); for (const r of l) body.append(item(r.name, `${nbs.get(r.nb)?.name || ''} · ${fmtTime(r.duration || 0)}`, async () => { d.close(); await withBusy(() => addRecClip(pr, r)); changed(); })); }
+      if (cur === 'lesson') { const l = recs.filter(r => r.kind === 'audio' && (r.lesson || r.cam) && r.done); if (!l.length) body.append(h('div', { class: 'sub' }, 'ยังไม่มีบทเรียนที่อัด')); for (const r of l) body.append(item(r.name, `${nbs.get(r.nb)?.name || ''} · ${fmtTime(r.duration || 0)}`, async () => { d.close(); await withBusy(() => addRecClip(pr, r)); changed(); })); }
       else if (cur === 'video') { const l = recs.filter(r => r.kind === 'video'); if (!l.length) body.append(h('div', { class: 'sub' }, 'ยังไม่มีวิดีโอในแอป (ส่งออกบทเรียนเป็นวิดีโอ หรือเพิ่มจากเครื่อง)')); for (const r of l) body.append(item(r.name, `${fmtTime(r.duration || 0)} · ${fmtBytes(r.size)}`, async () => { d.close(); await withBusy(() => addRecClip(pr, r)); changed(); })); }
       else if (cur === 'page') { const list = [...nbs.values()].sort((a, b) => (b.updated || 0) - (a.updated || 0)).slice(0, 30); for (const n of list) body.append(item(n.name, `${n.pages?.length || 0} หน้า`, () => pickPage(n))); }
       else if (cur === 'device') { body.append(h('p', { class: 'sub' }, 'วิดีโอ MP4/MOV หรือรูปจากแอปไฟล์/รูปภาพ · วิดีโอจะถูกคัดลอกเก็บในแอป'), h('button', { class: 'pill prim', onclick: async () => { const f = await pickFile('video/*,image/*'); if (!f) return; d.close(); await withBusy(() => addDeviceFile(pr, f)); changed(); } }, icon('folder'), 'เลือกไฟล์…')); }
@@ -403,7 +403,7 @@ export async function openCutEditor(app, { projectId = null, addRec = null, addR
 
 // ---------- helpers to add clips ----------
 export async function addRecClip(pr, r) {
-  if (r.kind === 'audio' && r.lesson) { const c = { id: uid(), kind: 'lesson', src: r.id, name: r.name, in: 0, out: r.duration || 0, dur: r.duration || 0, speed: 1 }; const s = new LessonSrc(c); await s.load(); c.dur = s.dur; c.out = s.dur; s.dispose(); pr.clips.push(c); }
+  if (r.kind === 'audio' && (r.lesson || r.cam)) { const c = { id: uid(), kind: 'lesson', src: r.id, name: r.name, in: 0, out: r.duration || 0, dur: r.duration || 0, speed: 1 }; const s = new LessonSrc(c); await s.load(); c.dur = s.dur; c.out = s.dur; s.dispose(); pr.clips.push(c); }
   else if (r.kind === 'video') { const c = { id: uid(), kind: 'video', src: r.id, name: r.name, in: 0, out: r.duration || 0, dur: r.duration || 0, speed: 1 }; const s = new VideoSrc(c); await s.load(); s.dispose(); pr.clips.push(c); }
   else throw new Error('ชนิดนี้ใช้เป็นคลิปไม่ได้');
 }

@@ -27,7 +27,7 @@ export async function openMakeVideo(app, { preselect = null } = {}) {
   // ---------- step 1 ----------
   const step1 = async () => {
     cleanup(); setSteps(1); body.innerHTML = '';
-    const recs = (await db.getAll('recs')).filter(r => r.kind === 'audio' && r.lesson && r.done && !r.hidden).sort((a, b) => b.created - a.created);
+    const recs = (await db.getAll('recs')).filter(r => r.kind === 'audio' && (r.lesson || r.cam) && r.done && !r.hidden).sort((a, b) => b.created - a.created);
     const nbs = new Map((await db.getAll('notebooks')).map(n => [n.id, n]));
     const curNb = app.editor?.nb?.id;
     let scope = curNb && recs.some(r => r.nb === curNb) ? 'here' : 'all';
