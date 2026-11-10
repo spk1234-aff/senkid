@@ -27,12 +27,13 @@ export async function openStudio(app) {
   const code = h('div', { class: 'studio-code' }, '····');
   const status = h('div', { class: 'studio-status' }, 'กำลังเปิดห้อง…');
   const micSel = h('select', { class: 'sel' }), camSel = h('select', { class: 'sel' });
-  const micMeter = h('div', { class: 'meter' }, ...Array.from({ length: 24 }, () => h('i')));
+  const micMeter = h('div', { class: 'meter big' }, ...Array.from({ length: 32 }, () => h('i')));
+  const micState = h('div', { class: 'studio-mic', 'data-s': 'warn' }, 'กำลังเปิดไมค์…');
   const recBtn = h('button', { class: 'studio-rec' }, icon('mic'), ' เริ่มอัด');
   const timer = h('div', { class: 'studio-timer' }, '00:00');
   const sizeTxt = h('div', { class: 'sub' }, '');
   const fmtNote = h('div', { class: 'sub' }, '');
-  const fitSeg = seg([['follow', 'ตามปากกา'], ['pages', 'ทั้งหน้า'], ['world', 'เหมือนจอ iPad']], x.fit, v => { x.fit = v; st.fitMode = v; savePrefs(); });
+  const fitSeg = seg([['follow', 'ตามปากกา'], ['pages', 'ทั้งหน้า'], ['world', 'จอ iPad']], x.fit, v => { x.fit = v; st.fitMode = v; savePrefs(); });
   const fitNote = h('div', { class: 'sub' }, 'ตามปากกา: ขยายเต็มความกว้างหน้ากระดาษ แล้วเลื่อนตามจุดที่เขียน · ทั้งหน้า: เห็นทั้งหน้าตลอด · เหมือนจอ iPad: ตรงตามที่เห็นบน iPad');
   const resSeg = seg(RES, x.res, v => { x.res = v; savePrefs(); sizeCanvas(); });
   const posSeg = seg([['tl', '↖'], ['tr', '↗'], ['bl', '↙'], ['br', '↘']], x.camPos, v => { x.camPos = v; savePrefs(); });
@@ -71,7 +72,7 @@ export async function openStudio(app) {
   const panel = h('div', { class: 'studio-panel' },
     h('div', { class: 'studio-h' }, h('b', {}, 'เส้นคิด Studio'), h('span', { class: 'sub' }, ' เขียนบน iPad · อัดบน Mac')),
     h('div', { class: 'lbl' }, 'รหัสสำหรับ iPad'), code, status,
-    h('div', { class: 'lbl' }, 'ไมโครโฟน'), micSel, micMeter,
+    h('div', { class: 'lbl' }, 'ไมโครโฟน'), micSel, micMeter, micState,
     h('div', { class: 'lbl' }, 'กล้องครู'), camSel,
     h('div', { class: 'row2' }, h('span', { class: 'sub' }, 'มุม'), posSeg, h('span', { class: 'sub' }, 'ขนาด'), camSizeSeg),
     h('div', { class: 'lbl' }, 'ความละเอียด'), resSeg,
@@ -80,7 +81,14 @@ export async function openStudio(app) {
     recBtn, timer, sizeTxt,
     h('button', { class: 'pill sec', style: { marginTop: '14px' }, onclick: () => closeStudio() }, icon('close'), ' ปิด Studio'),
     upBox);
-  root.append(h('div', { class: 'studio-stage' }, cv), panel);
+  // presentation mode (for sharing the window into Google Meet): only the board, with a small bar that appears on hover
+  const hudT = h('span', {}, ''), hud = h('div', { class: 'studio-hud' }, h('i', { class: 'lv' }), h('b', {}, 'REC'), hudT,
+    h('button', { title: 'เริ่ม/หยุดอัด', onclick: () => recBtn.click() }, '●'), h('button', { title: 'ออกจากโหมดนำเสนอ', onclick: () => present(false) }, '✕ ออก'));
+  const presentBtn = h('button', { class: 'pill sec', style: { marginTop: '8px' }, onclick: () => present(true) }, icon('tv'), ' โหมดนำเสนอ (สำหรับ Google Meet)');
+  function present(on) { root.classList.toggle('present', on); if (on) toast('โหมดนำเสนอ · ใน Meet กด "นำเสนอ" แล้วเลือกหน้าต่าง/แท็บนี้ · เลื่อนเมาส์ไปขอบล่างเพื่อดูปุ่ม · กด Esc เพื่อออก', 6000); }
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && root.classList.contains('present')) present(false); });
+  recBtn.after(presentBtn);
+  root.append(h('div', { class: 'studio-stage' }, cv, hud), panel);
 
   const mime = pickMime(); const isMp4 = (mime || '').includes('mp4');
   const canStream = !!window.showSaveFilePicker;
@@ -114,13 +122,30 @@ export async function openStudio(app) {
     catch (e) { toast('เปิดกล้องไม่ได้: ' + (e.message || e.name), 4000, 'warn'); }
   }
   micSel.onchange = openMic; camSel.onchange = openCam;
-  let meterCtx = null;
+  let meterCtx = null, lastLoud = 0, micLevel = 0;
   function meter(stream) {
     try { meterCtx?.close(); } catch { }
-    const AC = window.AudioContext || window.webkitAudioContext; meterCtx = new AC(); const an = meterCtx.createAnalyser(); an.fftSize = 256; meterCtx.createMediaStreamSource(stream).connect(an);
-    const buf = new Uint8Array(an.fftSize), bars = [...micMeter.children];
-    const tick = () => { if (!meterCtx || meterCtx.state === 'closed') return; an.getByteTimeDomainData(buf); let p = 0; for (const v of buf) p = Math.max(p, Math.abs(v - 128)); const n = Math.round(p / 128 * bars.length * 1.6); bars.forEach((b, i) => b.classList.toggle('on', i < n)); requestAnimationFrame(tick); }; tick();
+    const AC = window.AudioContext || window.webkitAudioContext; meterCtx = new AC(); const an = meterCtx.createAnalyser(); an.fftSize = 512; meterCtx.createMediaStreamSource(stream).connect(an);
+    const buf = new Uint8Array(an.fftSize), bars = [...micMeter.children]; let peak = 0, peakAt = 0; lastLoud = performance.now();
+    const my = meterCtx;
+    const tick = () => {
+      if (meterCtx !== my || my.state === 'closed') return;
+      if (my.state === 'suspended') { micState.textContent = 'แตะตรงไหนก็ได้ในหน้านี้เพื่อเปิดมาตรวัดเสียง'; micState.dataset.s = 'warn'; requestAnimationFrame(tick); return; }
+      an.getByteTimeDomainData(buf); let p = 0; for (const v of buf) p = Math.max(p, Math.abs(v - 128)); const lv = Math.min(1, p / 128 * 1.8); micLevel = lv;
+      const now = performance.now(); if (lv > peak || now - peakAt > 1200) { peak = lv; peakAt = now; } if (lv > 0.04) lastLoud = now;
+      const n = Math.round(lv * bars.length), pk = Math.min(bars.length - 1, Math.round(peak * bars.length));
+      bars.forEach((b, i) => { b.className = i < n ? (i > bars.length * 0.85 ? 'on hot' : i > bars.length * 0.65 ? 'on warm' : 'on') : (i === pk && peak > 0.04 ? 'pk' : ''); });
+      const tr = stream.getAudioTracks()[0], silent = now - lastLoud > 6000;
+      if (!tr || tr.readyState !== 'live') { micState.textContent = 'ไมค์หลุด · เลือกไมค์ใหม่'; micState.dataset.s = 'bad'; }
+      else if (tr.muted) { micState.textContent = 'ไมค์ถูกปิดเสียงที่ระบบ'; micState.dataset.s = 'bad'; }
+      else if (silent) { micState.textContent = (rec ? '⚠ กำลังอัดแต่ไม่มีเสียงเข้า' : 'ยังไม่ได้ยินเสียง') + ' · ลองพูด หรือเช็กว่าเลือกไมค์ถูกตัว'; micState.dataset.s = rec ? 'bad' : 'warn'; }
+      else if (lv > 0.92) { micState.textContent = 'เสียงดังเกิน (แตก) · ถอยห่างไมค์หรือลดเกน'; micState.dataset.s = 'bad'; }
+      else { micState.textContent = 'ไมค์ทำงาน ✓ ' + (tr.label || ''); micState.dataset.s = 'ok'; }
+      requestAnimationFrame(tick);
+    }; tick();
   }
+  const wake = () => { try { if (meterCtx?.state === 'suspended') meterCtx.resume(); } catch { } };
+  addEventListener('pointerdown', wake, true); addEventListener('keydown', wake, true);
 
   // ---- drawing ----
   function camMeta(W, H) { const sz = { s: 0.14, m: 0.2, l: 0.28 }[x.camSize] * H; const pos = { tl: { x: sz / W, y: sz / H }, tr: { x: 1 - 0.015, y: sz / H + 0.015 }, bl: { x: sz / W + 0.015, y: 1 - 0.015 }, br: { x: 1 - 0.015, y: 1 - 0.015 } }[x.camPos]; return { camStageW: W, camSize: sz, camPos: pos, camShape: 'circle' }; }
@@ -132,6 +157,7 @@ export async function openStudio(app) {
     if (camEl) drawCamFrame(ctx, camMeta(W, H), camEl, W, H);
     drawCredit(ctx, W, H, credit);
     if (rec) { timer.textContent = fmtTime(performance.now() - recStart); sizeTxt.textContent = fmtBytes(bytes) + (fileName ? ' → ' + fileName : ''); }
+    hud.style.setProperty('--lv', micLevel.toFixed(2)); hud.dataset.rec = rec ? '1' : ''; hud.dataset.silent = (performance.now() - lastLoud > 6000) ? '1' : ''; if (rec) hudT.textContent = fmtTime(performance.now() - recStart);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
