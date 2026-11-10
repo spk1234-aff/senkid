@@ -38,6 +38,36 @@ export async function openStudio(app) {
   const posSeg = seg([['tl', '↖'], ['tr', '↗'], ['bl', '↙'], ['br', '↘']], x.camPos, v => { x.camPos = v; savePrefs(); });
   const camSizeSeg = seg([['s', 'เล็ก'], ['m', 'กลาง'], ['l', 'ใหญ่']], x.camSize, v => { x.camSize = v; savePrefs(); });
 
+  // ---- updates: check on open and every 20 minutes; never restart while recording ----
+  const verTxt = h('span', { class: 'sub' }, 'รุ่น …'), upBtn = h('button', { class: 'pill sec', style: { height: '36px' } }, icon('download'), ' ตรวจหาอัปเดต');
+  const upBox = h('div', { class: 'studio-up' }, verTxt, upBtn);
+  let myVer = '', newVer = '';
+  const serverVer = async () => { try { const t = await (await fetch(new URL('../sw.js?fresh=' + Date.now(), import.meta.url), { cache: 'no-store' })).text(); return (t.match(/senkid-([\d.]+)-/) || [])[1] || ''; } catch { return ''; } };
+  const paintUp = () => { verTxt.textContent = 'รุ่น ' + (myVer || '?') + (newVer && newVer !== myVer ? ' · มีรุ่นใหม่ ' + newVer : ' · ล่าสุดแล้ว'); upBtn.classList.toggle('prim', !!newVer && newVer !== myVer); upBtn.classList.toggle('sec', !(newVer && newVer !== myVer)); upBtn.lastChild.textContent = newVer && newVer !== myVer ? ' อัปเดตเป็น ' + newVer : ' ตรวจหาอัปเดต'; };
+  async function applyUpdate() {
+    if (rec) { toast('กำลังอัดอยู่ · หยุดอัดก่อนแล้วค่อยอัปเดต', 3000, 'warn'); return; }
+    upBtn.disabled = true; verTxt.textContent = 'กำลังดาวน์โหลดรุ่นใหม่…';
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration(new URL('../', import.meta.url).href);
+      let ok = false;
+      if (reg) { try { await reg.update(); } catch { } const w = reg.installing || reg.waiting; if (w) ok = await new Promise(res => { if (w.state === 'activated') return res(true); w.addEventListener('statechange', () => { if (w.state === 'activated') res(true); else if (w.state === 'redundant') res(false); }); setTimeout(() => res(false), 20000); }); }
+      if (!ok && window.caches) for (const k of await caches.keys()) if (k.startsWith('senkid-')) await caches.delete(k); // stuck: drop the offline copy (notebooks live elsewhere)
+      try { peer?.send({ k: 'bye' }); await peer?.close(true); } catch { }
+      location.reload();
+    } catch (e) { upBtn.disabled = false; toast('อัปเดตไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); paintUp(); }
+  }
+  async function checkUpdate(manual) {
+    if (!navigator.onLine) { if (manual) toast('ต้องต่ออินเทอร์เน็ตก่อน', 2500, 'warn'); return; }
+    const v = await serverVer(); if (v) newVer = v; paintUp();
+    if (manual && (!newVer || newVer === myVer)) toast('ใช้รุ่นล่าสุดอยู่แล้ว (' + myVer + ')', 2500);
+    else if (!manual && newVer && newVer !== myVer && !rec && base == null) applyUpdate(); // nobody connected, not recording: update quietly
+  }
+  upBtn.onclick = () => (newVer && newVer !== myVer) ? applyUpdate() : checkUpdate(true);
+  // the version this page is running = the sw.js copy in the offline cache (importing main.js here would boot the whole app)
+  (async () => { try { const t = await (await fetch(new URL('../sw.js', import.meta.url))).text(); myVer = (t.match(/senkid-([\d.]+)-/) || [])[1] || ''; } catch { } paintUp(); checkUpdate(false); })();
+  setInterval(() => checkUpdate(false), 20 * 60e3);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(false); });
+
   const panel = h('div', { class: 'studio-panel' },
     h('div', { class: 'studio-h' }, h('b', {}, 'เส้นคิด Studio'), h('span', { class: 'sub' }, ' เขียนบน iPad · อัดบน Mac')),
     h('div', { class: 'lbl' }, 'รหัสสำหรับ iPad'), code, status,
@@ -48,7 +78,8 @@ export async function openStudio(app) {
     h('div', { class: 'lbl' }, 'มุมมอง'), fitSeg, fitNote,
     fmtNote,
     recBtn, timer, sizeTxt,
-    h('button', { class: 'pill sec', style: { marginTop: '14px' }, onclick: () => closeStudio() }, icon('close'), ' ปิด Studio'));
+    h('button', { class: 'pill sec', style: { marginTop: '14px' }, onclick: () => closeStudio() }, icon('close'), ' ปิด Studio'),
+    upBox);
   root.append(h('div', { class: 'studio-stage' }, cv), panel);
 
   const mime = pickMime(); const isMp4 = (mime || '').includes('mp4');
