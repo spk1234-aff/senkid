@@ -20,7 +20,7 @@ export async function openStudioLink(app, ed) {
       const code = inp.value.trim(); if (!/^\d{4}$/.test(code)) { sub.textContent = 'รหัสต้องเป็นตัวเลข 4 หลัก'; return false; }
       B.disabled = true; B.textContent = 'กำลังเชื่อมต่อ…'; sub.textContent = 'กำลังติดต่อห้องอัด…';
       try { await connect(app, ed, code); return true; }
-      catch (e) { sub.textContent = e.message || String(e); B.disabled = false; B.textContent = 'ลองอีกครั้ง'; return false; }
+      catch (e) { sub.textContent = (e.message || String(e)) + (e.needLogin ? ' · ไปที่ ตั้งค่า → ซิงก์ Google Drive → เชื่อมต่อบัญชีครู แล้วลองใหม่' : ''); B.disabled = false; B.textContent = 'ลองอีกครั้ง'; return false; }
     }
   }], { width: 460 });
 }

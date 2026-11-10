@@ -108,9 +108,14 @@ export async function openStudio(app) {
   // ---- link ----
   const N = await import('./studio-net.js');
   const setStatus = (s) => { status.textContent = { connecting: 'รอ iPad เชื่อมต่อ…', paired: 'iPad จับคู่แล้ว · กำลังเปิดช่องส่งตรง…', direct: 'เชื่อมต่อตรงกับ iPad ✓', relay: 'เชื่อมต่อผ่านเซิร์ฟเวอร์ (ใช้ได้ ช้ากว่าเล็กน้อย)', closed: 'ปิดแล้ว' }[s] || s; status.dataset.s = s; };
-  try { peer = await N.createHost(setStatus); code.textContent = peer.code; setStatus('connecting'); }
-  catch (e) { status.textContent = 'เปิดห้องไม่ได้: ' + (e.message || e); code.textContent = '— — — —'; }
-  peer?.onMessage(async (m) => {
+  const loginBtn = h('button', { class: 'pill prim', style: { width: '100%', marginTop: '6px' }, hidden: true }, icon('user'), ' เข้าสู่ระบบด้วย Google (บัญชีครู)');
+  status.after(loginBtn);
+  async function openRoom() {
+    try { peer = await N.createHost(setStatus); code.textContent = peer.code; setStatus('connecting'); loginBtn.hidden = true; peer.onMessage(onMsg); }
+    catch (e) { code.textContent = '— — — —'; status.textContent = (e.needLogin ? '' : 'เปิดห้องไม่ได้: ') + (e.message || e); loginBtn.hidden = !e.needLogin; if (/permission|insufficient/i.test(e.message || '')) status.textContent = 'บัญชีนี้ไม่มีสิทธิ์ใช้ Studio · ต้องเป็นบัญชีครู'; }
+  }
+  loginBtn.onclick = async () => { loginBtn.disabled = true; try { await N.studioLogin(); status.textContent = 'กำลังเปิดห้อง…'; await openRoom(); } catch (e) { status.textContent = 'เข้าสู่ระบบไม่สำเร็จ: ' + (e.code || e.message || e); } finally { loginBtn.disabled = false; } };
+  const onMsg = async (m) => {
     if (m.k === 'hello') { base = performance.now() - (m.t || 0); nbName = m.name || ''; data.events.length = 0; st.reset(); toast('iPad เชื่อมต่อแล้ว' + (nbName ? ' · ' + nbName : ''), 2500); }
     else if (m.k === 'ping') { lastEvAt = performance.now(); if (base == null) base = performance.now() - (m.t || 0); }
     else if (m.k === 'ev') {
@@ -125,7 +130,8 @@ export async function openStudio(app) {
     }
     else if (m.k === 'pdfimg') { const img = new Image(); img.onload = () => injectPdfBitmap(m.id, m.n, img); img.src = m.data; }
     else if (m.k === 'bye') { toast('iPad หยุดส่งภาพแล้ว', 3000); setStatus('connecting'); }
-  });
+  };
+  await openRoom();
 
   // ---- recording ----
   async function startRec() {

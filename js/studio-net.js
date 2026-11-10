@@ -23,9 +23,10 @@ class FirestoreSignal {
     await new Promise(r => { const u = this.auth.onAuthStateChanged(() => { u(); r(); }); setTimeout(r, 2500); });
     if (!this.auth.currentUser) {
       const { accessToken } = await import('./sync.js'); const tok = accessToken();
-      if (!tok) throw new Error(location.pathname.includes('/studio') ? 'ยังไม่ได้เชื่อมบัญชี Google บนเครื่องนี้ · เปิดเส้นคิด → ตั้งค่า → ซิงก์ Google Drive → เชื่อมต่อ แล้วกลับมาที่เส้นคิด Studio' : 'ยังไม่ได้เชื่อม Google Drive บน iPad · ตั้งค่า → ซิงก์ Google Drive');
+      const need = (msg) => { const e = new Error(msg); e.needLogin = true; return e; };
+      if (!tok) throw need('ยังไม่ได้เข้าสู่ระบบบัญชีครูบนเครื่องนี้');
       try { const cred = window.firebase.auth.GoogleAuthProvider.credential(null, tok); await this.auth.signInWithCredential(cred); }
-      catch (e) { throw new Error('เข้าระบบ Firebase ไม่ได้ (' + (e.code || e.message) + ') · ลองเชื่อม Google ใหม่ในตั้งค่า'); }
+      catch (e) { throw need('เข้าระบบไม่ได้ (' + (e.code || e.message) + ')'); }
     }
     this.uid = this.auth.currentUser.uid;
   }
@@ -56,6 +57,13 @@ class LocalSignal { // same-origin pages in one browser: for tests and for tryin
   close() { try { this.bc.close(); } catch { } }
 }
 
+// sign in with a Google pop-up (must be called from a tap/click). The session is remembered by Firebase afterwards.
+export async function studioLogin() {
+  await loadScript(SDK + 'firebase-app-compat.js'); await loadScript(SDK + 'firebase-auth-compat.js');
+  const fb = window.firebase; const app = fb.apps.find(a => a.name === 'senkid-studio') || fb.initializeApp(FB, 'senkid-studio');
+  const pv = new fb.auth.GoogleAuthProvider(); pv.setCustomParameters({ prompt: 'select_account', login_hint: 'sattrawood@sopit.ac.th' });
+  const r = await app.auth().signInWithPopup(pv); return r.user?.email || '';
+}
 export function makeSignal() { return new URLSearchParams(location.search).get('studio_signal') === 'local' ? new LocalSignal() : new FirestoreSignal(); }
 
 // ---------- peer: one side of the link ----------
