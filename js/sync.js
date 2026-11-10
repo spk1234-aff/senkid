@@ -25,6 +25,7 @@ function readToken() { try { const t = JSON.parse(localStorage.getItem(TOKEN_KEY
 function clientId() { return prefs.sync?.clientId || DEFAULT_CLIENT_ID; }
 export function connected() { return !!prefs.sync?.on; }
 export function tokenOk() { return !!readToken(); }
+export function accessToken() { return readToken()?.t || null; } // the Google OAuth token (for Firebase sign-in in the studio link)
 
 // Renewing the Google token means a full round trip to accounts.google.com and back (the page reloads), so it must
 // never happen while the teacher is in the middle of something: writing, recording, or teaching on the TV link.

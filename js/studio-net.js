@@ -19,7 +19,14 @@ class FirestoreSignal {
     await loadScript(SDK + 'firebase-app-compat.js'); await loadScript(SDK + 'firebase-auth-compat.js'); await loadScript(SDK + 'firebase-firestore-compat.js');
     const fb = window.firebase; this.app = fb.apps.find(a => a.name === 'senkid-studio') || fb.initializeApp(FB, 'senkid-studio');
     this.auth = this.app.auth(); this.db = this.app.firestore(); this.unsubs = [];
-    if (!this.auth.currentUser) { try { await this.auth.signInAnonymously(); } catch (e) { throw new Error('เข้าระบบ Firebase ไม่ได้ (' + (e.code || e.message) + ') · ต้องเปิด Anonymous sign-in ในโปรเจกต์ sirearth-class'); } }
+    // the room is for the teacher only: sign in to Firebase with the Google token เส้นคิด already holds for Drive sync
+    await new Promise(r => { const u = this.auth.onAuthStateChanged(() => { u(); r(); }); setTimeout(r, 2500); });
+    if (!this.auth.currentUser) {
+      const { accessToken } = await import('./sync.js'); const tok = accessToken();
+      if (!tok) throw new Error(location.pathname.includes('/studio') ? 'ยังไม่ได้เชื่อมบัญชี Google บนเครื่องนี้ · เปิดเส้นคิด → ตั้งค่า → ซิงก์ Google Drive → เชื่อมต่อ แล้วกลับมาที่ห้องอัด' : 'ยังไม่ได้เชื่อม Google Drive บน iPad · ตั้งค่า → ซิงก์ Google Drive');
+      try { const cred = window.firebase.auth.GoogleAuthProvider.credential(null, tok); await this.auth.signInWithCredential(cred); }
+      catch (e) { throw new Error('เข้าระบบ Firebase ไม่ได้ (' + (e.code || e.message) + ') · ลองเชื่อม Google ใหม่ในตั้งค่า'); }
+    }
     this.uid = this.auth.currentUser.uid;
   }
   doc(path) { return this.db.doc(path); }
