@@ -14,7 +14,7 @@ const DELAY = 450; // ms behind the iPad: smooths jitter and lets strokes animat
 
 export async function openStudio(app) {
   const x = prefs.studio || (prefs.studio = {}); x.res = x.res || '1440'; x.camPos = x.camPos || 'br'; x.camSize = x.camSize || 'm'; x.fit = x.fit || 'follow';
-  document.body.classList.add('studio');
+  document.body.classList.add('studio'); document.title = 'ห้องอัด เส้นคิด';
   const root = h('div', { class: 'studio-root' }); document.body.appendChild(root);
 
   // ---- receiver state ----
@@ -168,7 +168,7 @@ export async function openStudio(app) {
     try { peer?.send({ k: 'bye' }); } catch { }
     await peer?.close(true);
     micStream?.getTracks().forEach(t => t.stop()); camStream?.getTracks().forEach(t => t.stop()); try { meterCtx?.close(); } catch { }
-    location.href = location.pathname; // back to the normal app
+    location.href = location.pathname.includes('/studio') ? '../' : location.pathname; // back to the main app
   }
   await fillDevices();
 }

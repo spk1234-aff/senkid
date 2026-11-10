@@ -12,7 +12,7 @@ export function liveActive() { return !!link; }
 export async function openStudioLink(app, ed) {
   if (link) return showChipMenu(app);
   const inp = h('input', { class: 'inp', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 4, placeholder: '0000', autocomplete: 'off', style: { fontSize: '40px', letterSpacing: '12px', textAlign: 'center', width: '100%' } });
-  const sub = h('p', { class: 'sub', style: { margin: '10px 0 0' } }, 'บน Mac เปิดเส้นคิด → "ห้องอัด" จะเห็นรหัส 4 หลัก พิมพ์รหัสนั้นที่นี่ · ทั้งสองเครื่องต้องต่ออินเทอร์เน็ต');
+  const sub = h('p', { class: 'sub', style: { margin: '10px 0 0' } }, 'บน Mac เปิดแอป "ห้องอัด" (spk1234-aff.github.io/senkid/studio/) จะเห็นรหัส 4 หลัก พิมพ์รหัสนั้นที่นี่ · ทั้งสองเครื่องต้องต่ออินเทอร์เน็ต');
   const body = h('div', {}, h('div', { class: 'lbl' }, 'รหัสห้องอัดจากจอ Mac'), inp, sub);
   setTimeout(() => inp.focus(), 50);
   dialog('ส่งภาพไปห้องอัด (Mac)', body, [{ label: 'ยกเลิก' }, {

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ห้องอัด เส้นคิด</title>
+<meta name="description" content="ห้องอัดของเส้นคิด: เขียนบน iPad อัดบน Mac เป็นวิดีโอ MP4 พร้อมเสียงและกล้องครู">
+<meta name="theme-color" content="#1b1d22">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="../icons/studio-192.png" type="image/png">
+<link rel="apple-touch-icon" href="../icons/studio-192.png">
+<link rel="preload" href="../fonts/THSarabunNew.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="../fonts/THSarabunNew-Bold.woff" as="font" type="font/woff" crossorigin>
+<link rel="stylesheet" href="../css/app.css">
+<style>html,body{background:#1b1d22;margin:0}</style>
+</head>
+<body class="studio">
+<div id="app"></div>
+<div id="layer"></div>
+<div id="toasts"></div>
+<script type="module">
+  import { openStudio } from '../js/studio.js';
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => { });
+  openStudio(null).catch(e => { document.body.innerHTML = '<p style="color:#fff;font:20px TH Sarabun New,sans-serif;padding:30px">เปิดห้องอัดไม่ได้: ' + (e.message || e) + '</p>'; });
+</script>
+</body>
+</html>
