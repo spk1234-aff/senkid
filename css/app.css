@@ -1091,3 +1091,11 @@ body.studio #app,body.studio .lib,body.studio .onb{display:none!important}
 .studio-panel .seg button{flex:1;white-space:nowrap;font-size:16px;padding:7px 4px;min-width:0}
 .studio-up{flex-wrap:nowrap}.studio-up .pill{height:36px;font-size:15px;padding:0 12px;white-space:nowrap}
 .studio-root{grid-template-columns:1fr 380px}
+.studio-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.studio-main .studio-stage{flex:1;min-height:0}
+.studio-bar{display:flex;align-items:center;gap:10px;padding:10px 18px 0;color:#ddd}
+.studio-bar .seg{background:#2e323a;border-radius:12px;padding:3px;display:flex}
+.studio-bar .seg button{color:#ddd;font-size:16px;padding:6px 14px;white-space:nowrap}.studio-bar .seg button.on{background:#3B6CF5;color:#fff}
+.studio-bar .sub{color:#9aa0ad;font-size:15px}
+.sbar-btn{background:#2e323a;border:1px solid #444b57;color:#eee;border-radius:12px;height:38px;padding:0 14px;font:inherit;font-size:16px;display:flex;align-items:center;gap:6px;cursor:pointer}
+.studio-root.present .studio-bar{display:none}

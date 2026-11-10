@@ -358,7 +358,7 @@ function closeGap(P, L, diag, chord) {
 export function recognize(p) {
   if (p.length < 8) return null;
   p = trimRest(p);
-  const L = pathLen(p); if (L < 14) return null;
+  const L = pathLen(p); if (L < 7) return null;
   const rad = recognizeRadical(p); if (rad) return rad;
   const R = resample(p, 96); const P = []; for (let i = 0; i < R.length; i += 2) P.push([R[i], R[i + 1]]);
   const s = P[0], e = P[P.length - 1];
@@ -382,7 +382,7 @@ export function recognize(p) {
     const a = pr(s), b = pr(e);
     return { k: 'line', pts: snapLine(a[0], a[1], b[0], b[1]), closed: false };
   }
-  const closed = chord < Math.max(0.2 * diag, 8);
+  const closed = chord < Math.max((diag < 70 ? 0.3 : 0.2) * diag, 8); // small loops rarely meet exactly
 
   if (!closed) {
     { const pg = closeGap(P, L, diag, chord); if (pg) return pg; }
@@ -403,6 +403,8 @@ export function recognize(p) {
     let sw = 0;
     if (C) for (let i = 1; i < P.length; i++) { let d = Math.atan2(P[i][1] - C.cy, P[i][0] - C.cx) - Math.atan2(P[i - 1][1] - C.cy, P[i - 1][0] - C.cx); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; sw += d; }
     const oneBend = singleBend(P);
+    // almost a whole turn around one centre with the ends near each other: a circle drawn with a gap, not an arc
+    if (C && oneBend && C.err < 0.06 && C.r > 2.5 && Math.abs(sw) > 4.7 && chord < 1.1 * C.r) return { k: 'ellipse', cx: C.cx, cy: C.cy, rx: C.r, ry: C.r, rot: 0 };
     // a big round arc (half circle or more) that really fits a circle stays a circular arc
     if (C && oneBend && C.err < 0.03 && C.r > 4 && Math.abs(sw) > 2.3 && Math.abs(sw) < 5.6) {
       const a0 = Math.atan2(s[1] - C.cy, s[0] - C.cx), am = a0 + sw / 2, a1 = a0 + sw;

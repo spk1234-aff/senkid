@@ -228,7 +228,7 @@ export function openStudentWindow() {
 // true = 2 screens, false = 1 screen, null = browser can't tell (Safari/iPad)
 const twoScreens = () => (typeof screen.isExtended === 'boolean' ? screen.isExtended : null);
 
-function presentMode(ed) {
+export function presentMode(ed) {
   prefs.toolbarHidden = true; savePrefs(); ed.applyPos();
   toast('โหมดนำเสนอ · ลากขีดบนแถบเล็กเพื่อย้ายไปไหนก็ได้ · ˄˅ เปลี่ยนหน้า · แตะเครื่องมือซ้ำเพื่อตั้งค่า · × ออก', 5000, 'keep');
 }

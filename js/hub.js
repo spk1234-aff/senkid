@@ -20,7 +20,13 @@ export function openHub(ed, anchor, page = null) {
   // run something that needs a popover anchor: close the hub, then anchor it to the menu button
   const go = (fn) => () => { closeHub(); requestAnimationFrame(() => fn(ed.menuBtn || anchor)); };
   const PAGES = [
-    !student && { id: 'tv', ic: 'tv', title: 'ต่อทีวี', sub: 'ฉายจอให้นักเรียนดู', rows: () => [
+    !student && { id: 'mirror', ic: 'screen', title: 'สะท้อนหน้าจอ', sub: 'AirPlay หรือสาย · ทีวีเห็นเหมือน iPad', rows: () => [
+      T('ทีวีแสดงทุกอย่างบนจอ iPad · ไม่ต้องเชื่อมอะไรในแอป'),
+      R('screen', 'วิธีต่อ', 'ไร้สาย: ศูนย์ควบคุม > สะท้อนหน้าจอ > เลือกทีวี · มีสาย: เสียบ HDMI แล้วภาพขึ้นเอง', () => { }),
+      R('hide', 'ซ่อนเครื่องมือบน iPad (โหมดนำเสนอ)', 'นักเรียนเห็นแต่กระดาษ · แถบเล็กลากย้ายได้', () => { closeHub(); import('./broadcast.js').then(B => B.presentMode(ed)); }),
+    ] },
+    !student && { id: 'tv', ic: 'tv', title: 'ทีวีจอที่สอง', sub: 'ทีวีแสดงเฉพาะกระดาษ · iPad เห็นเครื่องมือ', rows: () => [
+      T('ทีวีเป็นอีกจอหนึ่ง แยกจาก iPad (ต้องเชื่อมในแอปก่อน)'),
       R('tv', app.broadcast?.connected ? 'ทีวีต่ออยู่ · ตั้งค่า / เลิกใช้' : 'เชื่อมทีวี', 'สแกน QR หรือเปิดลิงก์บนทีวี', go(a => app.studentMenu(a))),
       T('ทีวีแสดงอะไร'),
       ...TVK.map(([id, label, sub, ic]) => R(ic, (tvCur === id ? '✓ ' : '') + label, sub, () => { import('./broadcast.js').then(B => B.setTvKind(app, id)); closeHub(); })),
@@ -30,7 +36,7 @@ export function openHub(ed, anchor, page = null) {
       R('gear', student ? 'เลือกไมโครโฟน' : 'ไมโครโฟนและกล้องครู', student ? null : 'เลือกไมค์ เปิดกล้อง ถอดเสียง ส่งขึ้น Drive', go(a => app.recorderSettings(ed, ed.micBtn || a))),
       R('history', student ? 'เสียงที่อัดในเล่มนี้' : 'บทเรียนที่อัดในเล่มนี้', student ? 'ฟังย้อนพร้อมดูเส้น' : 'ฟังย้อน แชร์ ดาวน์โหลด', () => { closeHub(); app.openRecordings(ed.nb.id); }),
     ] },
-    !student && { id: 'studio', ic: 'tv', title: 'เส้นคิด Studio', sub: 'เขียนบน iPad · อัดบน Mac', direct: () => { closeHub(); import('./studio-send.js').then(m => m.openStudioLink(app, ed)); } },
+    !student && { id: 'studio', ic: 'tv', title: 'เส้นคิด Studio', sub: 'ส่งไป Mac เพื่ออัดวิดีโอ / Google Meet', direct: () => { closeHub(); import('./studio-send.js').then(m => m.openStudioLink(app, ed)); } },
     !student && { id: 'video', ic: 'film', title: 'ทำวิดีโอ', sub: 'รวมเส้น เสียง กล้อง เป็น MP4', direct: () => { closeHub(); app.openRecordings(); } },
     { id: 'vlib', ic: 'play', title: student ? 'เสียงที่อัดไว้' : 'คลังวิดีโอ', sub: student ? 'ฟังย้อน แชร์' : 'บทเรียนที่อัด · วิดีโอ', direct: () => { closeHub(); app.openRecordings(); } },
     { id: 'teach', ic: 'teach', title: student ? 'เครื่องมือ' : 'เครื่องมือสอน', sub: student ? 'จับเวลา คณิต' : 'ใช้ระหว่างคาบ', rows: () => student ? [

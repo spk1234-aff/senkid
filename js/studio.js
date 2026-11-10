@@ -73,7 +73,7 @@ export async function openStudio(app) {
   // screen (QuickTime's iPad mirror), so the teacher's toolbars are visible too
   let scrEl = null, scrStream = null;
   const srcNote = h('div', { class: 'sub' }, '');
-  const paintSrc = () => { srcNote.innerHTML = x.src === 'screen' ? (scrEl ? 'กำลังใช้ภาพทั้งจอ iPad (เห็นแถบเครื่องมือ) · ความคมเท่าจอ iPad' : 'ยังไม่ได้เลือกหน้าต่าง · กดปุ่มด้านล่าง') : 'เฉพาะกระดาษและลายมือ คมทุกความละเอียด · ไม่เห็นแถบเครื่องมือ'; pickScr.hidden = x.src !== 'screen'; scrHelp.hidden = x.src !== 'screen'; fitRow.hidden = x.src === 'screen'; };
+  const paintSrc = () => { srcNote.innerHTML = x.src === 'screen' ? (scrEl ? 'กำลังใช้ภาพทั้งจอ iPad (เห็นแถบเครื่องมือ) · ความคมเท่าจอ iPad' : 'ยังไม่ได้เลือกหน้าต่าง · กดปุ่มด้านล่าง') : 'เฉพาะกระดาษและลายมือ คมทุกความละเอียด · ไม่เห็นแถบเครื่องมือ'; pickScr.hidden = x.src !== 'screen'; scrHelp.hidden = x.src !== 'screen'; fitSeg.hidden = x.src === 'screen'; };
   async function pickScreen() {
     try {
       scrStream?.getTracks().forEach(t => t.stop());
@@ -84,10 +84,9 @@ export async function openStudio(app) {
     paintSrc();
   }
   x.src = x.src === 'screen' ? 'ink' : (x.src || 'ink'); // a captured window never survives a restart: start on ink
-  const srcSeg = seg([['ink', 'ลายมือ (คมสุด)'], ['screen', 'ทั้งจอ + เครื่องมือ']], x.src, v => { x.src = v; savePrefs(); paintSrc(); if (v === 'screen' && !scrEl) pickScreen(); });
+  const srcSeg = seg([['ink', 'เฉพาะเนื้อหา'], ['screen', 'ทั้งจอ + เครื่องมือ']], x.src, v => { x.src = v; savePrefs(); paintSrc(); if (v === 'screen' && !scrEl) pickScreen(); });
   const pickScr = h('button', { class: 'pill sec', style: { width: '100%', marginTop: '6px' }, onclick: pickScreen }, icon('screen'), ' เลือกหน้าต่างที่แสดงจอ iPad');
   const scrHelp = h('div', { class: 'sub' }, 'วิธีทำ: ต่อ iPad กับ Mac ด้วยสาย USB → เปิด QuickTime Player → ไฟล์ → บันทึกภาพยนตร์ใหม่ → กดลูกศรข้างปุ่มอัด เลือก iPad → กลับมากดปุ่มด้านบนแล้วเลือกหน้าต่าง QuickTime (ไม่ต้องใส่รหัส)');
-  const fitRow = h('div', {}, h('div', { class: 'lbl' }, 'มุมมอง'), fitSeg, fitNote);
   const sec = (title, open, ...kids) => { const d = h('details', { class: 'studio-sec' }, h('summary', {}, title), h('div', { class: 'studio-sec-b' }, ...kids)); d.open = !!open; return d; };
   const panel = h('div', { class: 'studio-panel' },
     h('div', { class: 'studio-h' }, h('b', {}, 'เส้นคิด Studio'), h('span', { class: 'sub' }, ' เขียนบน iPad · อัดบน Mac')),
@@ -99,8 +98,7 @@ export async function openStudio(app) {
       h('div', { class: 'lbl' }, 'กล้องครู'), camSel,
       h('div', { class: 'row2' }, h('span', { class: 'sub' }, 'มุม'), posSeg), h('div', { class: 'row2' }, h('span', { class: 'sub' }, 'ขนาด'), camSizeSeg)),
     sec('ภาพในวิดีโอ', false,
-      h('div', { class: 'lbl' }, 'ที่มาของภาพ'), srcSeg, srcNote, pickScr, scrHelp,
-      fitRow,
+      srcNote, pickScr, scrHelp,
       h('div', { class: 'lbl' }, 'ความละเอียด'), resSeg, fmtNote),
     h('div', { style: { flex: 1 } }),
     upBox,
@@ -110,10 +108,14 @@ export async function openStudio(app) {
   const hudT = h('span', {}, ''), hud = h('div', { class: 'studio-hud' }, h('i', { class: 'lv' }), h('b', {}, 'REC'), hudT,
     h('button', { title: 'เริ่ม/หยุดอัด', onclick: () => recBtn.click() }, '●'), h('button', { title: 'ออกจากโหมดนำเสนอ', onclick: () => present(false) }, '✕ ออก'));
   const presentBtn = h('button', { class: 'pill sec', style: { width: '100%' }, onclick: () => present(true) }, icon('tv'), ' นำเสนอ / Google Meet');
-  function present(on) { root.classList.toggle('present', on); if (on) toast('โหมดนำเสนอ · ใน Meet กด "นำเสนอ" แล้วเลือกหน้าต่าง/แท็บนี้ · เลื่อนเมาส์ไปขอบล่างเพื่อดูปุ่ม · กด Esc เพื่อออก', 6000); }
+  function present(on) { root.classList.toggle('present', on); if (!on && document.fullscreenElement) document.exitFullscreen?.().catch(() => { }); if (on) toast('โหมดนำเสนอ · ใน Meet กด "นำเสนอ" แล้วเลือกหน้าต่าง/แท็บนี้ · เลื่อนเมาส์ไปขอบล่างเพื่อดูปุ่ม · กด Esc เพื่อออก', 6000); }
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && root.classList.contains('present')) present(false); });
   sizeTxt.after(presentBtn);
-  root.append(h('div', { class: 'studio-stage' }, cv, hud), panel);
+  // bar above the picture: what to show (content only / whole iPad screen with tools), how to frame it, full screen
+  const fsBtn = h('button', { class: 'sbar-btn', title: 'เต็มจอ (Esc เพื่อออก)', onclick: async () => { present(true); try { await root.requestFullscreen?.(); } catch { } } }, icon('expand'), ' เต็มจอ');
+  const bar = h('div', { class: 'studio-bar' }, h('span', { class: 'sub' }, 'แสดง'), srcSeg, fitSeg, h('div', { style: { flex: 1 } }), fsBtn);
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && root.classList.contains('present')) present(false); });
+  root.append(h('div', { class: 'studio-main' }, bar, h('div', { class: 'studio-stage' }, cv, hud)), panel);
 
   const mime = pickMime(); const isMp4 = (mime || '').includes('mp4');
   const canStream = !!window.showSaveFilePicker;

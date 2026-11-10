@@ -1042,25 +1042,28 @@ export class Editor {
     if (L.cover || (L.kind === 'hl' && prefs.hl.straight)) return;
     // shape recognition switched off: still notice the hold, only to say where to switch it back on
     L.hintOnly = !prefs.shapeRecog;
-    L.track = [{ t: performance.now(), x: L.sx, y: L.sy, n: L.pts.length }];
+    L.track = [{ t: performance.now(), x: L.sx, y: L.sy, n: L.pts.length }]; L.hb = [L.sx, L.sy, L.sx, L.sy];
     this.holdTimer = setInterval(() => this.checkHold(), 40);
   }
   trackHold(sx, sy) {
     const L = this.live; if (!L || !L.track) return;
     const now = performance.now(); L.track.push({ t: now, x: sx, y: sy, n: L.pts.length });
+    const hb = L.hb; if (hb) { if (sx < hb[0]) hb[0] = sx; if (sy < hb[1]) hb[1] = sy; if (sx > hb[2]) hb[2] = sx; if (sy > hb[3]) hb[3] = sy; }
     while (L.track.length > 2 && now - L.track[1].t > 900) L.track.shift();
   }
   checkHold() {
     const L = this.live; if (!L || L.shape) { clearInterval(this.holdTimer); return; }
     const now = performance.now(), tr = L.track; if (!tr || now - tr[0].t < HOLD_MS) return;
-    const last = tr[tr.length - 1], R = 9;
+    // "still" radius scales with the stroke: a 9 px circle would swallow most of a short dash or a small circle
+    const ext = L.hb ? Math.hypot(L.hb[2] - L.hb[0], L.hb[3] - L.hb[1]) : 100;
+    const last = tr[tr.length - 1], R = Math.max(2.5, Math.min(9, ext * 0.14));
     // first sample of the stationary window
     let i = tr.length - 1;
     while (i > 0 && Math.hypot(tr[i - 1].x - last.x, tr[i - 1].y - last.y) < R) i--;
     const stillSince = i === 0 ? tr[0].t : tr[i].t;
     if (now - stillSince >= HOLD_MS || now - last.t >= HOLD_MS) {
       // only when the stroke actually travelled before the hold
-      if (Math.hypot(L.sx - last.x, L.sy - last.y) < 12 && tr.length < 3) return;
+      if (ext < 6) return; // a dot, not a stroke
       L.holdIdx = tr[i].n;
       clearInterval(this.holdTimer);
       this.onHold();
