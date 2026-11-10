@@ -1071,3 +1071,23 @@ body.studio #app,body.studio .lib,body.studio .onb{display:none!important}
 .studio-panel .meter i{display:block;height:100%;min-width:0;transform:none;opacity:1}
 .studio-panel .seg{flex-wrap:wrap}
 .studio-h .sub{display:block;margin-left:0}
+.studio-panel{gap:8px;width:auto}
+.studio-card{background:#2b2f37;border-radius:14px;padding:10px 12px}
+.studio-card .studio-code{background:none;padding:0;font-size:56px}
+.studio-card .meter.big{margin-top:2px}
+.studio-rec{margin-top:6px}
+.studio-timer{font-size:34px;margin-top:0}
+.studio-sec{background:#2b2f37;border-radius:14px;overflow:hidden}
+.studio-sec summary{list-style:none;cursor:pointer;padding:12px 14px;font-size:19px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.studio-sec summary::-webkit-details-marker{display:none}
+.studio-sec summary::after{content:'▾';color:#9aa0ad;transition:transform .15s}.studio-sec[open] summary::after{transform:rotate(180deg)}
+.studio-sec-b{padding:0 14px 14px;display:flex;flex-direction:column;gap:6px}
+.studio-sec-b .lbl:first-child{margin-top:0}
+.studio-panel>*{flex:none}.studio-panel>div[style*="flex: 1"]{flex:1 0 8px}
+.studio-panel .pill{background:#343943;color:#eee;border:1px solid #444b57;height:44px;font-size:18px;justify-content:center}
+.studio-panel .pill.prim{background:#3B6CF5;border-color:#3B6CF5;color:#fff}
+.studio-panel .pill svg.i{--ico-in:#343943}
+.studio-panel .seg{display:flex;flex-wrap:nowrap;width:100%;border-radius:12px;padding:3px}
+.studio-panel .seg button{flex:1;white-space:nowrap;font-size:16px;padding:7px 4px;min-width:0}
+.studio-up{flex-wrap:nowrap}.studio-up .pill{height:36px;font-size:15px;padding:0 12px;white-space:nowrap}
+.studio-root{grid-template-columns:1fr 380px}

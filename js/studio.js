@@ -69,25 +69,50 @@ export async function openStudio(app) {
   setInterval(() => checkUpdate(false), 20 * 60e3);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(false); });
 
+  // what the video shows: the vector ink stream (sharp at any size), or a captured window that mirrors the whole iPad
+  // screen (QuickTime's iPad mirror), so the teacher's toolbars are visible too
+  let scrEl = null, scrStream = null;
+  const srcNote = h('div', { class: 'sub' }, '');
+  const paintSrc = () => { srcNote.innerHTML = x.src === 'screen' ? (scrEl ? 'กำลังใช้ภาพทั้งจอ iPad (เห็นแถบเครื่องมือ) · ความคมเท่าจอ iPad' : 'ยังไม่ได้เลือกหน้าต่าง · กดปุ่มด้านล่าง') : 'เฉพาะกระดาษและลายมือ คมทุกความละเอียด · ไม่เห็นแถบเครื่องมือ'; pickScr.hidden = x.src !== 'screen'; scrHelp.hidden = x.src !== 'screen'; fitRow.hidden = x.src === 'screen'; };
+  async function pickScreen() {
+    try {
+      scrStream?.getTracks().forEach(t => t.stop());
+      scrStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+      scrEl = h('video', { muted: true, playsinline: true, autoplay: true }); scrEl.srcObject = scrStream; await scrEl.play().catch(() => { });
+      scrStream.getVideoTracks()[0].addEventListener('ended', () => { scrEl = null; scrStream = null; toast('หน้าต่างที่จับภาพถูกปิด · กลับไปใช้ภาพลายมือ', 3500, 'warn'); paintSrc(); });
+    } catch (e) { if (e.name !== 'NotAllowedError') toast('จับภาพหน้าต่างไม่ได้: ' + (e.message || e.name), 4000, 'warn'); }
+    paintSrc();
+  }
+  x.src = x.src === 'screen' ? 'ink' : (x.src || 'ink'); // a captured window never survives a restart: start on ink
+  const srcSeg = seg([['ink', 'ลายมือ (คมสุด)'], ['screen', 'ทั้งจอ + เครื่องมือ']], x.src, v => { x.src = v; savePrefs(); paintSrc(); if (v === 'screen' && !scrEl) pickScreen(); });
+  const pickScr = h('button', { class: 'pill sec', style: { width: '100%', marginTop: '6px' }, onclick: pickScreen }, icon('screen'), ' เลือกหน้าต่างที่แสดงจอ iPad');
+  const scrHelp = h('div', { class: 'sub' }, 'วิธีทำ: ต่อ iPad กับ Mac ด้วยสาย USB → เปิด QuickTime Player → ไฟล์ → บันทึกภาพยนตร์ใหม่ → กดลูกศรข้างปุ่มอัด เลือก iPad → กลับมากดปุ่มด้านบนแล้วเลือกหน้าต่าง QuickTime (ไม่ต้องใส่รหัส)');
+  const fitRow = h('div', {}, h('div', { class: 'lbl' }, 'มุมมอง'), fitSeg, fitNote);
+  const sec = (title, open, ...kids) => { const d = h('details', { class: 'studio-sec' }, h('summary', {}, title), h('div', { class: 'studio-sec-b' }, ...kids)); d.open = !!open; return d; };
   const panel = h('div', { class: 'studio-panel' },
     h('div', { class: 'studio-h' }, h('b', {}, 'เส้นคิด Studio'), h('span', { class: 'sub' }, ' เขียนบน iPad · อัดบน Mac')),
-    h('div', { class: 'lbl' }, 'รหัสสำหรับ iPad'), code, status,
-    h('div', { class: 'lbl' }, 'ไมโครโฟน'), micSel, micMeter, micState,
-    h('div', { class: 'lbl' }, 'กล้องครู'), camSel,
-    h('div', { class: 'row2' }, h('span', { class: 'sub' }, 'มุม'), posSeg, h('span', { class: 'sub' }, 'ขนาด'), camSizeSeg),
-    h('div', { class: 'lbl' }, 'ความละเอียด'), resSeg,
-    h('div', { class: 'lbl' }, 'มุมมอง'), fitSeg, fitNote,
-    fmtNote,
+    h('div', { class: 'studio-card' }, h('div', { class: 'lbl', style: { marginTop: 0 } }, 'รหัสสำหรับ iPad'), code, status),
+    h('div', { class: 'studio-card' }, micMeter, micState),
     recBtn, timer, sizeTxt,
-    h('button', { class: 'pill sec', style: { marginTop: '14px' }, onclick: () => closeStudio() }, icon('close'), ' ปิด Studio'),
-    upBox);
+    sec('ไมค์และกล้อง', false,
+      h('div', { class: 'lbl' }, 'ไมโครโฟน'), micSel,
+      h('div', { class: 'lbl' }, 'กล้องครู'), camSel,
+      h('div', { class: 'row2' }, h('span', { class: 'sub' }, 'มุม'), posSeg), h('div', { class: 'row2' }, h('span', { class: 'sub' }, 'ขนาด'), camSizeSeg)),
+    sec('ภาพในวิดีโอ', false,
+      h('div', { class: 'lbl' }, 'ที่มาของภาพ'), srcSeg, srcNote, pickScr, scrHelp,
+      fitRow,
+      h('div', { class: 'lbl' }, 'ความละเอียด'), resSeg, fmtNote),
+    h('div', { style: { flex: 1 } }),
+    upBox,
+    h('button', { class: 'pill sec', style: { marginTop: '8px' }, onclick: () => closeStudio() }, icon('close'), ' ปิด Studio'));
+  paintSrc();
   // presentation mode (for sharing the window into Google Meet): only the board, with a small bar that appears on hover
   const hudT = h('span', {}, ''), hud = h('div', { class: 'studio-hud' }, h('i', { class: 'lv' }), h('b', {}, 'REC'), hudT,
     h('button', { title: 'เริ่ม/หยุดอัด', onclick: () => recBtn.click() }, '●'), h('button', { title: 'ออกจากโหมดนำเสนอ', onclick: () => present(false) }, '✕ ออก'));
-  const presentBtn = h('button', { class: 'pill sec', style: { marginTop: '8px' }, onclick: () => present(true) }, icon('tv'), ' โหมดนำเสนอ (สำหรับ Google Meet)');
+  const presentBtn = h('button', { class: 'pill sec', style: { width: '100%' }, onclick: () => present(true) }, icon('tv'), ' นำเสนอ / Google Meet');
   function present(on) { root.classList.toggle('present', on); if (on) toast('โหมดนำเสนอ · ใน Meet กด "นำเสนอ" แล้วเลือกหน้าต่าง/แท็บนี้ · เลื่อนเมาส์ไปขอบล่างเพื่อดูปุ่ม · กด Esc เพื่อออก', 6000); }
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && root.classList.contains('present')) present(false); });
-  recBtn.after(presentBtn);
+  sizeTxt.after(presentBtn);
   root.append(h('div', { class: 'studio-stage' }, cv, hud), panel);
 
   const mime = pickMime(); const isMp4 = (mime || '').includes('mp4');
@@ -154,6 +179,10 @@ export async function openStudio(app) {
     const W = cv.width, H = cv.height;
     if (base == null) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#EDEAE2'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#6b6f7a'; ctx.font = `${Math.round(H * 0.045)}px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.fillText('รอ iPad เชื่อมต่อ · ใส่รหัสด้านขวาในเส้นคิดบน iPad (เมนู → ส่งภาพไป Studio)', W / 2, H / 2); }
     else { st.seek(Math.max(0, liveT())); st.draw(ctx, W, H, 1); }
+    if (x.src === 'screen' && scrEl && scrEl.readyState >= 2) { // whole iPad screen, letterboxed
+      const vw = scrEl.videoWidth, vh = scrEl.videoHeight, k = Math.min(W / vw, H / vh), dw = vw * k, dh = vh * k;
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#111318'; ctx.fillRect(0, 0, W, H); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(scrEl, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    }
     if (camEl) drawCamFrame(ctx, camMeta(W, H), camEl, W, H);
     drawCredit(ctx, W, H, credit);
     if (rec) { timer.textContent = fmtTime(performance.now() - recStart); sizeTxt.textContent = fmtBytes(bytes) + (fileName ? ' → ' + fileName : ''); }
@@ -193,7 +222,7 @@ export async function openStudio(app) {
   // ---- recording ----
   async function startRec() {
     if (!micStream) { toast('ยังไม่มีไมค์ · เลือกไมค์ก่อน', 3000, 'warn'); return; }
-    if (base == null && !confirm('iPad ยังไม่ได้เชื่อมต่อ จะอัดเลยไหม?')) return;
+    if (base == null && !(x.src === 'screen' && scrEl) && !confirm('iPad ยังไม่ได้เชื่อมต่อ จะอัดเลยไหม?')) return;
     const ext = isMp4 ? 'mp4' : 'webm';
     fileName = `${(nbName || 'เส้นคิด').replace(/[\\/:*?"<>|]/g, '-')} ${new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} ${new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }).replace(':', '.')}.${ext}`;
     writer = null; let idbId = null, seq = 0;
@@ -230,7 +259,7 @@ export async function openStudio(app) {
     if (rec) { rec.stop(); await new Promise(r => setTimeout(r, 1500)); }
     try { peer?.send({ k: 'bye' }); } catch { }
     await peer?.close(true);
-    micStream?.getTracks().forEach(t => t.stop()); camStream?.getTracks().forEach(t => t.stop()); try { meterCtx?.close(); } catch { }
+    micStream?.getTracks().forEach(t => t.stop()); camStream?.getTracks().forEach(t => t.stop()); scrStream?.getTracks().forEach(t => t.stop()); try { meterCtx?.close(); } catch { }
     location.href = location.pathname.includes('/studio') ? '../' : location.pathname; // back to the main app
   }
   await fillDevices();
