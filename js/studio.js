@@ -14,7 +14,7 @@ const DELAY = 450; // ms behind the iPad: smooths jitter and lets strokes animat
 
 export async function openStudio(app) {
   const x = prefs.studio || (prefs.studio = {}); x.res = x.res || '1440'; x.camPos = x.camPos || 'br'; x.camSize = x.camSize || 'm'; x.fit = x.fit || 'follow';
-  document.body.classList.add('studio'); document.title = 'ห้องอัด เส้นคิด';
+  document.body.classList.add('studio'); document.title = 'เส้นคิด Studio';
   const root = h('div', { class: 'studio-root' }); document.body.appendChild(root);
 
   // ---- receiver state ----
@@ -39,7 +39,7 @@ export async function openStudio(app) {
   const camSizeSeg = seg([['s', 'เล็ก'], ['m', 'กลาง'], ['l', 'ใหญ่']], x.camSize, v => { x.camSize = v; savePrefs(); });
 
   const panel = h('div', { class: 'studio-panel' },
-    h('div', { class: 'studio-h' }, h('b', {}, 'ห้องอัด'), h('span', { class: 'sub' }, ' เขียนบน iPad · อัดบน Mac')),
+    h('div', { class: 'studio-h' }, h('b', {}, 'เส้นคิด Studio'), h('span', { class: 'sub' }, ' เขียนบน iPad · อัดบน Mac')),
     h('div', { class: 'lbl' }, 'รหัสสำหรับ iPad'), code, status,
     h('div', { class: 'lbl' }, 'ไมโครโฟน'), micSel, micMeter,
     h('div', { class: 'lbl' }, 'กล้องครู'), camSel,
@@ -48,7 +48,7 @@ export async function openStudio(app) {
     h('div', { class: 'lbl' }, 'มุมมอง'), fitSeg, fitNote,
     fmtNote,
     recBtn, timer, sizeTxt,
-    h('button', { class: 'pill sec', style: { marginTop: '14px' }, onclick: () => closeStudio() }, icon('close'), ' ปิดห้องอัด'));
+    h('button', { class: 'pill sec', style: { marginTop: '14px' }, onclick: () => closeStudio() }, icon('close'), ' ปิด Studio'));
   root.append(h('div', { class: 'studio-stage' }, cv), panel);
 
   const mime = pickMime(); const isMp4 = (mime || '').includes('mp4');
@@ -96,7 +96,7 @@ export async function openStudio(app) {
   let waitingMsg = true;
   function frame() {
     const W = cv.width, H = cv.height;
-    if (base == null) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#EDEAE2'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#6b6f7a'; ctx.font = `${Math.round(H * 0.045)}px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.fillText('รอ iPad เชื่อมต่อ · ใส่รหัสด้านขวาในเส้นคิดบน iPad (เมนู → ส่งภาพไปห้องอัด)', W / 2, H / 2); }
+    if (base == null) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#EDEAE2'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#6b6f7a'; ctx.font = `${Math.round(H * 0.045)}px "TH Sarabun New", sans-serif`; ctx.textAlign = 'center'; ctx.fillText('รอ iPad เชื่อมต่อ · ใส่รหัสด้านขวาในเส้นคิดบน iPad (เมนู → ส่งภาพไป Studio)', W / 2, H / 2); }
     else { st.seek(Math.max(0, liveT())); st.draw(ctx, W, H, 1); }
     if (camEl) drawCamFrame(ctx, camMeta(W, H), camEl, W, H);
     drawCredit(ctx, W, H, credit);

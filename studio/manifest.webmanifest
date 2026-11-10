@@ -1,6 +1,6 @@
 {
-  "name": "ห้องอัด เส้นคิด — เขียนบน iPad อัดบน Mac",
-  "short_name": "ห้องอัด",
+  "name": "เส้นคิด Studio",
+  "short_name": "เส้นคิด Studio",
   "description": "รับภาพเขียนสดจากเส้นคิดบน iPad แล้วอัดเป็นวิดีโอ MP4 พร้อมเสียงและกล้องครู",
   "id": "senkid-studio",
   "lang": "th",
@@ -8,8 +8,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "landscape",
-  "background_color": "#1b1d22",
-  "theme_color": "#1b1d22",
+  "background_color": "#2F5BEA",
+  "theme_color": "#2F5BEA",
   "icons": [
     { "src": "../icons/studio-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "../icons/studio-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.76';
+export const VERSION = '1.9.77';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -277,7 +277,7 @@ class App {
         row('ป้องกันเบราว์เซอร์ลบข้อมูล', persisted),
         row('สำรองสมุดทั้งหมด', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'ส่งออก'); b.onclick = async () => { await this.editor?.flush(); this.exportNotebooks((await db.getAll('notebooks')).map(n => n.id)); }; return b; })()),
         row('นำเข้าไฟล์สำรอง', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('upload'), 'นำเข้า'); b.onclick = () => this.importBackup(); return b; })()),
-        ...(prefs.studentUI ? [] : [row('ห้องอัด (อัดบน Mac/PC)', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('tv'), 'เปิด'); b.onclick = () => { location.href = new URL('studio/', location.href.replace(/[?#].*$/, '')).href; }; return b; })(), 'แอปแยกสำหรับคอมพิวเตอร์ (Chrome) · เปิดแล้วกด "ติดตั้ง" ในแถบที่อยู่จะได้ไอคอนบน Dock · ได้รหัส 4 หลัก แล้วบน iPad เลือก เมนู → ส่งภาพไปห้องอัด'),
+        ...(prefs.studentUI ? [] : [row('เส้นคิด Studio (อัดบน Mac/PC)', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('tv'), 'เปิด'); b.onclick = () => { location.href = new URL('studio/', location.href.replace(/[?#].*$/, '')).href; }; return b; })(), 'แอปแยกสำหรับคอมพิวเตอร์ (Chrome) · เปิดแล้วกด "ติดตั้ง" ในแถบที่อยู่จะได้ไอคอนบน Dock · ได้รหัส 4 หลัก แล้วบน iPad เลือก เมนู → ส่งภาพไปเส้นคิด Studio'),
         row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => { this._closeSettings?.(); this.openRecordings(); }; return b; })()),
         row('ทำวิดีโอจากบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิดคลัง'); b.onclick = () => { this._closeSettings?.(); this.openRecordings(); }; return b; })(), 'ในคลังวิดีโอ กด "ทำวิดีโอ" ที่บทเรียน → เลือกความละเอียด → เสร็จแล้วบันทึกลงแอปรูปภาพได้เลย')])),
       h('div', { class: 'sec-t' }, 'ความช่วยเหลือ'),

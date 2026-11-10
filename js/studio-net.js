@@ -23,7 +23,7 @@ class FirestoreSignal {
     await new Promise(r => { const u = this.auth.onAuthStateChanged(() => { u(); r(); }); setTimeout(r, 2500); });
     if (!this.auth.currentUser) {
       const { accessToken } = await import('./sync.js'); const tok = accessToken();
-      if (!tok) throw new Error(location.pathname.includes('/studio') ? 'ยังไม่ได้เชื่อมบัญชี Google บนเครื่องนี้ · เปิดเส้นคิด → ตั้งค่า → ซิงก์ Google Drive → เชื่อมต่อ แล้วกลับมาที่ห้องอัด' : 'ยังไม่ได้เชื่อม Google Drive บน iPad · ตั้งค่า → ซิงก์ Google Drive');
+      if (!tok) throw new Error(location.pathname.includes('/studio') ? 'ยังไม่ได้เชื่อมบัญชี Google บนเครื่องนี้ · เปิดเส้นคิด → ตั้งค่า → ซิงก์ Google Drive → เชื่อมต่อ แล้วกลับมาที่เส้นคิด Studio' : 'ยังไม่ได้เชื่อม Google Drive บน iPad · ตั้งค่า → ซิงก์ Google Drive');
       try { const cred = window.firebase.auth.GoogleAuthProvider.credential(null, tok); await this.auth.signInWithCredential(cred); }
       catch (e) { throw new Error('เข้าระบบ Firebase ไม่ได้ (' + (e.code || e.message) + ') · ลองเชื่อม Google ใหม่ในตั้งค่า'); }
     }
@@ -126,8 +126,8 @@ export async function createHost(onStatus) {
 export async function joinGuest(code, onStatus) {
   const sig = makeSignal(); await sig.init();
   const path = ROOT + '/' + code;
-  const room = await sig.get(path); if (!room) throw new Error('ไม่พบห้องอัดรหัส ' + code + ' · ตรวจรหัสบนจอ Mac อีกครั้ง');
-  const offerDoc = await sig.get(path + '/sig/offer'); if (!offerDoc?.sdp) throw new Error('ห้องอัดยังไม่พร้อม · ลองใหม่อีกครั้ง');
+  const room = await sig.get(path); if (!room) throw new Error('ไม่พบ Studio รหัส ' + code + ' · ตรวจรหัสบนจอ Mac อีกครั้ง');
+  const offerDoc = await sig.get(path + '/sig/offer'); if (!offerDoc?.sdp) throw new Error('Studio ยังไม่พร้อม · ลองใหม่อีกครั้ง');
   const peer = new Peer('guest', code, sig); peer.onStatus = onStatus;
   peer.pc.ondatachannel = (e) => peer.attachDC(e.channel);
   await peer.pc.setRemoteDescription(JSON.parse(offerDoc.sdp));

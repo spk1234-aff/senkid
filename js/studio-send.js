@@ -12,10 +12,10 @@ export function liveActive() { return !!link; }
 export async function openStudioLink(app, ed) {
   if (link) return showChipMenu(app);
   const inp = h('input', { class: 'inp', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 4, placeholder: '0000', autocomplete: 'off', style: { fontSize: '40px', letterSpacing: '12px', textAlign: 'center', width: '100%' } });
-  const sub = h('p', { class: 'sub', style: { margin: '10px 0 0' } }, 'บน Mac เปิดแอป "ห้องอัด" (spk1234-aff.github.io/senkid/studio/) จะเห็นรหัส 4 หลัก พิมพ์รหัสนั้นที่นี่ · ทั้งสองเครื่องต้องต่ออินเทอร์เน็ต');
-  const body = h('div', {}, h('div', { class: 'lbl' }, 'รหัสห้องอัดจากจอ Mac'), inp, sub);
+  const sub = h('p', { class: 'sub', style: { margin: '10px 0 0' } }, 'บน Mac เปิดแอป "เส้นคิด Studio" (spk1234-aff.github.io/senkid/studio/) จะเห็นรหัส 4 หลัก พิมพ์รหัสนั้นที่นี่ · ทั้งสองเครื่องต้องต่ออินเทอร์เน็ต');
+  const body = h('div', {}, h('div', { class: 'lbl' }, 'รหัสจากจอ เส้นคิด Studio บน Mac'), inp, sub);
   setTimeout(() => inp.focus(), 50);
-  dialog('ส่งภาพไปห้องอัด (Mac)', body, [{ label: 'ยกเลิก' }, {
+  dialog('ส่งภาพไปเส้นคิด Studio (Mac)', body, [{ label: 'ยกเลิก' }, {
     label: 'เชื่อมต่อ', cls: 'prim', icon: 'link', action: async (B) => {
       const code = inp.value.trim(); if (!/^\d{4}$/.test(code)) { sub.textContent = 'รหัสต้องเป็นตัวเลข 4 หลัก'; return false; }
       B.disabled = true; B.textContent = 'กำลังเชื่อมต่อ…'; sub.textContent = 'กำลังติดต่อห้องอัด…';
@@ -27,9 +27,9 @@ export async function openStudioLink(app, ed) {
 
 async function connect(app, ed, code) {
   const N = await import('./studio-net.js');
-  const chip = h('div', { class: 'live-chip' }, h('span', { class: 'dot' }), h('span', { class: 'txt' }, 'กำลังเชื่อมต่อห้องอัด…'), h('button', { class: 'x', title: 'หยุดส่งภาพ' }, '✕'));
+  const chip = h('div', { class: 'live-chip' }, h('span', { class: 'dot' }), h('span', { class: 'txt' }, 'กำลังเชื่อมต่อ Studio…'), h('button', { class: 'x', title: 'หยุดส่งภาพ' }, '✕'));
   const setTxt = (s) => {
-    const m = { connecting: 'กำลังเชื่อมต่อ…', paired: 'จับคู่แล้ว · กำลังเปิดช่องส่งตรง…', direct: 'ห้องอัด: เชื่อมต่อตรง ✓', relay: 'ห้องอัด: ส่งผ่านเซิร์ฟเวอร์ (ช้ากว่าเล็กน้อย)', closed: 'ห้องอัดปิดแล้ว' };
+    const m = { connecting: 'กำลังเชื่อมต่อ…', paired: 'จับคู่แล้ว · กำลังเปิดช่องส่งตรง…', direct: 'Studio: เชื่อมต่อตรง ✓', relay: 'Studio: ส่งผ่านเซิร์ฟเวอร์ (ช้ากว่าเล็กน้อย)', closed: 'ห้องอัดปิดแล้ว' };
     chip.querySelector('.txt').textContent = m[s] || s; chip.dataset.s = s;
   };
   const peer = await N.joinGuest(code, setTxt);
@@ -48,10 +48,10 @@ async function connect(app, ed, code) {
   peer.send({ k: 'ev', ev: tl.events[0] });
   tl.based.clear(); tl.view(true);
   const ping = setInterval(() => { if (link) peer.send({ k: 'ping', t: tl.now() }); }, 4000);
-  peer.onMessage((m) => { if (m.k === 'bye') { toast('ห้องอัดบน Mac ปิดการเชื่อมต่อแล้ว', 3000); stopLive(app, false); } if (m.k === 'rec') { chip.classList.toggle('rec', !!m.on); toast(m.on ? '● Mac เริ่มอัดแล้ว' : '■ Mac หยุดอัดแล้ว', 2000); } if (m.k === 'needpdf') sendPdfPage(ed, m.pid, m.pdf, new Set(), peer); });
+  peer.onMessage((m) => { if (m.k === 'bye') { toast('Studio บน Mac ปิดการเชื่อมต่อแล้ว', 3000); stopLive(app, false); } if (m.k === 'rec') { chip.classList.toggle('rec', !!m.on); toast(m.on ? '● Mac เริ่มอัดแล้ว' : '■ Mac หยุดอัดแล้ว', 2000); } if (m.k === 'needpdf') sendPdfPage(ed, m.pid, m.pdf, new Set(), peer); });
   chip.querySelector('.x').onclick = () => showChipMenu(app);
   link = { peer, tl, chip, ping };
-  toast('ส่งภาพไปห้องอัดแล้ว · เขียนต่อได้เลย Mac จะเห็นทันที', 3000);
+  toast('ส่งภาพไป Studio แล้ว · เขียนต่อได้เลย Mac จะเห็นทันที', 3000);
 }
 
 async function sendPdfPage(ed, pid, ref, sent, peer) {
@@ -75,7 +75,7 @@ async function sendPdfPage(ed, pid, ref, sent, peer) {
 function showChipMenu(app) {
   if (!link) return;
   const s = link.peer.status;
-  dialog('ห้องอัด (Mac)', h('div', {}, h('p', {}, s === 'direct' ? 'เชื่อมต่อตรงกับ Mac อยู่ ✓' : s === 'relay' ? 'ส่งผ่านเซิร์ฟเวอร์อยู่ (ใช้ได้ แต่ช้ากว่าเล็กน้อย)' : 'กำลังเชื่อมต่อ…'), h('p', { class: 'sub' }, 'ทุกเส้นที่เขียน การเปลี่ยนหน้า และการซูม ถูกส่งไปให้ Mac อัด · ฝั่ง iPad ไม่ได้อัดอะไรไว้ เว้นแต่กดอัดบทเรียนตามปกติด้วย')),
+  dialog('เส้นคิด Studio (Mac)', h('div', {}, h('p', {}, s === 'direct' ? 'เชื่อมต่อตรงกับ Mac อยู่ ✓' : s === 'relay' ? 'ส่งผ่านเซิร์ฟเวอร์อยู่ (ใช้ได้ แต่ช้ากว่าเล็กน้อย)' : 'กำลังเชื่อมต่อ…'), h('p', { class: 'sub' }, 'ทุกเส้นที่เขียน การเปลี่ยนหน้า และการซูม ถูกส่งไปให้ Mac อัด · ฝั่ง iPad ไม่ได้อัดอะไรไว้ เว้นแต่กดอัดบทเรียนตามปกติด้วย')),
     [{ label: 'ปิด' }, { label: 'หยุดส่งภาพ', cls: 'danger', icon: 'close', action: () => stopLive(app, true) }], { width: 440 });
 }
 
@@ -88,5 +88,5 @@ export function stopLive(app, say = true) {
   tl.live = null;
   if (tl.liveOnly) { tl.liveOnly = false; tl.active = false; const ed = tl.ed; if (ed?.hooks) ed.hooks.dirty = ed.hooks.view = ed.hooks.frame = null; }
   chip.remove();
-  if (say) toast('หยุดส่งภาพไปห้องอัดแล้ว', 2000);
+  if (say) toast('หยุดส่งภาพไป Studio แล้ว', 2000);
 }

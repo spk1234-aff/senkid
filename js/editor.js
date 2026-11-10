@@ -680,7 +680,7 @@ export class Editor {
     if (prefs.studentUI) mi('upload', 'ส่งงานให้ครู', () => openExportDialog(this, { submit: true }));
     if (!prefs.studentUI) mi('screen', 'หน้าจอนักเรียน', () => this.app.studentMenu(anchor));
     if (!prefs.studentUI) mi('mic', 'บทเรียนที่อัดในเล่มนี้', () => this.app.openRecordings(this.nb.id));
-    if (!prefs.studentUI) mi('tv', 'ส่งภาพไปห้องอัด (Mac)', () => import('./studio-send.js').then(m => m.openStudioLink(this.app, this)));
+    if (!prefs.studentUI) mi('tv', 'ส่งภาพไปเส้นคิด Studio (Mac)', () => import('./studio-send.js').then(m => m.openStudioLink(this.app, this)));
     if (!prefs.studentUI) mi('pages', this.splitPane ? 'ปิดเทียบสองหน้า' : 'เทียบสองหน้า (ดูอีกหน้าด้านขวา)', () => import('./split.js').then(m => m.toggleSplit(this)));
     if (!prefs.studentUI) mi('dice', 'สุ่มโจทย์ฝึก', () => import('./problems.js').then(m => m.openProblems(this, anchor)));
     mi('history', 'ย้อนดูขั้นก่อนหน้า (ไม่ลบ)', () => this.openPeek(anchor));
