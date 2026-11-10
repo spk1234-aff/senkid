@@ -78,6 +78,11 @@ const queue = []; let busy = false;
 const pending = new Set();
 function key(id, n, b) { return id + '#' + n + '@' + b; }
 
+// a bitmap handed over from another device (the Mac "ห้องอัด" has no copy of the iPad's PDF): served for every scale
+export function injectPdfBitmap(id, n, img) {
+  const c = document.createElement('canvas'); c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height; c.getContext('2d').drawImage(img, 0, 0);
+  for (const b of BUCKETS) cache.set(key(id, n, b), { c, px: c.width * c.height, used: performance.now() });
+}
 export function pdfBitmap(page, scale, maxBucket = 3) {
   const ref = page.pdf; if (!ref) return null;
   const want = BUCKETS.find(b => b >= scale * 0.92) || BUCKETS[BUCKETS.length - 1];

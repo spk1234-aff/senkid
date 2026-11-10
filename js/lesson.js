@@ -11,13 +11,13 @@ import { serializePage } from './editor.js';
 const KV = (id) => 'lesson:' + id;
 
 // ---------- serialisation (strokes with images → JSON-safe) ----------
-async function strokeOut(s) {
+export async function strokeOut(s) {
   const o = { ...s }; delete o.bb;
   if (o.pts instanceof Float32Array) o.pts = Array.from(o.pts);
   if (o.blob instanceof Blob) { o.data = await blobToDataURL(o.blob); delete o.blob; }
   return o;
 }
-async function strokeIn(o) {
+export async function strokeIn(o) {
   const s = { ...o };
   if (Array.isArray(s.pts)) s.pts = Float32Array.from(s.pts);
   if (s.data) { s.blob = await dataURLToBlob(s.data); delete s.data; }
@@ -28,20 +28,22 @@ async function strokeIn(o) {
 export class Timeline {
   constructor(app) { this.app = app; this.active = false; }
   start(ed, id) {
-    this.ed = ed; this.id = id; this.t0 = performance.now(); this.pausedTotal = 0; this.pauseAt = 0; this.active = true;
+    this.ed = ed; this.id = id; this.t0 = performance.now(); this.pausedTotal = 0; this.pauseAt = 0; this.active = true; this.liveOnly = false;
     this.events = []; this.known = new Map(); this.based = new Set(); this.pending = []; this.lastView = ''; this.lastLaser = 0; this.lastSave = performance.now();
     this.events.push([0, 'meta', { nb: ed.nb.id, name: ed.nb.name, paper: ed.paper, cols: ed.cols }]);
     ed.hooks.dirty = (p) => this.pageChanged(p); ed.hooks.view = () => this.view(); ed.hooks.frame = () => this.frame();
     this.view(true);
   }
   now() { return Math.round(performance.now() - this.t0 - this.pausedTotal - (this.pauseAt ? performance.now() - this.pauseAt : 0)); }
+  // live listeners (the Mac "ห้องอัด") get every event as soon as its payload is complete
+  push(ev, ready) { this.events.push(ev); if (this.live) { const go = () => this.live(ev); ready ? ready.then(go) : go(); } return ev; }
   pause() { this.pauseAt = performance.now(); }
   resume() { if (this.pauseAt) { this.pausedTotal += performance.now() - this.pauseAt; this.pauseAt = 0; } }
   base(p) {
     if (this.based.has(p.id)) return; this.based.add(p.id);
     const sp = serializePage(p); const t = this.now();
-    const ev = [t, 'base', p.id, null]; this.events.push(ev);
-    this.pending.push(Promise.all(sp.strokes.map(strokeOut)).then(st => { ev[3] = { ...sp, strokes: st }; }));
+    const ev = [t, 'base', p.id, null];
+    const rd = Promise.all(sp.strokes.map(strokeOut)).then(st => { ev[3] = { ...sp, strokes: st }; }); this.pending.push(rd); this.push(ev, rd);
     this.known.set(p.id, new Map(p.strokes.map(s => [s.id, s])));
   }
   pageChanged(p) {
@@ -52,11 +54,11 @@ export class Timeline {
     for (const s of p.strokes) {
       cur.set(s.id, s);
       const old = prev.get(s.id);
-      if (!old) { const ev = [t, 'add', p.id, null, this.ed.lastCommitT0 ? Math.max(0, Math.round(this.ed.lastCommitT0 - this.t0 - this.pausedTotal)) : t]; this.events.push(ev); this.pending.push(strokeOut(s).then(o => { ev[3] = o; })); }
-      else if (old !== s) { const ev = [t, 'rep', p.id, null]; this.events.push(ev); this.pending.push(strokeOut(s).then(o => { ev[3] = o; })); }
+      if (!old) { const ev = [t, 'add', p.id, null, this.ed.lastCommitT0 ? Math.max(0, Math.round(this.ed.lastCommitT0 - this.t0 - this.pausedTotal)) : t]; const rd = strokeOut(s).then(o => { ev[3] = o; }); this.pending.push(rd); this.push(ev, rd); }
+      else if (old !== s) { const ev = [t, 'rep', p.id, null]; const rd = strokeOut(s).then(o => { ev[3] = o; }); this.pending.push(rd); this.push(ev, rd); }
     }
     for (const id of prev.keys()) if (!cur.has(id)) rm.push(id);
-    if (rm.length) this.events.push([t, 'rm', p.id, rm]);
+    if (rm.length) this.push([t, 'rm', p.id, rm]);
     this.known.set(p.id, cur);
     if (performance.now() - this.lastSave > 20000) this.save(false);
   }
@@ -69,26 +71,29 @@ export class Timeline {
     for (const pid of vis) { const p = ed.pageMap.get(pid); if (p) this.base(p); }
     const key = [x0, y0, x1, y1].map(v => v.toFixed(1)).join(',') + vis.join('');
     if (key === this.lastView && !force) return; this.lastView = key;
-    this.events.push([this.now(), 'view', { world: [x0, y0, x1, y1], vis, rects, paper: ed.paper }]);
+    this.push([this.now(), 'view', { world: [x0, y0, x1, y1], vis, rects, paper: ed.paper }]);
   }
   frame() {
     if (!this.active || this.pauseAt) return;
     const ed = this.ed;
-    if (ed.laser.length) { const now = performance.now(); if (now - this.lastLaser > 70) { this.lastLaser = now; this.events.push([this.now(), 'laser', ed.laserWorld(), !!ed.lasering]); this.hadLaser = true; } }
-    else if (this.hadLaser) { this.hadLaser = false; this.events.push([this.now(), 'laser', [], false]); }
+    if (ed.laser.length) { const now = performance.now(); if (now - this.lastLaser > 70) { this.lastLaser = now; this.push([this.now(), 'laser', ed.laserWorld(), !!ed.lasering]); this.hadLaser = true; } }
+    else if (this.hadLaser) { this.hadLaser = false; this.push([this.now(), 'laser', [], false]); }
     if (this.ed.lastViewChange && performance.now() - this.ed.lastViewChange < 50) this.view();
   }
   async save(final) {
     this.lastSave = performance.now();
     await Promise.all(this.pending); this.pending = [];
     const json = JSON.stringify({ v: 1, id: this.id, duration: this.now(), events: this.events, final: !!final });
-    await db.put('kv', { k: KV(this.id), v: json });
+    if (!this.liveOnly) await db.put('kv', { k: KV(this.id), v: json }); // live-only streams (ห้องอัด) are not kept on the iPad
     return json.length;
   }
   async stop() {
     if (!this.active) return 0;
     this.active = false; const ed = this.ed; ed.hooks.dirty = ed.hooks.view = ed.hooks.frame = null;
-    return this.save(true);
+    const n = await this.save(true);
+    // a lesson recording ended while the Mac "ห้องอัด" is still listening: keep streaming in live-only mode
+    if (this.live) { this.start(ed, 'live-' + Date.now()); this.liveOnly = true; }
+    return n;
   }
 }
 
@@ -103,12 +108,14 @@ export class State {
     }
   }
   seek(t) { if (t < this.lastT) this.reset(); this.advance(t); }
+  // remembers the latest ink position (page + y) for the "follow the pen" framing
+  noteInk(pid, s, t) { let y = null; if (s.pts && s.pts.length >= 2) { let a = Infinity, b = -Infinity; for (let i = 1; i < s.pts.length; i += 4) { a = Math.min(a, s.pts[i]); b = Math.max(b, s.pts[i]); } y = (a + b) / 2; } else if (s.y != null) y = s.y + (s.h || 0) / 2; if (y != null) this.ink = { pid, y, t }; }
   advance(t) {
     const E = this.data.events;
     while (this.i < E.length && E[this.i][0] <= t) {
       const ev = E[this.i++]; const k = ev[1];
       if (k === 'base') { if (ev[3]) this.pages.set(ev[2], { ...ev[3], strokes: ev[3].strokes.slice() }); }
-      else if (k === 'add') { const p = this.pages.get(ev[2]); if (p && ev[3]) p.strokes.push(ev[3]); }
+      else if (k === 'add') { const p = this.pages.get(ev[2]); if (p && ev[3]) { p.strokes.push(ev[3]); this.noteInk(ev[2], ev[3], ev[0]); } }
       else if (k === 'rep') { const p = this.pages.get(ev[2]); if (p && ev[3]) p.strokes = p.strokes.map(s => s.id === ev[3].id ? ev[3] : s); }
       else if (k === 'rm') { const p = this.pages.get(ev[2]); if (p) { const rm = new Set(ev[3]); p.strokes = p.strokes.filter(s => !rm.has(s.id)); } }
       else if (k === 'view') { this.view = ev[2]; if (ev[2].paper) this.paper = ev[2].paper; }
@@ -122,7 +129,28 @@ export class State {
   draw(ctx, W, H, dpr) {
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#EDEAE2'; ctx.fillRect(0, 0, W * dpr, H * dpr);
     const v = this.view; if (!v) return;
-    const [x0, y0, x1, y1] = v.world; const z = Math.min(W / (x1 - x0), H / (y1 - y0)); const ox = (W - (x1 - x0) * z) / 2 - x0 * z, oy = (H - (y1 - y0) * z) / 2 - y0 * z;
+    let [x0, y0, x1, y1] = v.world;
+    const mode = this.fitMode || (this.fitPages ? 'pages' : 'world');
+    if (mode !== 'world' && v.vis?.length) {
+      // what the pages occupy inside the visible area (drops the grey margins around them)
+      let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+      for (const pid of v.vis) { const r = v.rects[pid]; if (!r) continue; a = Math.min(a, Math.max(x0, r.x)); b = Math.min(b, Math.max(y0, r.y)); c = Math.max(c, Math.min(x1, r.x + r.w)); d = Math.max(d, Math.min(y1, r.y + r.h)); }
+      if (c - a > 50 && d - b > 50) {
+        const pad = Math.min(c - a, d - b) * 0.01; a -= pad; b -= pad; c += pad; d += pad;
+        if (mode === 'follow') {
+          // full page width, and a 16:9 window that glides to where the pen is (or to the middle of what the teacher sees)
+          const vh = (c - a) * H / W;
+          if (vh < d - b) {
+            let target = (y0 + y1) / 2;
+            if (this.ink && this.lastT - this.ink.t < 12000 && v.vis.includes(this.ink.pid)) { const r = v.rects[this.ink.pid]; target = r.y + this.ink.y - vh * 0.15; } // the pen sits a little below centre, so the lines just written stay in view
+            target = Math.max(b + vh / 2, Math.min(d - vh / 2, target));
+            if (this.followY == null || Math.abs(this.followY - target) > vh * 2) this.followY = target; else this.followY += (target - this.followY) * 0.06;
+            x0 = a; x1 = c; y0 = this.followY - vh / 2; y1 = this.followY + vh / 2;
+          } else { x0 = a; y0 = b; x1 = c; y1 = d; }
+        } else { x0 = a; y0 = b; x1 = c; y1 = d; }
+      }
+    }
+    const z = Math.min(W / (x1 - x0), H / (y1 - y0)); const ox = (W - (x1 - x0) * z) / 2 - x0 * z, oy = (H - (y1 - y0) * z) / 2 - y0 * z;
     const dark = !!PAPERS[this.paper]?.dark;
     for (const pid of v.vis) {
       const r = v.rects[pid], p = this.pages.get(pid); if (!r) continue;

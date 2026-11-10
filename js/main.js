@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.73';
+export const VERSION = '1.9.74';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -53,6 +53,7 @@ class App {
     if (!prefs.rec.uploadModeV2) { prefs.rec.uploadMode = 'night'; prefs.rec.uploadModeV2 = 1; savePrefs(); } // 1.9.68: clips stay on the device, Drive upload at night or by hand
     import('./recorder.js').then(R => R.startUploadScheduler?.()).catch(() => { });
     try { await (await import('./i18n.js')).initI18n(); } catch (e) { console.warn('i18n', e); }
+    if (new URLSearchParams(location.search).get('mode') === 'studio') { document.getElementById('boot')?.remove(); try { await (await import('./studio.js')).openStudio(this); } catch (e) { console.error(e); alert('เปิดห้องอัดไม่ได้: ' + (e.message || e)); } return; }
     try { applyLock(); } catch (e) { console.warn('lock', e); } // student link / account rule must decide the mode before the first screen
     const boot = document.getElementById('boot'); if (boot) { boot.querySelector('p').textContent = 'กำลังโหลดสมุด…'; }
     try { await db.openDB(); } catch (e) { this.root.append(h('div', { style: { padding: '40px', textAlign: 'center' } }, 'เปิดที่เก็บข้อมูลไม่ได้ (' + e.message + ') ถ้าเปิดในโหมดส่วนตัว ให้ปิดโหมดนั้นก่อน')); return; }
@@ -276,7 +277,8 @@ class App {
         row('ป้องกันเบราว์เซอร์ลบข้อมูล', persisted),
         row('สำรองสมุดทั้งหมด', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('download'), 'ส่งออก'); b.onclick = async () => { await this.editor?.flush(); this.exportNotebooks((await db.getAll('notebooks')).map(n => n.id)); }; return b; })()),
         row('นำเข้าไฟล์สำรอง', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('upload'), 'นำเข้า'); b.onclick = () => this.importBackup(); return b; })()),
-        ...(prefs.studentUI ? [] : [row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => { this._closeSettings?.(); this.openRecordings(); }; return b; })()),
+        ...(prefs.studentUI ? [] : [row('ห้องอัด (อัดบน Mac/PC)', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('tv'), 'เปิด'); b.onclick = () => { location.href = location.pathname + '?mode=studio'; }; return b; })(), 'เปิดบนคอมพิวเตอร์ (Chrome) ได้รหัส 4 หลัก แล้วบน iPad เลือก เมนู → ส่งภาพไปห้องอัด · Mac อัดเส้น + เสียง + กล้องเป็น MP4 ลงเครื่องทันที'),
+        row('คลิปที่อัดไว้', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิด'); b.onclick = () => { this._closeSettings?.(); this.openRecordings(); }; return b; })()),
         row('ทำวิดีโอจากบทเรียน', (() => { const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('film'), 'เปิดคลัง'); b.onclick = () => { this._closeSettings?.(); this.openRecordings(); }; return b; })(), 'ในคลังวิดีโอ กด "ทำวิดีโอ" ที่บทเรียน → เลือกความละเอียด → เสร็จแล้วบันทึกลงแอปรูปภาพได้เลย')])),
       h('div', { class: 'sec-t' }, 'ความช่วยเหลือ'),
       card(

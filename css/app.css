@@ -1024,3 +1024,31 @@ i.w{background:#2563EB}i.tv{background:#0F8A7E}
 .devchk .dc-rep{width:100%;font:12px/1.4 ui-monospace,monospace;background:var(--panel2,rgba(0,0,0,.2));color:var(--muted);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:8px;padding:8px;resize:vertical}
 .advbox{margin-top:6px;padding:4px 10px;border:1px dashed var(--line,rgba(255,255,255,.14));border-radius:12px}
 .vl-make{margin-top:8px;height:40px;font-size:17px;justify-content:center;width:100%}
+/* ห้องอัด (Mac) */
+body.studio{overflow:hidden}
+body.studio #app,body.studio .lib,body.studio .onb{display:none!important}
+.studio-root{position:fixed;inset:0;display:grid;grid-template-columns:1fr 360px;background:#1b1d22;color:#eee;font-family:"TH Sarabun New",system-ui,sans-serif}
+.studio-stage{display:flex;align-items:center;justify-content:center;padding:18px;min-width:0}
+.studio-cv{max-width:100%;max-height:100%;width:auto;height:auto;aspect-ratio:16/9;background:#EDEAE2;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+.studio-panel{background:#24272e;padding:16px 18px;overflow:auto;display:flex;flex-direction:column;gap:6px;border-left:1px solid #333}
+.studio-panel .lbl{color:#9aa0ad;font-size:15px;margin-top:10px}
+.studio-panel .sel{width:100%;background:#2e323a;color:#eee;border:1px solid #444;border-radius:10px;padding:8px 10px;font:inherit;font-size:17px}
+.studio-panel .sub{color:#9aa0ad;font-size:15px}
+.studio-panel .seg{background:#2e323a}.studio-panel .seg button{color:#ddd}.studio-panel .seg button.on{background:#3B6CF5;color:#fff}
+.studio-h b{font-size:26px}.studio-h .sub{margin-left:8px}
+.studio-code{font-size:64px;font-weight:700;letter-spacing:10px;text-align:center;background:#2e323a;border-radius:14px;padding:6px 0;color:#fff;font-variant-numeric:tabular-nums}
+.studio-status{text-align:center;font-size:16px;color:#9aa0ad;min-height:22px}
+.studio-status[data-s=direct]{color:#4ADE80}.studio-status[data-s=relay]{color:#FBBF24}
+.studio-panel .meter{display:flex;gap:2px;height:10px;margin-top:4px}.studio-panel .meter i{flex:1;background:#3a3f49;border-radius:2px}.studio-panel .meter i.on{background:#4ADE80}
+.studio-panel .row2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.studio-rec{margin-top:18px;height:60px;border-radius:30px;border:0;background:#E5484D;color:#fff;font:inherit;font-size:24px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer}
+.studio-rec.on{background:#333;outline:3px solid #E5484D;animation:recpulse 1.2s infinite}
+@keyframes recpulse{50%{outline-color:transparent}}
+.studio-timer{font-size:40px;text-align:center;font-variant-numeric:tabular-nums;margin-top:4px}
+/* iPad: live link chip */
+.live-chip{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);z-index:70;display:flex;align-items:center;gap:8px;background:rgba(30,32,38,.92);color:#fff;padding:6px 8px 6px 12px;border-radius:999px;font-size:16px;box-shadow:0 4px 18px rgba(0,0,0,.3)}
+.live-chip .dot{width:10px;height:10px;border-radius:50%;background:#FBBF24}
+.live-chip[data-s=direct] .dot,.live-chip[data-s=relay] .dot{background:#4ADE80}
+.live-chip.rec .dot{background:#E5484D;animation:recpulse2 1s infinite}
+@keyframes recpulse2{50%{opacity:.3}}
+.live-chip .x{background:transparent;border:0;color:#fff;font-size:16px;padding:2px 8px;cursor:pointer}
