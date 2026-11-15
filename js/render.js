@@ -600,7 +600,8 @@ export function drawLaserTrail(ctx, pts, headOn, opt = {}) {
 
 // small tool icon at the pen tip (like a laser pointer), so viewers on the TV / in a video see where the teacher is about
 // to write. The icon points down-left with its tip exactly at (x, y), the way a right-hander holds the pencil.
-export function tipAlpha(age) { return age < 1100 ? 1 : Math.max(0, 1 - (age - 1100) / 450); }
+// stays while the pen moves or hovers (each move restarts the clock); once it stops, gone in about a third of a second
+export function tipAlpha(age) { return age < 150 ? 1 : Math.max(0, 1 - (age - 150) / 200); }
 export function drawToolTip(ctx, x, y, tool, color, a = 1, size = 34) {
   if (a <= 0 || !['pen', 'hl', 'cover', 'eraser', 'shapes'].includes(tool)) return;
   ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.rotate(-Math.PI / 4); // +x now runs up-right, along the pencil
