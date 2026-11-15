@@ -416,8 +416,8 @@ export class Editor {
       L('ruler', 'ไม้บรรทัด', 'ไม้บรรทัด (ใช้นิ้วลากย้าย สองนิ้วหมุน ลากปากกาชิดขอบได้เส้นตรง)', () => this.toggleRuler(), !!this.ruler),
       L('equation', 'คณิต', 'คณิต: สมการ กราฟ ไม้โปรแทรกเตอร์ เครื่องคิดเลข', (b) => this.mathMenu(b)),
       ...(prefs.studentUI ? [] : [
-        L('laser', 'เลเซอร์', 'เลเซอร์พอยเตอร์ (เลือกสี/แบบที่แถบด้านบน)', () => this.setTool('laser'), t === 'laser'),
-        L('sticker', 'สติกเกอร์', 'สติกเกอร์', (b) => this.stickerPanel(b))]),
+        L('laser', 'เลเซอร์', 'เลเซอร์พอยเตอร์ (เลือกสี/แบบที่แถบด้านบน)', () => this.setTool('laser'), t === 'laser')]),
+      L('sticker', 'สติกเกอร์', 'สติกเกอร์', (b) => this.stickerPanel(b)),
       );
     this.micBtn = L('mic', 'อัด', 'อัดเสียง + ลายมือ (กดค้างเพื่อตั้งค่า)', (b) => this.app.audioClick(this, b)); onLongPress(this.micBtn, () => this.app.recorderSettings(this, this.micBtn));
     this.recBtn = h('button', { class: 'recbtn', style: { display: 'none' } });
