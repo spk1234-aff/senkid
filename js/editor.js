@@ -1664,7 +1664,7 @@ export class Editor {
   }
   // pen-tip tool icon: remembered in world coordinates so the TV / recording can draw it too
   noteTip(sx, sy, down) {
-    if ((prefs.toolTip || 'all') === 'off' || !['pen', 'hl', 'cover', 'eraser', 'shapes'].includes(this.tool)) { if (this.tip) { this.tip = null; this.laserDirty = true; } return; }
+    if (prefs.studentUI || (prefs.toolTip || 'all') === 'off' || !['pen', 'hl', 'cover', 'eraser', 'shapes'].includes(this.tool)) { if (this.tip) { this.tip = null; this.laserDirty = true; } return; }
     const [wx, wy] = this.toWorld(sx, sy), c = this.cur();
     this.tip = { x: wx, y: wy, tool: this.tool, c: this.tool === 'eraser' ? null : (c.color || '#222'), t: performance.now(), down: !!down };
     this.laserDirty = true;

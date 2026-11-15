@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.86';
+export const VERSION = '1.9.87';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -247,7 +247,7 @@ class App {
         row('แปลงเป็นรูปทรงอัตโนมัติ', toggle(prefs.shapeRecog, v => { prefs.shapeRecog = v; savePrefs(); this.editor?.buildToolbar(); }), 'ขีดแล้วกดค้างไว้ 0.5 วินาที'),
         row('ขีดฆ่าเพื่อลบ', toggle(prefs.scribbleErase, v => { prefs.scribbleErase = v; savePrefs(); }), 'ขีดไปมาซ้ำ ๆ ทับเส้นที่ต้องการลบ'),
         row('แสดงจุดปลายปากกาเมื่อลอย', toggle(prefs.showHover, v => { prefs.showHover = v; savePrefs(); }), 'Apple Pencil Pro / Apple Pencil 2 บน iPad M2 ขึ้นไป'),
-        row('ไอคอนอุปกรณ์ที่ปลายปากกา', seg([['all', 'ทุกจอ'], ['viewers', 'เฉพาะทีวี/วิดีโอ'], ['off', 'ปิด']], prefs.toolTip || 'all', v => { prefs.toolTip = v; savePrefs(); }), 'ปากกา ไฮไลต์ ยางลบ เล็ก ๆ ที่ปลายปากกา ให้คนดูรู้ว่ากำลังจะเขียนตรงไหน · "ทุกจอ" ใช้กับสะท้อนหน้าจอ · โผล่ตอนปากกาลอย (iPad M2 ขึ้นไป) และตอนเขียน')),
+        ...(prefs.studentUI ? [] : [row('ไอคอนอุปกรณ์ที่ปลายปากกา', seg([['all', 'ทุกจอ'], ['viewers', 'เฉพาะทีวี/วิดีโอ'], ['off', 'ปิด']], prefs.toolTip || 'all', v => { prefs.toolTip = v; savePrefs(); }), 'ปากกา ไฮไลต์ ยางลบ เล็ก ๆ ที่ปลายปากกา ให้คนดูรู้ว่ากำลังจะเขียนตรงไหน · "ทุกจอ" ใช้กับสะท้อนหน้าจอ · โผล่ตอนปากกาลอย (iPad M2 ขึ้นไป) และตอนเขียน')])),
       h('div', { class: 'sec-t' }, 'การรองรับของเครื่องนี้'),
       card(
         row('แรงกดปากกา', yes(c.pressure, 'ใช้ได้'), 'ลองเขียนด้วยปากกาสักเส้นก่อนเปิดหน้านี้'),
