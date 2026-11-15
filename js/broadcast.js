@@ -111,6 +111,10 @@ export class Broadcast {
     // laser (world coords + age)
     if (ed.laser.length) { this.post({ type: 'laser', pts: ed.laserWorld(), head: !!ed.lasering, opt: prefs.laser }); this.hadLaser = true; }
     else if (this.hadLaser) { this.hadLaser = false; this.post({ type: 'laser', pts: [] }); }
+    // pen-tip tool icon
+    const tip = ed.tipState?.();
+    if (tip) { const now = performance.now(); if (now - (this.lastTip || 0) > 33) { this.lastTip = now; this.post({ type: 'tip', x: tip.x, y: tip.y, tool: tip.tool, c: tip.c, a: tip.a }); this.hadTip = true; } }
+    else if (this.hadTip) { this.hadTip = false; this.post({ type: 'tip', a: 0 }); }
   }
   // the TV reports what it is showing every 1.5 s; anything that does not match the teacher's choice is sent again
   checkTv(m) {

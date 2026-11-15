@@ -26,7 +26,7 @@ const defaults = () => ({
   recent: [],
   toolbarPos: 'top', toolbarHidden: false,
   theme: 'auto', fingerDraw: false, shapeRecog: true, shapeFill: true, scribbleErase: true, twoPage: true, economy: false,
-  showHover: true, onboarded: false,
+  showHover: true, toolTip: 'all', onboarded: false,
   newNb: { bg: 'grid', orient: 'P', paper: 'cream' },
   rec: { res: '2160', mic: '', micLabel: '', warn25: true, fps: 30, uploadMode: 'night', cam: '', camLabel: '', camShape: 'circle', camSize: 150 },
   folders: [], folderColors: {}, tabs: [], lastOpen: null,

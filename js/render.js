@@ -597,3 +597,32 @@ export function drawLaserTrail(ctx, pts, headOn, opt = {}) {
   ctx.restore();
 }
 
+
+// small tool icon at the pen tip (like a laser pointer), so viewers on the TV / in a video see where the teacher is about
+// to write. The icon points down-left with its tip exactly at (x, y), the way a right-hander holds the pencil.
+export function tipAlpha(age) { return age < 1100 ? 1 : Math.max(0, 1 - (age - 1100) / 450); }
+export function drawToolTip(ctx, x, y, tool, color, a = 1, size = 34) {
+  if (a <= 0 || !['pen', 'hl', 'cover', 'eraser', 'shapes'].includes(tool)) return;
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(x, y); ctx.rotate(-Math.PI / 4); // +x now runs up-right, along the pencil
+  const L = size, line = (w) => { ctx.lineJoin = 'round'; ctx.lineWidth = w; };
+  ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 1.5;
+  const col = color || '#222';
+  if (tool === 'eraser') {
+    const w = L * 0.36, l = L * 0.62;
+    ctx.beginPath(); ctx.roundRect(0, -w / 2, l, w, w * 0.22); ctx.fillStyle = '#fff'; ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.beginPath(); ctx.roundRect(0, -w / 2, l * 0.38, w, [w * 0.22, 0, 0, w * 0.22]); ctx.fillStyle = '#F7A1B5'; ctx.fill();
+    ctx.beginPath(); ctx.roundRect(0, -w / 2, l, w, w * 0.22); ctx.strokeStyle = '#333'; line(1.6); ctx.stroke();
+  } else {
+    const wide = tool === 'hl' || tool === 'cover', bw = L * (wide ? 0.27 : 0.19), nib = L * (wide ? 0.2 : 0.28);
+    // nib (in the ink colour)
+    ctx.beginPath();
+    if (wide) { ctx.moveTo(0, -bw * 0.32); ctx.lineTo(0, bw * 0.12); ctx.lineTo(nib, bw / 2); ctx.lineTo(nib, -bw / 2); }
+    else { ctx.moveTo(0, 0); ctx.lineTo(nib, bw / 2); ctx.lineTo(nib, -bw / 2); }
+    ctx.closePath(); ctx.fillStyle = col; ctx.fill(); ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#fff'; line(1.4); ctx.stroke();
+    // body
+    ctx.beginPath(); ctx.roundRect(nib, -bw / 2, L - nib, bw, [0, bw * 0.3, bw * 0.3, 0]); ctx.fillStyle = '#2B2F38'; ctx.fill(); ctx.strokeStyle = '#fff'; line(1.4); ctx.stroke();
+    // a band of the ink colour on the barrel
+    ctx.beginPath(); ctx.rect(nib + (L - nib) * 0.12, -bw / 2 + 1, (L - nib) * 0.16, bw - 2); ctx.fillStyle = col; ctx.globalAlpha = a * (wide ? 0.75 : 1); ctx.fill();
+  }
+  ctx.restore();
+}

@@ -3,7 +3,7 @@
 import { h, icon, toast, popover, menu, dialog, confirmBox, toggle, seg, onLongPress, uid, ask, pickFile, busy, $, $$ } from './ui.js';
 import { prefs, savePrefs, pushRecent, applyTheme, PEN_LABEL, coverPrefs } from './prefs.js';
 import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
-import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail } from './render.js';
+import { TEXT_LH, PAGE, PAPERS, STRIDE, dims, drawPaper, drawStrokes, drawStroke, strokeBB, renderPageTo, shapePolyline, setPdfQuality, measureText, drawLaserTrail, drawToolTip, tipAlpha } from './render.js';
 import { importPdf, setPdfReadyHook, setPdfBudget, pdfBitmap } from './pdfdoc.js';
 import { openExportDialog, exportPdf } from './exportpdf.js';
 import { recognize, holdShape, straighten, shapeHandles, moveHandle, shapeAs, looksLikeRadical, recognizeBracket, recognizeChevron } from './shapes.js';
@@ -957,6 +957,7 @@ export class Editor {
     const [sx, sy] = this.local(e);
     const type = e.pointerType;
     if (type === 'pen') { this.penSeen = true; this.hideHover(); }
+    if (type === 'pen' || type === 'mouse') this.noteTip(sx, sy, true);
     if (type === 'touch') {
       // palm rejection: ignore touches while pen writes or pen hovered just now
       if (this.live && this.live.type === 'pen') return;
@@ -1166,6 +1167,7 @@ export class Editor {
 
   move(e) {
     const [sx, sy] = this.local(e);
+    if (e.pointerType === 'pen' || e.pointerType === 'mouse') this.noteTip(sx, sy, e.buttons > 0);
     // any real movement cancels a pending long-press (must run before the tool branches below return)
     if (this.lp && this.lp.id === e.pointerId && Math.hypot(sx - this.lp.sx, sy - this.lp.sy) > 8) { clearTimeout(this.lp.t); this.lp = null; }
     if (this.shDraw && this.shDraw.id === e.pointerId) { const D = this.shDraw, [wx, wy] = this.toWorld(sx, sy), r0 = this.rects.get(D.page.id); D.x1 = wx - r0.x; D.y1 = wy - r0.y; if (Math.hypot(sx - D.sx, sy - D.sy) > 6) D.moved = true; this.need.ui = true; return; }
@@ -1660,14 +1662,23 @@ export class Editor {
     if (st === 'dot' && out.length > 1) { const last = out[out.length - 1]; return [last]; }
     return out;
   }
+  // pen-tip tool icon: remembered in world coordinates so the TV / recording can draw it too
+  noteTip(sx, sy, down) {
+    if ((prefs.toolTip || 'all') === 'off' || !['pen', 'hl', 'cover', 'eraser', 'shapes'].includes(this.tool)) { if (this.tip) { this.tip = null; this.laserDirty = true; } return; }
+    const [wx, wy] = this.toWorld(sx, sy), c = this.cur();
+    this.tip = { x: wx, y: wy, tool: this.tool, c: this.tool === 'eraser' ? null : (c.color || '#222'), t: performance.now(), down: !!down };
+    this.laserDirty = true;
+  }
+  tipState() { const t = this.tip; if (!t) return null; const a = tipAlpha(performance.now() - t.t); if (a <= 0) { this.tip = null; return null; } return { ...t, a }; }
   redrawLaser() {
     const ctx = this.ctxLaser, R = this.R;
-    const pts = this.laserWorld();
+    const pts = this.laserWorld(), tip = this.tipState();
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, this.cvLaser.width, this.cvLaser.height);
-    this.laserDirty = pts.length > 0;
-    if (!pts.length) return;
+    this.laserDirty = pts.length > 0 || !!tip;
+    if (!pts.length && !tip) return;
     ctx.setTransform(R, 0, 0, R, 0, 0);
-    drawLaserTrail(ctx, pts.map(p => ({ x: this.ox + p.x * this.z, y: this.oy + p.y * this.z, a: p.a, s: p.s })), !!this.lasering, prefs.laser);
+    if (pts.length) drawLaserTrail(ctx, pts.map(p => ({ x: this.ox + p.x * this.z, y: this.oy + p.y * this.z, a: p.a, s: p.s })), !!this.lasering, prefs.laser);
+    if (tip && (prefs.toolTip || 'all') === 'all') drawToolTip(ctx, this.ox + tip.x * this.z, this.oy + tip.y * this.z, tip.tool, tip.c, tip.a);
   }
 
   // ---------- math: equations, graphs, protractor, compass ----------

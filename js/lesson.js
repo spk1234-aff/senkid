@@ -3,7 +3,7 @@
 import { h, icon, toast, dialog, busy, fmtTime, fmtBytes, seg, uid, downloadBlob } from './ui.js';
 import * as db from './db.js';
 import { prefs, savePrefs } from './prefs.js';
-import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, PAPERS, STRIDE } from './render.js';
+import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, drawToolTip, tipAlpha, PAPERS, STRIDE } from './render.js';
 import { blobToDataURL, dataURLToBlob, bitmapAsync, setImageReadyHook } from './images.js';
 import { setPdfReadyHook } from './pdfdoc.js';
 import { serializePage } from './editor.js';
@@ -78,6 +78,7 @@ export class Timeline {
     const ed = this.ed;
     if (ed.laser.length) { const now = performance.now(); if (now - this.lastLaser > 70) { this.lastLaser = now; this.push([this.now(), 'laser', ed.laserWorld(), !!ed.lasering]); this.hadLaser = true; } }
     else if (this.hadLaser) { this.hadLaser = false; this.push([this.now(), 'laser', [], false]); }
+    { const tp = ed.tip; if (tp && tp.t !== this.lastTipT && performance.now() - (this.lastTipAt || 0) > 60) { this.lastTipT = tp.t; this.lastTipAt = performance.now(); this.push([this.now(), 'tip', { x: tp.x, y: tp.y, tool: tp.tool, c: tp.c }]); } }
     if (this.ed.lastViewChange && performance.now() - this.ed.lastViewChange < 50) this.view();
   }
   async save(final) {
@@ -100,7 +101,7 @@ export class Timeline {
 // ---------- state machine shared by the player and the exporter ----------
 export class State {
   constructor(data) { this.data = data; this.reset(); }
-  reset() { this.pages = new Map(); this.view = null; this.laser = []; this.laserHead = false; this.i = 0; this.paper = this.data.events[0]?.[2]?.paper || 'cream'; this.partial = null; }
+  reset() { this.tip = null; this.pages = new Map(); this.view = null; this.laser = []; this.laserHead = false; this.i = 0; this.paper = this.data.events[0]?.[2]?.paper || 'cream'; this.partial = null; }
   async prepare() { // decode strokes once
     for (const ev of this.data.events) {
       if (ev[1] === 'base' && ev[3]) ev[3].strokes = await Promise.all(ev[3].strokes.map(strokeIn));
@@ -120,6 +121,7 @@ export class State {
       else if (k === 'rm') { const p = this.pages.get(ev[2]); if (p) { const rm = new Set(ev[3]); p.strokes = p.strokes.filter(s => !rm.has(s.id)); } }
       else if (k === 'view') { this.view = ev[2]; if (ev[2].paper) this.paper = ev[2].paper; }
       else if (k === 'laser') { this.laser = ev[2]; this.laserHead = ev[3]; }
+      else if (k === 'tip') { this.tip = ev[2]; this.tipAt = ev[0]; }
     }
     this.lastT = t;
     // stroke being written right now (progressive drawing)
@@ -163,6 +165,7 @@ export class State {
       ctx.restore();
     }
     if (this.laser.length) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); drawLaserTrail(ctx, this.laser.map(q => ({ x: ox + q.x * z, y: oy + q.y * z, a: q.a, s: q.s })), this.laserHead, prefs.laser || {}); }
+    if (this.tip && this.showTip !== false) { const a = tipAlpha(this.lastT - this.tipAt); if (a > 0) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); drawToolTip(ctx, ox + this.tip.x * z, oy + this.tip.y * z, this.tip.tool, this.tip.c, a, Math.max(30, W / 45)); } }
   }
 }
 

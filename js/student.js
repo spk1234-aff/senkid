@@ -1,5 +1,5 @@
 // Student screen: shows only the paper, synced live from the teacher window (BroadcastChannel)
-import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, PAPERS, STRIDE } from './render.js';
+import { dims, drawPaper, drawStrokes, drawStroke, drawLaserTrail, drawToolTip, PAPERS, STRIDE } from './render.js';
 import { setPdfReadyHook } from './pdfdoc.js';
 import { drawRulerAt, drawProtractorAt } from './tools-draw.js';
 import { setImageReadyHook } from './images.js';
@@ -11,7 +11,7 @@ const ch = new BroadcastChannel('senkid-live');
 let rtc = null; const send = (m) => { try { ch.postMessage(m); } catch { } if (rtc?.open) rtc.send(m); };
 const pages = new Map();
 let mirror = null, mStage = null, mScale = 1, mW = 0, mH = 0;
-let tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
+let tip = null, tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
 
 // canvas size is capped: a 4K TV at 3× pixel ratio would need a ~75 MB canvas, which Safari silently fails to keep in a
 // background window (the page goes white). ~8 M pixels (2× on a 1080p/4K window) is plenty for a TV and always fits.
@@ -38,6 +38,7 @@ const onMsg = (m) => {
     wait.style.display = 'none'; dirty = true;
   } else if (m.type === 'page') { if (m.nb === nb) { for (const s of m.page.strokes) if (s.pts && !(s.pts instanceof Float32Array)) s.pts = Float32Array.from(s.pts); pages.set(m.page.id, m.page); dirty = true; } }
   else if (m.type === 'live') { live = m.s ? { pid: m.pid, s: m.s } : null; dirty = true; }
+  else if (m.type === 'tip') { tip = m.a > 0 ? m : null; dirty = true; }
   else if (m.type === 'laser') { laser = m.pts || []; laserHead = !!m.head; laserOpt = m.opt || laserOpt; dirty = true; }
   else if (m.type === 'timer') timer(m.st);
   else if (m.type === 'tools') { tools = m; dirty = true; calcShow(m.calc); }
@@ -139,6 +140,7 @@ function frame() {
     ctx.setTransform(d, 0, 0, d, 0, 0);
     drawLaserTrail(ctx, laser.map(p => ({ x: T.ox + p.x * T.z, y: T.oy + p.y * T.z, a: p.a, s: p.s })), laserHead, laserOpt);
   }
+  if (tip) { ctx.setTransform(d, 0, 0, d, 0, 0); drawToolTip(ctx, T.ox + tip.x * T.z, T.oy + tip.y * T.z, tip.tool, tip.c, tip.a, Math.max(30, T.W / 45)); }
 }
 requestAnimationFrame(frame);
 
