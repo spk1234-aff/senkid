@@ -446,6 +446,7 @@ export class Editor {
       if (t === 'lasso' && this.app.clip?.items.length) { const pb = h('button', { class: 'chip on' }, icon('copy'), `วาง (${this.app.clip.items.length})`); pb.onclick = () => this.paste(); bar.append(h('div', { class: 'vsep' }), pb); }
       if (t === 'text') this.textBar(bar);
       if (prefs.toolbarHidden && !this.peek) bar.classList.add('hidden');
+      this.tvEyeBtn(bar);
       this.stage.append(cap, bar); this.updateUndoBtns(); this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
       this.app.timer.attach(this);
       return;
@@ -523,6 +524,7 @@ export class Editor {
       }
     }
     if (prefs.toolbarHidden && !this.peek) bar.classList.add('hidden');
+    this.tvEyeBtn(bar);
     this.groupCtx(bar); this.stage.append(cap, bar); this.armCtxDrag(bar);
     this.updateUndoBtns();
     this.app.recorder?.syncButton?.(); this.app.audio?.syncButton?.(); this.syncSaveBtn();
@@ -2160,6 +2162,14 @@ export class Editor {
   async pickImage() {
     const f = await pickFile('image/*', { hint: 'รูปจากคลังรูปภาพ/iCloud เครื่องต้องแปลงและดาวน์โหลดก่อน อาจใช้เวลาสักครู่' }); if (!f) return;
     this.insertImage(f, { crop: false, select: true }); // insert right away; crop later from the image bar
+  }
+  // eye on the floating bar: only while the TV shows the teacher's whole screen; decides whether the class sees this bar
+  tvEyeBtn(bar) {
+    const b = this.app.broadcast; if (!b?.connected || prefs.presentKind !== 'screen' || prefs.studentUI) return;
+    const on = !!prefs.tvShowTools;
+    const e = h('button', { class: 'sw tv-eye' + (on ? ' on' : ''), title: on ? 'นักเรียนเห็นแถบนี้บนทีวี · แตะเพื่อซ่อน' : 'ซ่อนแถบนี้จากทีวีอยู่ · แตะเพื่อให้นักเรียนเห็น', 'aria-label': 'แถบบนทีวี' }, icon(on ? 'eye' : 'hide'));
+    e.onclick = (ev) => { ev.stopPropagation(); prefs.tvShowTools = !prefs.tvShowTools; savePrefs(); toast(prefs.tvShowTools ? 'นักเรียนเห็นแถบเครื่องมือบนทีวีแล้ว' : 'ซ่อนแถบเครื่องมือจากทีวีแล้ว · ครูยังเห็นตามปกติ', 2200); this.buildToolbar(); b.sendUI?.(); };
+    bar.append(e);
   }
   async stickerPanel(anchor) { const m = await import('./stickers.js'); m.stickerPanel(this, anchor); }
   async insertImage(file, { crop = true, select = false, sticker = false, size = null, meta = null } = {}) {

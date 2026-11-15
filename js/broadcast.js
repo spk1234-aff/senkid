@@ -63,7 +63,10 @@ export class Broadcast {
   mirrorOn() { return prefs.presentKind === 'screen' && this.connected && !!this.app.editor; }
   uiSnapshot() {
     const ed = this.app.editor; if (!ed) return null;
-    const stageUI = [...ed.stage.children].filter(el => el.tagName !== 'CANVAS' && !el.dataset.nomirror).map(el => htmlOf(el)).join('');
+    // the bars that float on the paper (pen options, undo, presentation dock) stay on the iPad only, unless the teacher
+    // taps the eye button to show them to the class for a moment
+    const floating = (el) => !prefs.tvShowTools && el.classList && (el.classList.contains('ctxbar') || el.classList.contains('undocap') || el.classList.contains('pdock') || el.classList.contains('showtb'));
+    const stageUI = [...ed.stage.children].filter(el => el.tagName !== 'CANVAS' && !el.dataset.nomirror && !floating(el)).map(el => htmlOf(el)).join('');
     const layer = [...(document.getElementById('layer')?.children || [])].map(el => htmlOf(el)).join('');
     return { type: 'ui', on: true, W: innerWidth, H: innerHeight, theme: document.documentElement.dataset.theme || '', edClass: ed.el.className, tb: ed.tb.outerHTML, stageUI, layer, toasts: document.getElementById('toasts')?.innerHTML || '' };
   }
@@ -76,7 +79,7 @@ export class Broadcast {
   sendUI() {
     if (!this.mirrorOn()) { if (this.uiWas) { this.uiWas = false; this.post({ type: 'ui', on: false }); } return; }
     const snap = this.uiSnapshot(); if (!snap) return;
-    const key = snap.tb.length + ':' + snap.stageUI.length + ':' + snap.layer.length + ':' + snap.toasts.length + ':' + snap.W + 'x' + snap.H + ':' + sum(snap.stageUI) + ':' + sum(snap.layer);
+    const key = (prefs.tvShowTools ? 'T' : 'H') + ':' + snap.tb.length + ':' + snap.stageUI.length + ':' + snap.layer.length + ':' + snap.toasts.length + ':' + snap.W + 'x' + snap.H + ':' + sum(snap.stageUI) + ':' + sum(snap.layer);
     if (key === this.uiKey && this.uiWas && snap.tb === this.uiTb) return;
     this.uiKey = key; this.uiTb = snap.tb; this.uiWas = true; this.post(snap);
   }

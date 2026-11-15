@@ -1099,3 +1099,4 @@ body.studio #app,body.studio .lib,body.studio .onb{display:none!important}
 .studio-bar .sub{color:#9aa0ad;font-size:15px}
 .sbar-btn{background:#2e323a;border:1px solid #444b57;color:#eee;border-radius:12px;height:38px;padding:0 14px;font:inherit;font-size:16px;display:flex;align-items:center;gap:6px;cursor:pointer}
 .studio-root.present .studio-bar{display:none}
+.ctxbar .tv-eye{margin-left:6px}.ctxbar .tv-eye.on{background:#FDE68A}

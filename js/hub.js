@@ -30,6 +30,7 @@ export function openHub(ed, anchor, page = null) {
       R('tv', app.broadcast?.connected ? 'ทีวีต่ออยู่ · ตั้งค่า / เลิกใช้' : 'เชื่อมทีวี', 'สแกน QR หรือเปิดลิงก์บนทีวี', go(a => app.studentMenu(a))),
       T('ทีวีแสดงอะไร'),
       ...TVK.map(([id, label, sub, ic]) => R(ic, (tvCur === id ? '✓ ' : '') + label, sub, () => { import('./broadcast.js').then(B => B.setTvKind(app, id)); closeHub(); })),
+      R(prefs.tvShowTools ? 'eye' : 'hide', prefs.tvShowTools ? 'นักเรียนเห็นแถบเครื่องมือลอย · แตะเพื่อซ่อน' : 'ซ่อนแถบเครื่องมือลอยจากทีวี ✓', 'ใช้กับแบบ "ทั้งหน้าจอเหมือนครู" · ครูยังเห็นแถบบน iPad เสมอ · สลับเร็ว ๆ ได้ที่ปุ่มรูปตาบนแถบ', () => { prefs.tvShowTools = !prefs.tvShowTools; savePrefs(); app.broadcast?.sendUI?.(); ed.buildToolbar(); closeHub(); }),
     ] },
     { id: 'rec', ic: 'mic', title: student ? 'อัดเสียง' : 'อัดบทเรียน', sub: student ? 'เสียงพร้อมเส้นที่เขียน' : 'เสียง เส้น กล้อง', rows: () => [
       R('mic', app.audio?.active ? 'กำลังอัด · หยุด / พัก' : 'เริ่มอัด', student ? 'อัดเสียงอธิบายพร้อมเส้นที่เขียน' : 'อัดเสียงพร้อมลายมือ (และกล้องครูถ้าเปิดไว้)', go(a => app.audioClick(ed, ed.micBtn || a))),
