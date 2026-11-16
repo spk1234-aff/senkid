@@ -118,7 +118,7 @@ async function backend() {
 // moment the page becomes visible again, since iPadOS freezes a hidden app)
 function waitFor(B, test, { timeoutMs, alive = () => true, onTick }) {
   return new Promise((res) => {
-    let done = false, unsub = null, poll = null;
+    let done = false, unsub = null, poll = null, to = 0;
     const finish = (v) => { if (done) return; done = true; try { unsub && unsub(); } catch { } clearInterval(poll); clearTimeout(to); document.removeEventListener('visibilitychange', vis); res(v); };
     const check = (j) => { if (!alive()) return finish(null); const v = j && test(j); if (v) finish(v); };
     const pull = async () => { if (done || document.visibilityState === 'hidden') return; try { check(await B.read()); } catch (e) { console.warn('pair poll', e); onTick?.('error', e); } };
@@ -127,7 +127,7 @@ function waitFor(B, test, { timeoutMs, alive = () => true, onTick }) {
     if (B.watch) { unsub = B.watch(check); poll = setInterval(pull, 5000); } // listener does the work; slow poll is a safety net
     else poll = setInterval(pull, 900);
     pull();
-    const to = timeoutMs < 2e9 ? setTimeout(() => finish(null), timeoutMs) : 0; // (setTimeout fires at once beyond ~24.8 days)
+    if (!done && timeoutMs < 2e9) to = setTimeout(() => finish(null), timeoutMs); // (setTimeout fires at once beyond ~24.8 days)
   });
 }
 

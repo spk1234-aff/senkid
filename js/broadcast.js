@@ -14,7 +14,7 @@ export class Broadcast {
     this.wasConn = false; setInterval(() => { const c = this.connected; if (c !== this.wasConn) { this.wasConn = c; if (!c) this.tvSynced = false; this.app.editor?.buildToolbar?.(); } }, 1500);
     try { this.ch = new BroadcastChannel('senkid-live'); } catch { this.ch = null; }
     if (this.ch) this.ch.onmessage = (e) => this.onMsg(e.data);
-    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); } else if (this.rtcWas) { setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.autoAt = 0; this.dropped = true; } this.rtcWas = v; this.app.editor?.buildToolbar(); } });
+    this.rtc = new RtcLink({ onMsg: (m) => this.onMsg(m, true), onState: (v) => { if (v) { this.openAt = performance.now(); this.lastView = null; this.lastTools = null; setTv('on', 'ทีวี: เชื่อมต่อแล้ว'); this.paintHold(); } else if (this.rtcWas) { setTv('wait', 'ทีวีหลุด · กำลังต่อใหม่เอง…'); this.autoAt = 0; this.dropped = true; setTimeout(() => this.tryAuto?.(), 300); } this.rtcWas = v; this.app.editor?.buildToolbar(); } });
     app.timer.onChange((st) => this.post({ type: 'timer', st }));
     this.armMirror();
     // once a Safari window has been paired, keep it paired by itself: after a break, an app switch or a restart of the app,
@@ -25,7 +25,14 @@ export class Broadcast {
       if (Date.now() - (this.autoAt || 0) < ((this.autoFail || 0) >= 5 ? 60e3 : 12e3)) return; this.autoAt = Date.now(); // quick retries first, then once a minute
       import('./pair.js').then(m => { if (!m.canPair()) return; startPairing(this, false, true); });
     };
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(tryAuto, 1500); });
+    this.tryAuto = tryAuto; this.hold = 'live';
+    // a link that stays "open" but has gone silent (iPad slept, app switched) is dead: close it and re-pair at once
+    setInterval(() => { if (this.rtc.open && performance.now() - Math.max(this.lastAlive, this.openAt || 0) > 6500) { console.warn('tv: silent link, re-pairing'); try { this.rtc.close(); } catch { } } }, 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      this.openAt = Math.max(this.openAt || 0, performance.now() - 4000); // give a woken link 2.5 s to speak before calling it dead
+      setTimeout(tryAuto, 400);
+    });
     setInterval(tryAuto, 5e3); setTimeout(tryAuto, 3000);
     // hand the TV window our Google token whenever it changes, so it can re-pair without signing in
     setInterval(() => this.sendToken(), 30e3);
@@ -38,6 +45,14 @@ export class Broadcast {
     if (!force && this.tokSent === t.exp) return; this.tokSent = t.exp;
     this.rtc.send({ type: 'tok', t });
   }
+  // freeze / blank the TV while the teacher prepares something privately
+  setHold(mode) { this.hold = mode; this.post({ type: 'hold', m: mode }); this.paintHold(); }
+  paintHold() {
+    if (!this.connected && !this.rtc.open) return;
+    if (this.hold === 'freeze') setTv('hold', 'ทีวีหยุดภาพอยู่ · แตะเพื่อกลับมาสด');
+    else if (this.hold === 'blank') setTv('hold', 'ทีวีจอดำอยู่ · แตะเพื่อกลับมาสด');
+    else setTv('on', 'ทีวี: สด');
+  }
   post(m) { if (!this.connected) return; try { this.ch && this.ch.postMessage(m); } catch (e) { console.warn(e); } if (this.rtc.open) this.rtc.send(m); }
   onMsg(m, viaRtc) {
     if (!m) return;
@@ -46,7 +61,7 @@ export class Broadcast {
       try { if (viaRtc) this.rtc.send({ type: 'ack' }); else this.ch.postMessage({ type: 'ack' }); } catch { } // keeps the student screen from showing "disconnected" while the teacher is idle
       if (viaRtc) this.sendToken(m.type === 'hello');
       if (m.type === 'alive' && 'mode' in m) this.checkTv(m);
-      if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.uiWas = false; setTimeout(() => this.sendUI(), 200); this.app.editor?.buildToolbar(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
+      if (m.type === 'hello' || !was) { this.lastView = null; this.lastTools = null; this.sendMeta(); this.uiWas = false; setTimeout(() => this.sendUI(), 200); this.app.editor?.buildToolbar(); this.post({ type: 'hold', m: this.hold }); this.paintHold(); if (m.type === 'hello') { toast('หน้าจอนักเรียนเชื่อมต่อแล้ว', 1800); if (!prefs.secondScreenOk) { prefs.secondScreenOk = true; savePrefs(); } } }
     } else if (m.type === 'need') {
       const ed = this.app.editor; if (!ed) return;
       for (const pid of m.pids || []) { const p = ed.pageMap.get(pid); if (p) this.post({ type: 'page', nb: ed.nb.id, page: serializePage(p) }); }
@@ -65,7 +80,7 @@ export class Broadcast {
     const ed = this.app.editor; if (!ed) return null;
     // the bars that float on the paper (pen options, undo, presentation dock) stay on the iPad only, unless the teacher
     // taps the eye button to show them to the class for a moment
-    const floating = (el) => !prefs.tvShowTools && el.classList && (el.classList.contains('ctxbar') || el.classList.contains('undocap') || el.classList.contains('pdock') || el.classList.contains('showtb'));
+    const floating = (el) => el.classList?.contains('tvpill') || !prefs.tvShowTools && el.classList && (el.classList.contains('ctxbar') || el.classList.contains('undocap') || el.classList.contains('pdock') || el.classList.contains('showtb'));
     const stageUI = [...ed.stage.children].filter(el => el.tagName !== 'CANVAS' && !el.dataset.nomirror && !floating(el)).map(el => htmlOf(el)).join('');
     const layer = [...(document.getElementById('layer')?.children || [])].map(el => htmlOf(el)).join('');
     return { type: 'ui', on: true, W: innerWidth, H: innerHeight, theme: document.documentElement.dataset.theme || '', edClass: ed.el.className, tb: ed.tb.outerHTML, stageUI, layer, toasts: document.getElementById('toasts')?.innerHTML || '' };
@@ -151,11 +166,25 @@ let pairing = false;
 let tvPill = null, tvHideT = null;
 export function setTv(state, text) {
   const stage = document.querySelector('.stage'); if (!stage) return;
-  if (!tvPill || !tvPill.isConnected) { tvPill = h('div', { class: 'tvpill' }, h('i'), h('span')); stage.append(tvPill); }
+  if (!tvPill || !tvPill.isConnected) { tvPill = h('button', { class: 'tvpill' }, h('i'), h('span')); tvPill.onclick = () => tvQuick(tvPill); stage.append(tvPill); }
   clearTimeout(tvHideT);
   tvPill.dataset.st = state; tvPill.querySelector('span').textContent = text; tvPill.classList.remove('hidden');
-  if (state === 'on') tvHideT = setTimeout(() => tvPill.classList.add('mini'), 6000); else tvPill.classList.remove('mini');
+  if (state === 'on') tvHideT = setTimeout(() => tvPill.classList.add('mini'), 6000); else tvPill.classList.remove('mini'); // 'hold' and 'wait' stay fully visible
   if (state === 'off') tvHideT = setTimeout(() => tvPill.classList.add('hidden'), 4000);
+}
+// quick TV controls from the status pill: live / freeze / black, reconnect
+function tvQuick(anchor) {
+  const b = window.senkid?.broadcast; if (!b) return;
+  if (b.hold !== 'live') { b.setHold('live'); toast('ทีวีกลับมาแสดงสดแล้ว', 1400); return; } // one tap back to live
+  const box = h('div', { class: 'scr-menu tvq' });
+  const on = b.connected;
+  const opt = (id, ic, t, sub) => { const el = h('button', { class: 'tvq-opt' + (b.hold === id ? ' on' : '') }, icon(ic), h('div', {}, h('b', {}, t), h('div', { class: 'sub' }, sub))); el.onclick = () => { close(); b.setHold(id); }; return el; };
+  if (on) box.append(opt('live', 'screen', 'สด', 'ทีวีแสดงตามที่ครูเขียน'), opt('freeze', 'pause', 'หยุดภาพ', 'ทีวีค้างภาพนี้ไว้ ครูเปิดหน้าอื่น/เฉลยได้ นักเรียนไม่เห็น'), opt('blank', 'moon', 'จอดำ', 'ทีวีขึ้นจอมืดกับโลโก้ ให้นักเรียนหันมาฟัง'));
+  else box.append(h('div', { class: 'sub', style: { padding: '6px 4px' } }, 'ทีวียังไม่เชื่อม'));
+  const re = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '6px' } }, icon('sync'), on ? 'เชื่อมทีวีใหม่' : 'เชื่อมทีวี');
+  re.onclick = () => { close(); startPairing(b, !b.rtcWas && !prefs.pairedAt); };
+  box.append(re);
+  const close = popover(anchor, box);
 }
 // one small card that walks the teacher through pairing and ticks itself off (instead of a string of toasts)
 let guideEl = null;

@@ -11,7 +11,7 @@ const ch = new BroadcastChannel('senkid-live');
 let rtc = null; const send = (m) => { try { ch.postMessage(m); } catch { } if (rtc?.open) rtc.send(m); };
 const pages = new Map();
 let mirror = null, mStage = null, mScale = 1, mW = 0, mH = 0;
-let tip = null, tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
+let held = null, pendUi = null, tip = null, tools = {}, nb = null, view = null, live = null, laser = [], laserHead = false, laserOpt = {}, paper = 'cream', dirty = true, lastMsg = 0;
 
 // canvas size is capped: a 4K TV at 3× pixel ratio would need a ~75 MB canvas, which Safari silently fails to keep in a
 // background window (the page goes white). ~8 M pixels (2× on a 1080p/4K window) is plenty for a TV and always fits.
@@ -35,21 +35,22 @@ const onMsg = (m) => {
     if (m.nb !== nb) { nb = m.nb; pages.clear(); }
     view = m; paper = m.paper || paper;
     const need = m.vis.filter(id => !pages.has(id)); if (need.length) send({ type: 'need', pids: need });
-    wait.style.display = 'none'; dirty = true;
+    wait.style.display = 'none'; rcNote(''); dirty = true;
   } else if (m.type === 'page') { if (m.nb === nb) { for (const s of m.page.strokes) if (s.pts && !(s.pts instanceof Float32Array)) s.pts = Float32Array.from(s.pts); pages.set(m.page.id, m.page); dirty = true; } }
   else if (m.type === 'live') { live = m.s ? { pid: m.pid, s: m.s } : null; dirty = true; }
   else if (m.type === 'tip') { tip = m.a > 0 ? m : null; dirty = true; }
   else if (m.type === 'laser') { laser = m.pts || []; laserHead = !!m.head; laserOpt = m.opt || laserOpt; dirty = true; }
   else if (m.type === 'timer') timer(m.st);
   else if (m.type === 'tools') { tools = m; dirty = true; calcShow(m.calc); }
-  else if (m.type === 'ui') mirrorApply(m);
+  else if (m.type === 'ui') { if (held) pendUi = m; else mirrorApply(m); }
+  else if (m.type === 'hold') holdShow(m.m);
   else if (m.type === 'pick') pickShow(m);
   else if (m.type === 'qr') { let q = document.getElementById('qrov'); if (!m.url) { q?.remove(); return; } if (!q) { q = document.createElement('div'); q.id = 'qrov'; document.body.append(q); } q.innerHTML = `<img src="${m.url}"><div class="n">${String(m.name || '').replace(/</g, '&lt;')}</div><div class="l">สแกนด้วยกล้อง iPad → เปิดใน Safari</div>`; }
 };
 ch.onmessage = (e) => onMsg(e.data);
 ch.postMessage({ type: 'hello' });
 setInterval(() => send({ type: 'alive', mode: view ? view.mode : null, ui: !!mirror }), 1500);
-setInterval(() => { if (performance.now() - lastMsg > 6000 && view) { wait.style.display = 'flex'; wait.querySelector('p').textContent = rtc ? 'ขาดการเชื่อมต่อกับแอปเส้นคิด · กลับไปที่แอปแล้วกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง' : 'ขาดการเชื่อมต่อกับหน้าจอครู · เปิดเส้นคิดค้างไว้ในเบราว์เซอร์เดียวกัน'; } }, 2000);
+setInterval(() => { if (performance.now() - lastMsg > 6000 && (view || mirror)) rcNote(rtc ? 'กำลังต่อใหม่…' : 'รอแอปเส้นคิด…'); else if (performance.now() - lastMsg < 3000 && wait.style.display === 'none' && !rtc) rcNote(''); }, 1500); // keep the last picture up; never the setup screen mid-class
 // the teacher's app hands this window its Google token (in the link on first open, then over the data channel whenever it
 // renews), so the TV window never has to sign in to Google itself and never expires while the app is running
 function takeToken(t) { try { if (t && t.exp > Date.now()) localStorage.setItem('senkid.gtoken', JSON.stringify(t)); } catch { } }
@@ -57,12 +58,13 @@ try { const m = /tok=([^&]+)/.exec(location.hash); if (m) { takeToken(JSON.parse
 const onMsg0 = onMsg; const onMsgT = (m) => { if (m && m.type === 'tok') { takeToken(m.t); return; } onMsg0(m); };
 // opened from the home-screen app: pair through Drive, then talk directly
 if (location.hash.includes('pair')) (async () => {
-  const msg = (t) => { wait.style.display = 'flex'; wait.querySelector('p').textContent = t; };
+  // once the class has seen the paper, never cover it with the setup screen again: a small corner note instead
+  const msg = (t) => { if (wait.style.display === 'none' && (view || mirror || pages.size)) { rcNote(t); return; } wait.style.display = 'flex'; wait.querySelector('p').textContent = t; };
   try {
     const { RtcLink, studentPair, canPair } = await import('./pair.js');
     
     let answered = 0, open = false;
-    rtc = new RtcLink({ onMsg: onMsgT, onState: (v) => { open = v; if (v) { send({ type: 'hello' }); msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } else { view = null; msg('หลุดการเชื่อมต่อ · ในแอปเส้นคิดกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง หน้านี้จะต่อให้เอง'); } } });
+    rtc = new RtcLink({ onMsg: onMsgT, onState: (v) => { open = v; if (v) { send({ type: 'hello' }); if (wait.style.display === 'none') rcNote(''); else msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } else { if (wait.style.display === 'none') rcNote('กำลังต่อใหม่…'); else { view = null; msg('หลุดการเชื่อมต่อ · ในแอปเส้นคิดกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง หน้านี้จะต่อให้เอง'); } } } });
     msg('กำลังจับคู่กับแอปเส้นคิด…');
     // keep this window alive on the TV: whenever the app publishes a new pairing code, answer it again
     while (true) {
@@ -128,6 +130,7 @@ function transform() {
 }
 function frame() {
   requestAnimationFrame(frame);
+  if (held) return; // teacher froze or blanked the TV: keep the last picture
   if (!dirty || !view) return; dirty = laser.length > 0;
   const T = transform(), d = cv.width / T.W;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = mirror ? (getComputedStyle(mirror).getPropertyValue('--desk').trim() || '#EDEAE2') : '#0B0C0E'; ctx.fillRect(0, 0, cv.width, cv.height);
@@ -178,4 +181,23 @@ const calcEl = document.createElement('div'); calcEl.id = 'calc'; calcEl.innerHT
 function calcShow(c) {
   calcEl.style.display = c ? 'block' : 'none'; if (!c) return;
   calcEl.querySelector('.t').textContent = c.top || ''; calcEl.querySelector('.r').textContent = c.res || '0'; calcEl.querySelector('.p').textContent = c.prev || '';
+}
+
+// ---- teacher froze / blanked the TV ----
+function holdShow(mode) {
+  let bl = document.getElementById('blank');
+  if (mode === 'blank') {
+    if (!bl) { bl = document.createElement('div'); bl.id = 'blank'; bl.innerHTML = '<div><img src="icons/icon-192.png" alt=""><b>เส้นคิด</b></div>'; document.body.append(bl); }
+    held = 'blank';
+  } else { bl?.remove(); held = mode === 'freeze' ? 'freeze' : null; }
+  if (!held) { if (pendUi) { const u = pendUi; pendUi = null; mirrorApply(u); } dirty = true; }
+}
+// a link that is still "open" but silent (the iPad slept or the app was switched away) is dead: drop it, so this window
+// goes straight back to listening and the app can re-pair the moment it returns
+setInterval(() => { if (rtc?.open && performance.now() - lastMsg > 6500) { console.warn('tv: link silent, re-listening'); try { rtc.close(); } catch { } } }, 1000);
+function rcNote(t) {
+  let n = document.getElementById('rcnote');
+  if (!t) { n?.remove(); return; }
+  if (!n) { n = document.createElement('div'); n.id = 'rcnote'; document.body.append(n); }
+  n.textContent = t.length > 40 ? 'กำลังต่อใหม่…' : t;
 }
