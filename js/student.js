@@ -60,7 +60,7 @@ if (location.hash.includes('pair')) (async () => {
   const msg = (t) => { wait.style.display = 'flex'; wait.querySelector('p').textContent = t; };
   try {
     const { RtcLink, studentPair, canPair } = await import('./pair.js');
-    if (!canPair()) { msg('ยังไม่ได้รับสิทธิ์จากแอปเส้นคิด · ในแอปกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง'); }
+    
     let answered = 0, open = false;
     rtc = new RtcLink({ onMsg: onMsgT, onState: (v) => { open = v; if (v) { send({ type: 'hello' }); msg('เชื่อมต่อแล้ว · รอหน้ากระดาษจากแอปเส้นคิด…'); } else { view = null; msg('หลุดการเชื่อมต่อ · ในแอปเส้นคิดกด "ส่งหน้าจอนักเรียนไป Safari" อีกครั้ง หน้านี้จะต่อให้เอง'); } } });
     msg('กำลังจับคู่กับแอปเส้นคิด…');
@@ -70,9 +70,17 @@ if (location.hash.includes('pair')) (async () => {
       if (t) answered = t;
       // wait until this link closes (or never opened within a minute) before listening for the next code
       const t0 = Date.now(); let wasOpen = false;
-      while (true) { await new Promise(r => setTimeout(r, 1000)); if (open) wasOpen = true; else if (wasOpen || Date.now() - t0 > 60e3) break; }
+      while (true) { await new Promise(r => setTimeout(r, 1000)); if (open) wasOpen = true; else if (wasOpen || Date.now() - t0 > 15e3) break; }
     }
-  } catch (e) { console.warn(e); msg('จับคู่ไม่สำเร็จ: ' + (e.message || e)); }
+  } catch (e) {
+    console.warn(e); msg('จับคู่ไม่สำเร็จ: ' + (e.message || e));
+    // first time in this Safari: sign in once (Firebase remembers it), then try again
+    if (e && e.needLogin) {
+      const p = wait.querySelector('p'); const b = document.createElement('button'); b.className = 'pill prim'; b.style.marginTop = '14px'; b.textContent = 'เข้าสู่ระบบบัญชีครู (ครั้งเดียว)';
+      b.onclick = async () => { try { await (await import('./studio-net.js')).studioLogin(); location.reload(); } catch (er) { msg('เข้าสู่ระบบไม่สำเร็จ: ' + (er.code || er.message || er)); } };
+      p.after(b);
+    }
+  }
 })();
 
 // ---- mirror of the teacher's whole screen (toolbars + menus as HTML, paper drawn in the stage area) ----

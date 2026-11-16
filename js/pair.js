@@ -82,45 +82,80 @@ function iceDone(pc, ms = 1200) {
   return new Promise(res => { if (pc.iceGatheringState === 'complete') return res(); const t = setTimeout(res, ms); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); res(); } }; });
 }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// ---- where the offer/answer is exchanged ----
+// 1st choice: Firestore (realtime — the answer arrives the moment Safari writes it, and Firebase keeps both windows signed
+// in by itself, so an expired Google token no longer breaks pairing). Fallback: a tiny file in the teacher's Drive (polled).
+let fsP = null;
+function firestoreBackend() {
+  if (!fsP) fsP = (async () => {
+    const { makeSignal } = await import('./studio-net.js');
+    const S = makeSignal();
+    await Promise.race([S.init(), sleep(8000).then(() => { throw new Error('Firestore ช้าเกินไป'); })]);
+    try { localStorage.setItem('senkid.fbok', '1'); } catch { }
+    const path = 'senkid_rooms/tv-' + (String(S.uid).startsWith('local-') ? 'local' : S.uid); // local = tests (one shared room)
+    return {
+      kind: 'fs',
+      save: (o) => S.put(path, o),
+      read: () => S.get(path),
+      watch: (cb) => S.watchDoc(path, cb),
+    };
+  })().catch(e => { fsP = null; throw e; });
+  return fsP;
+}
 async function pairFile() { return driveFind('pair'); }
-async function savePair(obj) { const f = await pairFile(); return driveUpload(f?.id || null, 'pair.json', { kind: 'pair', id: 'pair' }, obj); }
-async function readPair() { const f = await pairFile(); return f ? driveDownload(f.id) : null; }
+const driveBackend = {
+  kind: 'drive',
+  async save(obj) { const f = await pairFile(); return driveUpload(f?.id || null, 'pair.json', { kind: 'pair', id: 'pair' }, obj); },
+  async read() { const f = await pairFile(); return f ? driveDownload(f.id) : null; },
+  watch: null,
+};
+export let lastBackend = '';
+async function backend() {
+  try { const b = await firestoreBackend(); lastBackend = 'fs'; return b; }
+  catch (e) { console.warn('pair: Firestore unavailable, using Drive', e); if (!tokenOk()) throw e; lastBackend = 'drive'; return driveBackend; }
+}
+// resolve as soon as test(doc) holds — instantly through a Firestore listener, otherwise by polling (also re-checks the
+// moment the page becomes visible again, since iPadOS freezes a hidden app)
+function waitFor(B, test, { timeoutMs, alive = () => true, onTick }) {
+  return new Promise((res) => {
+    let done = false, unsub = null, poll = null;
+    const finish = (v) => { if (done) return; done = true; try { unsub && unsub(); } catch { } clearInterval(poll); clearTimeout(to); document.removeEventListener('visibilitychange', vis); res(v); };
+    const check = (j) => { if (!alive()) return finish(null); const v = j && test(j); if (v) finish(v); };
+    const pull = async () => { if (done || document.visibilityState === 'hidden') return; try { check(await B.read()); } catch (e) { console.warn('pair poll', e); onTick?.('error', e); } };
+    const vis = () => { if (document.visibilityState === 'visible') pull(); };
+    document.addEventListener('visibilitychange', vis);
+    if (B.watch) { unsub = B.watch(check); poll = setInterval(pull, 5000); } // listener does the work; slow poll is a safety net
+    else poll = setInterval(pull, 900);
+    pull();
+    const to = timeoutMs < 2e9 ? setTimeout(() => finish(null), timeoutMs) : 0; // (setTimeout fires at once beyond ~24.8 days)
+  });
+}
 
-export const canPair = () => typeof RTCPeerConnection !== 'undefined' && tokenOk();
+export const canPair = () => typeof RTCPeerConnection !== 'undefined' && (tokenOk() || (() => { try { return localStorage.getItem('senkid.fbok') === '1'; } catch { return false; } })());
 
 // teacher (home-screen app): publish an offer, then wait for the Safari window's answer
 export async function teacherPair(link, { onStatus, timeoutMs = 180e3 } = {}) {
+  const B = await backend();
   const pc = link._pc(); link._bind(pc.createDataChannel('senkid', { ordered: true }));
   await pc.setLocalDescription(await pc.createOffer()); await iceDone(pc);
   const t = Date.now();
-  await savePair({ offer: pc.localDescription.sdp, t, ans: null });
-  onStatus?.('offer');
-  const t0 = Date.now();
-  while (Date.now() - t0 < timeoutMs && link.pc === pc) {
-    await sleep(900);
-    if (document.visibilityState === 'hidden') continue; // iPad pauses us in the background anyway
-    let j = null; try { j = await readPair(); } catch (e) { console.warn('pair poll', e); continue; }
-    if (j && j.t === t && j.ans) { await pc.setRemoteDescription({ type: 'answer', sdp: j.ans }); onStatus?.('answered'); return true; }
-  }
-  return false;
+  await B.save({ offer: pc.localDescription.sdp, t, ans: null });
+  onStatus?.('offer', B.kind);
+  const ans = await waitFor(B, (j) => j.t === t && j.ans, { timeoutMs, alive: () => link.pc === pc });
+  if (!ans || link.pc !== pc) return false;
+  await pc.setRemoteDescription({ type: 'answer', sdp: ans }); onStatus?.('answered'); return true;
 }
 
 // student (Safari window opened with #pair): take the newest offer, answer it
 export async function studentPair(link, { onStatus, timeoutMs = 180e3, skipBefore = 0 } = {}) {
-  const t0 = Date.now(); let last = null;
-  while (Date.now() - t0 < timeoutMs) {
-    let j = null; try { j = await readPair(); } catch (e) { console.warn('pair poll', e); onStatus?.('error', e); await sleep(3000); continue; }
-    if (j && j.offer && !j.ans && Date.now() - j.t < 10 * 60e3 && j.t !== last && j.t > skipBefore) {
-      last = j.t;
-      const pc = link._pc(); pc.ondatachannel = (e) => link._bind(e.channel);
-      await pc.setRemoteDescription({ type: 'offer', sdp: j.offer });
-      await pc.setLocalDescription(await pc.createAnswer()); await iceDone(pc);
-      await savePair({ ...j, ans: pc.localDescription.sdp });
-      onStatus?.('answered');
-      return j.t;
-    }
-    onStatus?.('waiting');
-    await sleep(900);
-  }
-  return false;
+  let B; try { B = await backend(); } catch (e) { onStatus?.('error', e); throw e; }
+  onStatus?.('waiting', B.kind);
+  const j = await waitFor(B, (d) => (d.offer && !d.ans && Date.now() - d.t < 10 * 60e3 && d.t > skipBefore) ? d : null, { timeoutMs, onTick: onStatus });
+  if (!j) return false;
+  const pc = link._pc(); pc.ondatachannel = (e) => link._bind(e.channel);
+  await pc.setRemoteDescription({ type: 'offer', sdp: j.offer });
+  await pc.setLocalDescription(await pc.createAnswer()); await iceDone(pc);
+  await B.save({ offer: j.offer, t: j.t, ans: pc.localDescription.sdp });
+  onStatus?.('answered');
+  return j.t;
 }

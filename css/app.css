@@ -1100,3 +1100,14 @@ body.studio #app,body.studio .lib,body.studio .onb{display:none!important}
 .sbar-btn{background:#2e323a;border:1px solid #444b57;color:#eee;border-radius:12px;height:38px;padding:0 14px;font:inherit;font-size:16px;display:flex;align-items:center;gap:6px;cursor:pointer}
 .studio-root.present .studio-bar{display:none}
 .ctxbar .tv-eye{margin-left:6px}.ctxbar .tv-eye.on{background:#FDE68A}
+/* TV pairing guide */
+.pairguide{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:900;width:min(440px,calc(100vw - 24px));background:var(--panel,#fff);color:var(--ink,#1b1d22);border:1px solid var(--line);border-radius:18px;box-shadow:0 14px 40px rgba(0,0,0,.22);padding:12px 16px 14px}
+.pairguide .pg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.pairguide .pg-head b{font-size:22px}
+.pg-step{display:flex;gap:10px;align-items:flex-start;padding:6px 0;opacity:.45}
+.pg-step .n{flex:none;width:28px;height:28px;border-radius:50%;background:var(--line);color:var(--ink,#222);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px}
+.pg-step b{font-size:19px}.pg-step .sub{font-size:16px}
+.pg-step.cur{opacity:1}.pg-step.cur .n{background:var(--acc);color:#fff;animation:pgpulse 1.2s ease-in-out infinite}
+.pg-step.done{opacity:.85}.pg-step.done .n{background:#1E9E5A;color:#fff;font-size:0}.pg-step.done .n::after{content:'✓';font-size:17px}
+.pg-note{margin-top:4px;font-size:17px;font-weight:600}
+@keyframes pgpulse{50%{box-shadow:0 0 0 6px rgba(47,91,234,.18)}}

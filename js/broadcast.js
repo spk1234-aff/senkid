@@ -157,7 +157,32 @@ export function setTv(state, text) {
   if (state === 'on') tvHideT = setTimeout(() => tvPill.classList.add('mini'), 6000); else tvPill.classList.remove('mini');
   if (state === 'off') tvHideT = setTimeout(() => tvPill.classList.add('hidden'), 4000);
 }
-async function startPairing(b, openSafari = true, quiet = false) {
+// one small card that walks the teacher through pairing and ticks itself off (instead of a string of toasts)
+let guideEl = null;
+function pairGuide(b) {
+  guideEl?.remove();
+  const steps = [
+    ['เปิดหน้าต่างทีวีใน Safari', 'ถ้าใช้ Stage Manager ลากหน้าต่าง Safari ไปไว้บนทีวี แล้วกลับมาแอปนี้'],
+    ['รอหน้าต่างทีวีตอบรับ', 'หน้าต่างบนทีวีต้องเปิดค้างไว้ (ไม่ต้องกดอะไรบนนั้น)'],
+    ['เชื่อมต่อ', ''],
+  ];
+  const rows = steps.map(([t, sub], i) => h('div', { class: 'pg-step' }, h('span', { class: 'n' }, String(i + 1)), h('div', {}, h('b', {}, t), sub ? h('div', { class: 'sub' }, sub) : '')));
+  const x = h('button', { class: 'btn', title: 'ยกเลิก' }, icon('close'));
+  x.onclick = () => { try { b.rtc.close?.(); } catch { } el.remove(); guideEl = null; };
+  const note = h('div', { class: 'sub pg-note' });
+  const el = guideEl = h('div', { class: 'pairguide' }, h('div', { class: 'pg-head' }, h('b', {}, 'เชื่อมทีวีจอที่สอง'), x), ...rows, note);
+  document.body.append(el);
+  const step = (n, msg) => { rows.forEach((r, i) => { r.classList.toggle('done', i < n - 1); r.classList.toggle('cur', i === n - 1); }); note.textContent = msg || ''; };
+  step(1);
+  return {
+    step,
+    end(ok) {
+      if (ok) { rows.forEach(r => { r.classList.add('done'); r.classList.remove('cur'); }); note.textContent = '✓ ทีวีเชื่อมแล้ว'; setTimeout(() => { el.remove(); if (guideEl === el) guideEl = null; }, 1500); }
+      else { note.textContent = 'ยังต่อไม่ได้ · ดูว่าหน้าต่างเส้นคิดใน Safari ยังเปิดอยู่ แล้วกด "ลองอีกครั้ง"'; const again = h('button', { class: 'pill prim', style: { width: '100%', marginTop: '8px' } }, icon('sync'), 'ลองอีกครั้ง'); again.onclick = () => { el.remove(); guideEl = null; startPairing(b, false); }; const re = h('button', { class: 'pill ghost', style: { width: '100%', marginTop: '4px' } }, 'เปิด Safari ใหม่'); re.onclick = () => { el.remove(); guideEl = null; startPairing(b, true); }; el.append(again, re); }
+    },
+  };
+}
+export async function startPairing(b, openSafari = true, quiet = false) {
   if (pairing) return; pairing = true;
   const bz = quiet ? { done() {} } : busy('กำลังเตรียมจับคู่กับ Safari…');
   if (!quiet) setTv('wait', 'กำลังจับคู่กับ Safari…');
@@ -165,11 +190,17 @@ async function startPairing(b, openSafari = true, quiet = false) {
     await b.app.editor?.flush?.(); // iPadOS may suspend or restart this app while Safari is in front: nothing may be left unsaved
     let tokq = ''; try { const t = JSON.parse(localStorage.getItem('senkid.gtoken') || 'null'); if (t && t.exp > Date.now()) tokq = '&tok=' + encodeURIComponent(JSON.stringify(t)); } catch { }
     const url = new URL('student.html#pair' + tokq, location.href).href;
-    const p = teacherPair(b.rtc, { timeoutMs: quiet ? 40e3 : 180e3, onStatus: (st) => { if (st === 'offer') { bz.done(); if (openSafari) { location.href = 'x-safari-' + url; toast('เปิด Safari แล้ว · กลับมาที่แอปนี้เมื่อหน้าจอนักเรียนขึ้น', 6000); } else if (!quiet) toast('กำลังรอหน้าต่าง Safari บนทีวีตอบรับ…', 4000); } } });
-    const ok = await p;
+    const G = quiet ? null : pairGuide(b);
+    const p = teacherPair(b.rtc, { timeoutMs: quiet ? 40e3 : 180e3, onStatus: (st) => {
+      if (st === 'offer') { bz.done(); G?.step(openSafari ? 1 : 2); if (openSafari) location.href = 'x-safari-' + url; }
+      else if (st === 'answered') G?.step(3);
+    } });
+    let ok = await p;
+    // answered but the direct channel didn't open: try once more by itself (the Safari window keeps listening)
+    if (ok) { const t0 = Date.now(); while (!b.rtc.open && Date.now() - t0 < 8000) await new Promise(r => setTimeout(r, 200)); if (!b.rtc.open) { G?.step(2, 'ลองต่อใหม่อีกครั้ง…'); ok = await teacherPair(b.rtc, { timeoutMs: 30e3 }); const t1 = Date.now(); while (ok && !b.rtc.open && Date.now() - t1 < 8000) await new Promise(r => setTimeout(r, 200)); ok = ok && b.rtc.open; } }
+    G?.end(ok);
     if (ok) { prefs.pairedAt = Date.now(); savePrefs(); b.autoFail = 0; } else { b.autoFail = (b.autoFail || 0) + 1; } if (!ok && !b.rtc.open) { if (!quiet) setTv('off', 'จับคู่ไม่สำเร็จ'); else if (b.rtcWas || b.dropped) setTv('off', 'ทีวียังไม่กลับมา · จะลองต่อใหม่เองเงียบ ๆ'); }
-    if (!ok && !quiet) toast('จับคู่กับ Safari ไม่สำเร็จ (หมดเวลา) · ลองใหม่อีกครั้ง', 4000, 'warn');
-  } catch (e) { console.warn('pair', e); if (!quiet) toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); }
+  } catch (e) { console.warn('pair', e); if (!quiet) { guideEl?.remove(); guideEl = null; toast('จับคู่ไม่สำเร็จ: ' + (e.message || e), 5000, 'warn'); } }
   finally { bz.done(); pairing = false; }
 }
 export const isHomeApp = () => navigator.standalone === true || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches;
@@ -295,12 +326,16 @@ export function studentMenu(app, anchor, ed) {
       body.append(card('แบบที่ 1 · สะท้อนจอ (สาย / AirPlay)', 'ทีวีเห็นเหมือนหน้าจอ iPad ทุกอย่าง · ง่ายสุด ไม่ต้องตั้งค่า · ถ้าไม่อยากให้นักเรียนเห็นเครื่องมือ ให้ซ่อน', pres));
       // choice 2: second screen through the Safari TV window
       if (isHomeApp() && isIOS()) {
-        if (canPair() && syncOn()) {
+        if (canPair()) {
           const pairBtn = h('button', { class: 'pill prim' }, icon('screen'), on ? 'เชื่อมใหม่ (เปิด Safari อีกครั้ง)' : 'เชื่อมทีวี (เปิด Safari ให้)');
           pairBtn.onclick = () => { close(); startPairing(b, true); };
           const reBtn = h('button', { class: 'pill sec' }, icon('sync'), 'ต่อกับหน้าต่าง Safari ที่เปิดค้างอยู่'); reBtn.onclick = () => { close(); startPairing(b, false); };
           body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง (เต็มจอ)', on ? 'เชื่อมอยู่แล้ว · ครูสอนในแอปนี้ต่อได้เลย' : '1) ต่อทีวี + เปิด Stage Manager  2) กดปุ่มนี้ แอปจะเปิดหน้าทีวีใน Safari  3) ลากหน้าต่าง Safari ไปทีวี แล้วกลับมาแอปนี้ · ครั้งต่อไปต่อให้เองภายใน 12 ชม.', pairBtn, reBtn));
-        } else body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง (เต็มจอ)', syncOn() ? 'เชื่อมต่อ Google ในตั้งค่าก่อน แล้วปุ่มเชื่อมทีวีจะใช้ได้' : 'เปิด "ซิงก์ผ่าน Google Drive" ในตั้งค่าก่อน แล้วปุ่มเชื่อมทีวีจะใช้ได้'));
+        } else {
+          const lg = h('button', { class: 'pill prim' }, icon('user'), 'เข้าสู่ระบบบัญชีครู (ครั้งเดียว)');
+          lg.onclick = async () => { try { await (await import('./studio-net.js')).studioLogin(); localStorage.setItem('senkid.fbok', '1'); paint(); } catch (e) { toast('เข้าสู่ระบบไม่สำเร็จ: ' + (e.code || e.message || e), 4000, 'warn'); } };
+          body.append(card('แบบที่ 2 · ทีวีเป็นจอสอง (เต็มจอ)', 'เข้าสู่ระบบบัญชีครูครั้งเดียว แล้วปุ่มเชื่อมทีวีจะใช้ได้ (ไม่ต้องเปิดซิงก์)', lg));
+        }
       } else {
         const open = h('button', { class: 'pill ' + (twoScreens() ? 'prim' : 'sec') }, icon('screen'), on ? 'เปิดหน้าต่างนักเรียนอีกครั้ง' : 'เปิดหน้าจอนักเรียน');
         open.onclick = () => { close(); if (twoScreens() === true || prefs.secondScreenOk) openStudentWindow(); else confirmSecondScreen(ed); };
