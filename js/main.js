@@ -18,11 +18,11 @@ import { Broadcast, studentMenu } from './broadcast.js';
 import { UI_FONTS, applyUiFont, setUiFont, faceCss, familyOf } from './fonts.js';
 import { ytCard } from './youtube.js';
 import { colorPicker } from './hub.js';
-import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, connected, hasFileScope, tokenOk, busyNow } from './sync.js';
+import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, connected, hasFileScope, tokenOk, busyNow, driveBackup, backupStatus } from './sync.js';
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.90';
+export const VERSION = '1.9.91';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -433,7 +433,7 @@ class App {
         const re = h('button', { class: 'pill sec', style: { height: '42px' } }, 'เชื่อมต่อใหม่'); re.onclick = () => signIn();
         const off = h('button', { class: 'pill ghost', style: { height: '42px', color: '#D64545' } }, 'เลิกซิงก์'); off.onclick = () => { disconnect(); build(); toast('เลิกซิงก์แล้ว · สมุดในเครื่องนี้และใน Drive ยังอยู่', 3000); };
         card.append(row('บัญชี', h('span', { style: { color: 'var(--muted)' } }, sync.email || prefs.sync?.email || '–')), row('สถานะ', st),
-          ...(hasFileScope() ? [] : [row('เก็บคลิปใน Drive', h('span', { style: { color: '#D64545' } }, 'ต้องกด "เชื่อมต่อใหม่" เพื่ออนุญาตเพิ่ม'), 'คลิปและเสียงที่อัดจะส่งขึ้นโฟลเดอร์ เส้นคิด/คลิป ใน Drive แทนการเก็บในเครื่อง')]), row('ซิงก์ด้วยตัวเอง', now, 'ปกติซิงก์เองหลังเขียน 6 วินาที และตอนสลับแอป'), row(sync.state === 'auth' ? 'หมดอายุการเชื่อมต่อ' : 'เชื่อมต่อใหม่', re), row('เลิกซิงก์เครื่องนี้', off));
+          ...(hasFileScope() ? [] : [row('เก็บคลิปใน Drive', h('span', { style: { color: '#D64545' } }, 'ต้องกด "เชื่อมต่อใหม่" เพื่ออนุญาตเพิ่ม'), 'คลิปและเสียงที่อัดจะส่งขึ้นโฟลเดอร์ เส้นคิด/คลิป ใน Drive แทนการเก็บในเครื่อง')]), row('ซิงก์ด้วยตัวเอง', now, 'ปกติซิงก์เองหลังเขียน 6 วินาที และตอนสลับแอป'), (() => { const bs = backupStatus(); const b = h('button', { class: 'pill sec', style: { height: '42px' } }, icon('cloud'), 'สำรองตอนนี้'); b.onclick = async () => { b.disabled = true; try { await driveBackup(this, { manual: true }); } finally { b.disabled = false; build(); } }; return row('สำรองสมุดทั้งหมดขึ้น Drive', b, h('span', { style: bs.err ? { color: '#D64545' } : {} }, 'สำรองอัตโนมัติวันละครั้ง เก็บ 7 ไฟล์ล่าสุดในโฟลเดอร์ เส้นคิด/สำรอง · ' + bs.text)); })(), row(sync.state === 'auth' ? 'หมดอายุการเชื่อมต่อ' : 'เชื่อมต่อใหม่', re), row('เลิกซิงก์เครื่องนี้', off));
       }
       const cid = h('input', { class: 'field', type: 'text', placeholder: 'xxxx.apps.googleusercontent.com', value: prefs.sync?.clientId || '' , style: { width: '100%', height: '40px', fontSize: '16px' } });
       cid.onchange = () => { prefs.sync = { ...(prefs.sync || {}), clientId: cid.value.trim() }; savePrefs(); };

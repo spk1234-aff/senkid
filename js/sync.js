@@ -321,7 +321,7 @@ async function doSync(reason) {
       } catch (e) { if (e.auth) throw e; console.warn('sync prefs', e); }
     } finally { db.setQuiet(false); }
     sync.lastSync = Date.now(); prefs.sync.last = sync.lastSync; savePrefs();
-    weeklyBackup(app).catch(e => console.warn('weekly backup', e));
+    driveBackup(app).catch(e => console.warn('drive backup', e));
     setState('idle', { error: pdfFailMsg, progress: '' });
     if (pdfFails.length && reason === 'manual') toast('สมุดซิงก์แล้ว แต่ส่ง PDF ไม่ได้ — ' + pdfFails.join(' · '), 7000, 'warn');
     if (pulled) {
@@ -399,30 +399,61 @@ export function statusText() {
 }
 
 // ---------- recordings → a visible Drive folder "เส้นคิด/คลิป" (needs the drive.file permission) ----------
-// once a week, after a successful sync: one file with every notebook, into เส้นคิด/สำรอง on Drive (last 4 kept)
+// once a day, after a successful sync: one file with every notebook, into เส้นคิด/สำรอง on Drive (last 7 kept).
+// The file is assembled piece by piece (no single giant string) and sent in 8 MB chunks, so big PDFs no longer make it fail.
 let backingUp = false;
-async function weeklyBackup(app) {
-  if (backingUp || !hasFileScope() || !navigator.onLine) return;
-  const last = prefs.sync.lastFull || 0; if (Date.now() - last < 7 * 86400e3) return;
-  const ed = app?.editor; if (ed && Date.now() - (ed.lastInput || 0) < 120e3) return; // not while teaching
-  backingUp = true;
+const BK_RETRY = 3 * 3600e3; // after a failure, try again in 3 hours (not on every sync)
+function backupBlob(out) {
+  const parts = ['{"app":"senkid","format":1,"exported":', JSON.stringify(out.exported), ',"notebooks":', JSON.stringify(out.notebooks), ',"pages":['];
+  out.pages.forEach((pg, i) => { if (i) parts.push(','); parts.push(JSON.stringify(pg)); });
+  parts.push(']');
+  if (out.pdfs) { parts.push(',"pdfs":['); out.pdfs.forEach((pd, i) => { if (i) parts.push(','); parts.push(JSON.stringify(pd)); }); parts.push(']'); }
+  parts.push('}');
+  return new Blob(parts, { type: 'application/json' });
+}
+export async function driveBackup(app, { manual = false } = {}) {
+  if (backingUp) { if (manual) toast('กำลังสำรองอยู่ รอสักครู่', 2500); return false; }
+  if (!connected() || !readToken()) { if (manual) toast('ต้องเชื่อม Google Drive ก่อน (กด "เชื่อมต่อใหม่")', 3500, 'warn'); return false; }
+  if (!hasFileScope()) { if (manual) toast('ต้องกด "เชื่อมต่อใหม่" เพื่ออนุญาตให้เส้นคิดเขียนไฟล์ใน Drive', 4000, 'warn'); return false; }
+  if (!navigator.onLine) { if (manual) toast('ยังไม่ได้ต่ออินเทอร์เน็ต', 2500, 'warn'); return false; }
+  if (!manual) {
+    const last = prefs.sync.lastFull || 0; if (Date.now() - last < 86400e3) return false;
+    if (Date.now() - (prefs.sync.lastFullTry || 0) < BK_RETRY) return false;
+    const ed = app?.editor; if (ed && Date.now() - (ed.lastInput || 0) < 120e3) return false; // not while teaching
+  }
+  backingUp = true; prefs.sync.lastFullTry = Date.now(); savePrefs();
   try {
+    await app?.editor?.flush?.();
     const { buildBackup } = await import('./files.js');
-    const ids = (await db.getAll('notebooks')).map(n => n.id); if (!ids.length) return;
+    const ids = (await db.getAll('notebooks')).map(n => n.id); if (!ids.length) { if (manual) toast('ยังไม่มีสมุดให้สำรอง'); return false; }
+    if (manual) setState(sync.state, { progress: 'กำลังเตรียมไฟล์สำรอง…' });
     const out = await buildBackup(ids, null);
     const d = new Date(), p = (n) => String(n).padStart(2, '0');
-    const name = `senkid-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.senkid.json`;
-    const blob = new Blob([JSON.stringify(out)], { type: 'application/json' });
-    const folder = await folderId('สำรอง', await folderId('เส้นคิด', 'root'));
-    const r0 = await gfetch(`${UP}/files?uploadType=resumable&fields=id`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/json', 'X-Upload-Content-Length': String(blob.size) }, body: JSON.stringify({ name, parents: [folder] }) });
-    const loc = r0.headers.get('Location'); if (!loc) throw new Error('no location');
-    const tok = readToken(); const r = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok.t }, body: blob }); if (!r.ok) throw await driveError(r, 'backup');
-    // keep the newest 4
-    const q = new URLSearchParams({ q: `'${folder}' in parents and trashed = false`, fields: 'files(id,name,createdTime)', orderBy: 'createdTime desc', pageSize: '50' });
-    const j = await (await gfetch(`${API}/files?${q}`)).json(); for (const f of (j.files || []).slice(4)) await remove(f.id);
-    prefs.sync.lastFull = Date.now(); savePrefs();
-    console.log('weekly backup', name, blob.size);
-  } finally { backingUp = false; }
+    const name = `senkid-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.senkid.json`;
+    const blob = backupBlob(out);
+    const r = await uploadRecording(blob, name, manual ? (msg) => toast('สำรองขึ้น Drive: ' + msg, 1500) : null, 'สำรอง');
+    if (!r?.id) throw new Error('Drive ไม่ตอบกลับไฟล์ที่ส่ง');
+    // keep the newest 7 backups (only our own backup files)
+    try {
+      const folder = await folderId('สำรอง', await folderId('เส้นคิด', 'root'));
+      const q = new URLSearchParams({ q: `'${folder}' in parents and trashed = false and name contains 'senkid-backup-'`, fields: 'files(id,name,createdTime)', orderBy: 'createdTime desc', pageSize: '100' });
+      const j = await (await gfetch(`${API}/files?${q}`)).json();
+      for (const f of (j.files || []).slice(7)) await remove(f.id);
+    } catch (e) { console.warn('backup prune', e); }
+    prefs.sync.lastFull = Date.now(); prefs.sync.lastFullErr = ''; savePrefs();
+    if (manual) toast(`สำรองขึ้น Google Drive แล้ว · สมุด ${out.notebooks.length} เล่ม (${(blob.size / 1048576).toFixed(1)} MB) · โฟลเดอร์ เส้นคิด/สำรอง`, 3500);
+    return true;
+  } catch (e) {
+    console.warn('drive backup', e);
+    prefs.sync.lastFullErr = e.auth ? 'การเชื่อม Google หมดอายุ' : (e.message || String(e)); savePrefs();
+    if (manual) toast('สำรองขึ้น Drive ไม่สำเร็จ: ' + prefs.sync.lastFullErr, 5000, 'warn');
+    return false;
+  } finally { backingUp = false; if (manual) setState(sync.state, { progress: '' }); }
+}
+export function backupStatus() {
+  const s = prefs.sync || {}, t = s.lastFull ? new Date(s.lastFull) : null;
+  const when = t ? `${t.getDate()}/${t.getMonth() + 1}/${t.getFullYear() + 543} ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}` : 'ยังไม่เคยสำรอง';
+  return { text: 'ล่าสุด ' + when + (s.lastFullErr && (s.lastFullTry || 0) > (s.lastFull || 0) ? ' · ครั้งล่าสุดไม่สำเร็จ: ' + s.lastFullErr : ''), err: !!(s.lastFullErr && (s.lastFullTry || 0) > (s.lastFull || 0)) };
 }
 export function hasFileScope() { const t = readToken(); return !!t && (!t.scope || /drive\.file/.test(t.scope)); }
 async function folderId(name, parent) {
