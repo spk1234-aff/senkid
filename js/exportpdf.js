@@ -81,21 +81,27 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
   const L = await lib();
   const out = await L.PDFDocument.create();
   out.setCreator('เส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย'); out.setProducer('Senkid'); out.setAuthor('เส้นคิด (พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม)');
-  const srcDocs = new Map();
   const dark = !!PAPERS[paperKey]?.dark && withBg;
   let creditImg = null, creditAr = 1;
   if (credit) { const cp = await creditPng(credit); creditImg = await out.embedPng(cp.bytes); creditAr = cp.ar; }
   await ensurePageFonts(pages);
+  // 1.9.92: คัดลอกหน้าจาก PDF ต้นฉบับครั้งเดียวต่อไฟล์ — ฟอนต์/รูปที่ใช้ร่วมกันจะไม่ถูกคัดลอกซ้ำทุกหน้า (เดิมไฟล์บวมจนส่งงานไม่ได้)
+  const want = new Map();
+  pages.forEach((p, i) => { if (p.pdf) { const a = want.get(p.pdf.id) || []; a.push(i); want.set(p.pdf.id, a); } });
+  const copied = new Map();
+  for (const [id, list] of want) {
+    let src = null; try { const bytes = await pdfBytes(id); src = bytes ? await L.PDFDocument.load(bytes, { ignoreEncryption: true }) : null; } catch (e) { console.warn('pdf src', e); }
+    if (!src) continue;
+    const nn = src.getPageCount(), ok = list.filter(i => pages[i].pdf.n >= 1 && pages[i].pdf.n <= nn);
+    const cp = await out.copyPages(src, ok.map(i => pages[i].pdf.n - 1));
+    ok.forEach((i, k) => copied.set(i, cp[k]));
+  }
   for (let i = 0; i < pages.length; i++) {
     const page = pages[i], D = dims(page);
     let pg, ox = 0, oy = 0, sc = 1, H;
-    if (page.pdf) {
-      let src = srcDocs.get(page.pdf.id);
-      if (!src) { const bytes = await pdfBytes(page.pdf.id); src = bytes ? await L.PDFDocument.load(bytes, { ignoreEncryption: true }) : null; srcDocs.set(page.pdf.id, src); }
-      if (src) {
-        [pg] = await out.copyPages(src, [page.pdf.n - 1]); out.addPage(pg);
-        const box = pg.getCropBox(); ox = box.x; oy = box.y; sc = box.width / D.w; H = box.height;
-      }
+    if (page.pdf && copied.has(i)) {
+      pg = copied.get(i); out.addPage(pg);
+      const box = pg.getCropBox(); ox = box.x; oy = box.y; sc = box.width / D.w; H = box.height;
     }
     if (!pg) { pg = out.addPage([D.w, D.h]); H = D.h; if (withBg) drawPaperVector(L, pg, page, paperKey, D.w, D.h); }
     const place = { x: ox, y: oy + H, scale: sc };
@@ -126,6 +132,58 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
   }
   const bytes = await out.save();
   return new Blob([bytes], { type: 'application/pdf' });
+}
+
+// 1.9.92: ไฟล์ส่งงานขนาดเล็ก — วาดแต่ละหน้าเป็นภาพ JPEG (ใช้เมื่อ PDF ปกติใหญ่เกินที่ส่งได้)
+export const SUBMIT_MAX = 24 * 1024 * 1024;
+export async function exportPdfCompact(pages, paperKey, { pxW = 1400, quality = 0.72, onProgress } = {}) {
+  const L = await lib();
+  const out = await L.PDFDocument.create();
+  out.setCreator('เส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย'); out.setProducer('Senkid'); out.setAuthor('เส้นคิด (พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม)');
+  const { drawPaper, drawStrokes } = await import('./render.js');
+  const { getDoc } = await import('./pdfdoc.js');
+  const { bitmapAsync } = await import('./images.js');
+  const cp = await creditPng(CREDIT), creditImg = await out.embedPng(cp.bytes);
+  await ensurePageFonts(pages);
+  const dark = !!PAPERS[paperKey]?.dark;
+  const c = document.createElement('canvas');
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i], D = dims(page), k = pxW / D.w;
+    c.width = Math.round(D.w * k); c.height = Math.round(D.h * k);
+    const ctx = c.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, c.width, c.height);
+    let drewPdf = false;
+    if (page.pdf) {
+      try {
+        const doc = await getDoc(page.pdf.id), pp = await doc.getPage(page.pdf.n), v1 = pp.getViewport({ scale: 1 });
+        const vp = pp.getViewport({ scale: c.width / v1.width });
+        await pp.render({ canvasContext: ctx, viewport: vp, background: '#FFFFFF' }).promise; drewPdf = true;
+      } catch (e) { console.warn('compact pdf page', e); }
+    }
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    if (!drewPdf) drawPaper(ctx, page, paperKey, k);
+    for (const s of page.strokes) if (s.t === 'img' && s.blob) { try { await bitmapAsync(s.blob); } catch { } }
+    drawStrokes(ctx, page, k, dark && !page.pdf);
+    const jpg = await new Promise(r => c.toBlob(r, 'image/jpeg', quality));
+    const im = await out.embedJpg(new Uint8Array(await jpg.arrayBuffer()));
+    const pg = out.addPage([D.w, D.h]);
+    pg.drawImage(im, { x: 0, y: 0, width: D.w, height: D.h });
+    const hh = 9, ww = hh * cp.ar; pg.drawImage(creditImg, { x: D.w - ww - 10, y: 5, width: ww, height: hh });
+    onProgress && onProgress(i + 1, pages.length);
+    if (i % 2 === 1) await new Promise(r => setTimeout(r, 0));
+  }
+  c.width = c.height = 0;
+  return new Blob([await out.save()], { type: 'application/pdf' });
+}
+// ถ้าไฟล์ใหญ่เกินที่ส่งได้ ย่อให้อัตโนมัติ (ลดความละเอียดทีละขั้นจนพอดี)
+export async function fitForSubmit(blob, pages, paperKey, bz) {
+  if (blob.size <= SUBMIT_MAX) return blob;
+  for (const [pxW, q] of [[1400, 0.72], [1100, 0.62], [850, 0.55], [650, 0.5]]) {
+    bz && bz.set('กำลังย่อขนาดไฟล์ให้ส่งได้…', '', 0);
+    const b = await exportPdfCompact(pages, paperKey, { pxW, quality: q, onProgress: (a, n) => bz && bz.set('กำลังย่อขนาดไฟล์ให้ส่งได้…', `หน้า ${a} จาก ${n}`, a / n) });
+    if (b.size <= SUBMIT_MAX) return b;
+  }
+  return null;
 }
 
 // Dialog per design: all / current / from-to / multiple ranges, progress bar
@@ -198,7 +256,11 @@ export function openExportDialog(ed, { submit = false } = {}) {
     try {
       const pages = idx.map(i => ed.pageMap.get(ed.nb.pages[i]));
       const blob = await exportPdf(pages, ed.paper, { withBg, onProgress: (a, b) => { bar.firstChild.style.width = Math.round(a / b * 100) + '%'; prog.textContent = `กำลังสร้างไฟล์… หน้า ${a} จาก ${b}`; bz.set('กำลังสร้างไฟล์ PDF…', `หน้า ${a} จาก ${b}`, a / b); } });
-      prog.textContent = 'เสร็จแล้ว'; bz.done(); io.disconnect(); return { blob, n: idx.length };
+      let fit = blob;
+      if (submit || blob.size > SUBMIT_MAX) { try { fit = await fitForSubmit(blob, pages, ed.paper, bz); } catch (e) { console.warn('fit', e); fit = null; } }
+      prog.textContent = 'เสร็จแล้ว'; bz.done(); io.disconnect();
+      if (!fit) { toast('ไฟล์ยังใหญ่เกินไปแม้ย่อแล้ว ลองเลือกหน้าให้น้อยลง แล้วส่งเป็นสองครั้ง', 5000, 'warn'); busyFlag = false; btn.disabled = false; return null; }
+      return { blob: fit, n: idx.length };
     } catch (e) { console.error(e); bz.done(); toast('ส่งออกไม่สำเร็จ: ' + (e.message || e), 4000, 'warn'); busyFlag = false; btn.disabled = false; return null; }
   };
   const student = submit || prefs.studentUI;
@@ -267,7 +329,7 @@ function seOpen(data) {   // งานที่เปิดรับอยู่
   return out;
 }
 export function openSubmitDialog(blob, pages, name) {
-  if (blob.size > 24 * 1024 * 1024) { toast('ไฟล์ใหญ่เกิน 24 MB ลองเลือกหน้าให้น้อยลง', 4000, 'warn'); return; }
+  if (blob.size > SUBMIT_MAX) { toast('ไฟล์ใหญ่เกิน 24 MB ลองเลือกหน้าให้น้อยลง', 4000, 'warn'); return; }
   let S = null; try { S = JSON.parse(seLS.get('se_sess') || 'null'); } catch { }
   if (S && Date.now() - S.at > 5.5 * 3600e3) S = null;
   const body = h('div', { style: { fontSize: '20px', lineHeight: '1.45' } });
