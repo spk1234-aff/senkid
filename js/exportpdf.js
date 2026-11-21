@@ -7,6 +7,7 @@ import { pdfBytes } from './pdfdoc.js';
 import { prefs } from './prefs.js';
 export const CREDIT = 'สร้างด้วยเส้นคิด · พัฒนาโดย นายศาสตราวุฒิ อาชนะชัย โรงเรียนโซ่พิสัยพิทยาคม';
 
+// 1.9.93: vendor/pdf-lib ถูกแก้ที่ drawSvgPath ให้ใส่คำสั่งทีละตัว (เดิมใช้ push.apply — เส้นที่ยาวมากทำให้ Maximum call stack size exceeded)
 let libP = null;
 const lib = () => (libP ||= import('../vendor/pdf-lib.esm.min.js'));
 
