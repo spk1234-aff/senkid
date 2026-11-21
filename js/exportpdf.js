@@ -176,12 +176,27 @@ export async function exportPdfCompact(pages, paperKey, { pxW = 1400, quality = 
   c.width = c.height = 0;
   return new Blob([await out.save()], { type: 'application/pdf' });
 }
-// ถ้าไฟล์ใหญ่เกินที่ส่งได้ ย่อให้อัตโนมัติ (ลดความละเอียดทีละขั้นจนพอดี)
+// ถ้าไฟล์ใหญ่เกินที่ส่งได้ ย่อให้อัตโนมัติ — เลือกความคมชัดสูงสุดที่ยังส่งได้
+// 1.9.94: เดิมเริ่มที่กว้าง 1400px คุณภาพ 0.72 เสมอ ลายมือสีบนภาพ JPEG จึงเบลอ/หนาผิดจากที่เขียน ทั้งที่ไฟล์ยังเหลือที่อีกมาก
+//         ตอนนี้ลองวาดหน้าที่เขียนเยอะสุด 3 หน้าเพื่อประมาณขนาด แล้วเริ่มจากขั้นที่คมที่สุดที่น่าจะพอดี
+const FIT_STEPS = [[2200, 0.92], [1900, 0.9], [1650, 0.86], [1400, 0.8], [1100, 0.68], [850, 0.58], [650, 0.5]];
 export async function fitForSubmit(blob, pages, paperKey, bz) {
   if (blob.size <= SUBMIT_MAX) return blob;
-  for (const [pxW, q] of [[1400, 0.72], [1100, 0.62], [850, 0.55], [650, 0.5]]) {
-    bz && bz.set('กำลังย่อขนาดไฟล์ให้ส่งได้…', '', 0);
-    const b = await exportPdfCompact(pages, paperKey, { pxW, quality: q, onProgress: (a, n) => bz && bz.set('กำลังย่อขนาดไฟล์ให้ส่งได้…', `หน้า ${a} จาก ${n}`, a / n) });
+  const say = (t, sub = '', p = 0) => bz && bz.set(t, sub, p);
+  say('กำลังย่อขนาดไฟล์ให้ส่งได้…');
+  let from = 0;
+  if (pages.length > 4) {
+    const sample = [...pages].sort((x, y) => (y.strokes?.length || 0) - (x.strokes?.length || 0)).slice(0, 3);
+    for (; from < 3; from++) {   // ประมาณขนาดเฉพาะขั้นบน ๆ (ขั้นล่างเล็กพออยู่แล้ว)
+      try {
+        const t = await exportPdfCompact(sample, paperKey, { pxW: FIT_STEPS[from][0], quality: FIT_STEPS[from][1] });
+        if (t.size / sample.length * pages.length <= SUBMIT_MAX * 0.92) break;
+      } catch (e) { console.warn('fit estimate', e); from = 3; break; }
+    }
+  }
+  for (let i = from; i < FIT_STEPS.length; i++) {
+    const [pxW, q] = FIT_STEPS[i];
+    const b = await exportPdfCompact(pages, paperKey, { pxW, quality: q, onProgress: (a, n) => say('กำลังย่อขนาดไฟล์ให้ส่งได้…', `หน้า ${a} จาก ${n}`, a / n) });
     if (b.size <= SUBMIT_MAX) return b;
   }
   return null;
