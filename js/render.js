@@ -338,8 +338,13 @@ export function drawStroke(ctx, s, k, darkPaper, final = true) {
   if (!n) { ctx.restore(); return; }
   const pen = s.t === 'hl' ? 'hl' : s.pen;
   const cacheable = final && s.id !== 'live';
-  let G = cacheable ? s._g : null;
-  if (!G) { G = buildGeom(s, pen, minW, final); if (cacheable) Object.defineProperty(s, '_g', { value: G, writable: true, configurable: true, enumerable: false }); }
+  // 1.9.95: รูปทรงเส้นที่เก็บไว้ใช้ซ้ำมี "ความหนาขั้นต่ำ" (minW) ฝังอยู่ — เดิมภาพย่อ (สเกลเล็ก minW ใหญ่) สร้างไว้ก่อน แล้วภาพใหญ่/ไฟล์ส่งงานหยิบไปใช้ต่อ เส้นจึงหนาเกินจริง
+  //         ตอนนี้ใช้ของที่เก็บไว้เฉพาะเมื่อสร้างด้วย minW ที่ไม่ใหญ่กว่าที่ต้องการ และเก็บเฉพาะชุดที่ละเอียดที่สุด
+  let G = cacheable && s._g && s._gw <= minW * 1.5 && s._gw >= minW / 8 ? s._g : null;
+  if (!G) {
+    G = buildGeom(s, pen, minW, final);
+    if (cacheable && !(s._gw <= minW)) { Object.defineProperty(s, '_g', { value: G, writable: true, configurable: true, enumerable: false }); Object.defineProperty(s, '_gw', { value: minW, writable: true, configurable: true, enumerable: false }); }
+  }
   const w = s.w;
   switch (pen) {
     case 'ball': case 'dash': case 'dot':

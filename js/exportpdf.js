@@ -23,6 +23,16 @@ export function parseRanges(str, n) {
   return [...out].sort((x, y) => x - y);
 }
 
+// 1.9.95: pdf-lib เขียนพิกัดเส้นด้วยทศนิยม 15–17 หลัก (เช่น 168.76483013175002) ไฟล์ลายมือจึงใหญ่เกินจำเป็นราว 3 เท่า
+//         และทำให้งานที่ส่งเกิน 24 MB จนต้องแปลงเป็นภาพ — ปัดพิกัดเส้นเหลือ 2 ตำแหน่ง (ละเอียด 0.01 pt มองไม่เห็นความต่าง)
+const PATH_OPS = { m: 1, l: 1, c: 1, v: 1, y: 1 };
+function slimPath(cs, from) {
+  const ops = cs.operators;
+  for (let i = from; i < ops.length; i++) {
+    const o = ops[i]; if (!PATH_OPS[o.name]) continue;
+    for (const a of o.args) if (a && typeof a.numberValue === 'number' && typeof a.stringValue === 'string') a.stringValue = String(Math.round(a.numberValue * 100) / 100);
+  }
+}
 const rgb = (hex, L) => { const [r, g, b] = hexToRgb(hex); return L.rgb(r / 255, g / 255, b / 255); };
 
 // text typed inside a shape: drawn as a picture over the vector outline
@@ -116,12 +126,14 @@ export async function exportPdf(pages, paperKey, { withBg = true, onProgress } =
         continue;
       }
       const v = strokeVector(s); if (!v.d) continue;
+      const cs = pg.getContentStream(), op0 = cs.operators.length;
       const color = rgb(s.t === 'hl' ? s.c : inkFor(s.c, dark && !page.pdf), L);
       const alpha = (s.a ?? 1) * (v.alpha ?? 1);
       const blend = s.t === 'hl' && !s.cv ? L.BlendMode.Multiply : undefined;
       if (s.shape && s.fill && s.t !== 'hl' && (s.shape.closed || s.shape.k === 'ellipse')) pg.drawSvgPath(v.d, { ...place, color: s.fc ? rgb(inkFor(s.fc, dark && !page.pdf), L) : color, opacity: Math.min(1, alpha * s.fill) });
       if (v.kind === 'fill') pg.drawSvgPath(v.d, { ...place, color, opacity: s.cv ? 1 : s.t === 'hl' ? Math.min(1, (s.a ?? .4) * (v.alpha ?? 1)) : alpha, blendMode: blend });
       else pg.drawSvgPath(v.d, { ...place, borderColor: color, borderWidth: v.w * sc, borderOpacity: s.cv ? 1 : s.t === 'hl' ? (s.a ?? .4) : alpha, borderLineCap: v.cap === 'butt' ? L.LineCapStyle.Butt : L.LineCapStyle.Round, borderDashArray: v.dash ? v.dash.map(x => x * sc) : undefined, blendMode: blend });
+      try { slimPath(pg.getContentStream(), pg.getContentStream() === cs ? op0 : 0); } catch (e) { console.warn('slim', e); }
       if (s.tx?.text && s.shape) { const r = await rasterShapeText(s); const im = await out.embedPng(r.bytes); pg.drawImage(im, { x: ox + r.x * sc, y: oy + H - (r.y + r.h) * sc, width: r.w * sc, height: r.h * sc }); }
     }
     if (creditImg) { // ~7pt high, bottom-right corner
