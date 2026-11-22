@@ -42,13 +42,16 @@ async function connect(app, ed, code) {
   peer.send({ k: 'hello', t: tl.now(), name: ed.nb?.name || '', ver: 1 });
   tl.live = (ev) => {
     peer.send({ k: 'ev', ev });
-    if (ev[1] === 'base' && ev[3]?.pdf) sendPdfPage(ed, ev[2], ev[3].pdf, sentPdf, peer);
+    if (ev[1] === 'base' && ev[3]?.pdf) sendPdfPage(tl.ed, ev[2], ev[3].pdf, sentPdf, peer);
   };
+  // 1.9.96: the timeline restarts when another notebook tab is opened or a lesson recording starts/stops; its clock goes
+  // back to 0, so the Mac must reset its picture first (a new hello), otherwise the new pages sort behind the old ones
+  tl.onStart = () => { peer.send({ k: 'hello', t: tl.now(), name: tl.ed.nb?.name || '', ver: 1, again: 1 }); peer.send({ k: 'ev', ev: tl.events[0] }); };
   // give the Mac the whole current picture: meta, every visible page, the view
   peer.send({ k: 'ev', ev: tl.events[0] });
   tl.based.clear(); tl.view(true);
   const ping = setInterval(() => { if (link) peer.send({ k: 'ping', t: tl.now() }); }, 4000);
-  peer.onMessage((m) => { if (m.k === 'bye') { toast('Studio บน Mac ปิดการเชื่อมต่อแล้ว', 3000); stopLive(app, false); } if (m.k === 'rec') { chip.classList.toggle('rec', !!m.on); toast(m.on ? '● Mac เริ่มอัดแล้ว' : '■ Mac หยุดอัดแล้ว', 2000); } if (m.k === 'needpdf') sendPdfPage(ed, m.pid, m.pdf, new Set(), peer); });
+  peer.onMessage((m) => { if (m.k === 'bye') { toast('Studio บน Mac ปิดการเชื่อมต่อแล้ว', 3000); stopLive(app, false); } if (m.k === 'rec') { chip.classList.toggle('rec', !!m.on); toast(m.on ? '● Mac เริ่มอัดแล้ว' : '■ Mac หยุดอัดแล้ว', 2000); } if (m.k === 'needpdf') sendPdfPage(tl.ed, m.pid, m.pdf, new Set(), peer); });
   chip.querySelector('.x').onclick = () => showChipMenu(app);
   link = { peer, tl, chip, ping };
   toast('ส่งภาพไป Studio แล้ว · เขียนต่อได้เลย Mac จะเห็นทันที', 3000);
@@ -85,7 +88,7 @@ export function stopLive(app, say = true) {
   clearInterval(ping);
   try { peer.send({ k: 'bye' }); } catch { }
   setTimeout(() => peer.close(false), 300);
-  tl.live = null;
+  tl.live = null; tl.onStart = null;
   if (tl.liveOnly) { tl.liveOnly = false; tl.active = false; const ed = tl.ed; if (ed?.hooks) ed.hooks.dirty = ed.hooks.view = ed.hooks.frame = null; }
   chip.remove();
   if (say) toast('หยุดส่งภาพไป Studio แล้ว', 2000);

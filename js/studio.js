@@ -204,7 +204,7 @@ export async function openStudio(app) {
   }
   loginBtn.onclick = async () => { loginBtn.disabled = true; try { await N.studioLogin(); status.textContent = 'กำลังเปิดห้อง…'; await openRoom(); } catch (e) { status.textContent = 'เข้าสู่ระบบไม่สำเร็จ: ' + (e.code || e.message || e); } finally { loginBtn.disabled = false; } };
   const onMsg = async (m) => {
-    if (m.k === 'hello') { base = performance.now() - (m.t || 0); nbName = m.name || ''; data.events.length = 0; st.reset(); toast('iPad เชื่อมต่อแล้ว' + (nbName ? ' · ' + nbName : ''), 2500); }
+    if (m.k === 'hello') { base = performance.now() - (m.t || 0); nbName = m.name || ''; data.events.length = 0; st.reset(); st.lastT = -1; st.ink = null; if (!m.again) toast('iPad เชื่อมต่อแล้ว' + (nbName ? ' · ' + nbName : ''), 2500); }
     else if (m.k === 'ping') { lastEvAt = performance.now(); if (base == null) base = performance.now() - (m.t || 0); }
     else if (m.k === 'ev') {
       const ev = m.ev; lastEvAt = performance.now();

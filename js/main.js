@@ -22,7 +22,7 @@ import { sync, initSync, syncNow, signIn as signInRaw, disconnect, statusText, c
 // renewing the Google token reloads the app: refuse while recording / teaching on the TV, and say why
 const signIn = (o) => { const why = busyNow(undefined, { manual: true }); if (why && !o?.force) { toast(`${why} · ยังไม่ต่อ Google ตอนนี้ (จะต่อให้เองเมื่อว่าง) · ถ้าต้องการต่อเดี๋ยวนี้ ให้หยุดสิ่งที่ทำอยู่ก่อน`, 4000, 'warn'); return; } signInRaw(o); };
 
-export const VERSION = '1.9.95';
+export const VERSION = '1.9.96';
 export const DEV = { name: 'นายศาสตราวุฒิ อาชนะชัย', org: 'กลุ่มสาระการเรียนรู้คณิตศาสตร์ โรงเรียนโซ่พิสัยพิทยาคม' };
 
 class App {
@@ -134,6 +134,7 @@ class App {
     this.root.innerHTML = '';
     this.editor = new Editor(this, nb, pages);
     try { this.editor.mount(this.root); } finally { endBz(); }
+    this.timeline?.follow(this.editor); // 1.9.96: เส้นคิด Studio ตามไปสมุดเล่มใหม่เมื่อสลับแท็บ
     this.broadcast.reset();
   }
   tabList() { return (prefs.tabs || []).map(id => ({ id, name: this.tabNames?.get(id) || 'สมุด' })); }

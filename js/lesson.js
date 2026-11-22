@@ -32,11 +32,19 @@ export class Timeline {
     this.events = []; this.known = new Map(); this.based = new Set(); this.pending = []; this.lastView = ''; this.lastLaser = 0; this.lastSave = performance.now();
     this.events.push([0, 'meta', { nb: ed.nb.id, name: ed.nb.name, paper: ed.paper, cols: ed.cols }]);
     ed.hooks.dirty = (p) => this.pageChanged(p); ed.hooks.view = () => this.view(); ed.hooks.frame = () => this.frame();
+    this.onStart?.(); // 1.9.96: the Mac "ห้องอัด" is told the clock restarted before any new event reaches it
     this.view(true);
+  }
+  // 1.9.96: another notebook tab was opened (a new editor replaced the old one) while the Mac is listening: stream the new one
+  follow(ed) {
+    if (!this.live || !ed || ed === this.ed || (this.active && !this.liveOnly)) return;
+    const old = this.ed; if (old?.hooks) old.hooks.dirty = old.hooks.view = old.hooks.frame = null;
+    this.start(ed, 'live-' + Date.now()); this.liveOnly = true;
+    requestAnimationFrame(() => { if (this.ed === ed && this.live) this.view(true); });
   }
   now() { return Math.round(performance.now() - this.t0 - this.pausedTotal - (this.pauseAt ? performance.now() - this.pauseAt : 0)); }
   // live listeners (the Mac "ห้องอัด") get every event as soon as its payload is complete
-  push(ev, ready) { this.events.push(ev); if (this.live) { const go = () => this.live(ev); ready ? ready.then(go) : go(); } return ev; }
+  push(ev, ready) { const E = this.events; E.push(ev); if (this.live) { const go = () => { if (this.live && this.events === E) this.live(ev); }; ready ? ready.then(go) : go(); } return ev; }
   pause() { this.pauseAt = performance.now(); }
   resume() { if (this.pauseAt) { this.pausedTotal += performance.now() - this.pauseAt; this.pauseAt = 0; } }
   base(p) {
